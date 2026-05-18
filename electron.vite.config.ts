@@ -45,6 +45,7 @@ export default defineConfig({
                 '@': resolve('src'),
                 '@shared': resolve('shared'),
             },
+            dedupe: ['react', 'react-dom'],
         },
 
         define: {
@@ -62,7 +63,19 @@ export default defineConfig({
             strictPort: true,
         },
         plugins: [
-            react({ babel: { plugins: [['babel-plugin-react-compiler']] } }),
+            react({
+                babel: {
+                    plugins: [
+                        [
+                            'babel-plugin-react-compiler',
+                            {
+                                sources: (filename: string) =>
+                                    filename.includes('/src/') || filename.includes('\\src\\'),
+                            },
+                        ],
+                    ],
+                },
+            }),
             tailwindcss(),
         ],
     },
