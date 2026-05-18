@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  typecheck:
+    name: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: cion-template
+
+      - uses: ./cion-template/.github/actions/setup
+        with:
+          cion-suite-token: ${{ secrets.CION_SUITE_PAT }}
+
+      - name: Typecheck
+        working-directory: cion-template
+        run: pnpm typecheck
+
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: cion-template
+
+      - uses: ./cion-template/.github/actions/setup
+        with:
+          cion-suite-token: ${{ secrets.CION_SUITE_PAT }}
+
+      - name: Lint
+        working-directory: cion-template
+        run: pnpm lint
+
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: cion-template
+
+      - uses: ./cion-template/.github/actions/setup
+        with:
+          cion-suite-token: ${{ secrets.CION_SUITE_PAT }}
+
+      - name: Build
+        working-directory: cion-template
+        run: pnpm build
+
+  lockfile-strict-pr:
+    name: lockfile-strict (PR)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          path: cion-template
+
+      - uses: ./cion-template/.github/actions/setup
+        with:
+          cion-suite-token: ${{ secrets.CION_SUITE_PAT }}
+          frozen-lockfile: 'true'
+
+      - name: Verify cion-template lockfile is in sync (strict)
+        working-directory: cion-template
+        run: |
+          echo "Lockfile verified — composite setup installed with --frozen-lockfile."
+          echo "If this failed: run 'pnpm install' locally, commit the updated pnpm-lock.yaml."

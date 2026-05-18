@@ -1,0 +1,59 @@
+{
+    "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+    "extends": [
+        "config:recommended",
+        ":semanticCommits",
+        ":automergeMinor",
+        ":prHourlyLimit2",
+        ":dependencyDashboard",
+        "helpers:pinGitHubActionDigests"
+    ],
+    "timezone": "Europe/Istanbul",
+    "baseBranches": ["dev"],
+    "rangeStrategy": "replace",
+    "schedule": ["before 5am on monday"],
+    "lockFileMaintenance": {
+        "enabled": false
+    },
+    "packageRules": [
+        {
+            "description": "Disable updates for link:-resolved @cion-suite/* packages",
+            "matchPackageNames": ["/^@cion-suite//"],
+            "enabled": false
+        },
+        {
+            "description": "Group Electron + electron-vite + electron-builder + electron-updater",
+            "matchPackageNames": [
+                "electron",
+                "electron-vite",
+                "electron-builder",
+                "electron-updater"
+            ],
+            "groupName": "electron stack"
+        },
+        {
+            "description": "Group React + types",
+            "matchPackageNames": [
+                "react",
+                "react-dom",
+                "@types/react",
+                "@types/react-dom"
+            ],
+            "groupName": "react stack"
+        },
+        {
+            "description": "Group Tailwind + shadcn deps",
+            "matchPackageNames": [
+                "tailwindcss",
+                "@tailwindcss/vite",
+                "tw-animate-css",
+                "tailwind-merge",
+                "class-variance-authority",
+                "clsx",
+                "radix-ui",
+                "lucide-react"
+            ],
+            "groupName": "tailwind + shadcn"
+        }
+    ]
+}

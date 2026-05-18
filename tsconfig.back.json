@@ -1,0 +1,13 @@
+{
+    "extends": "@cion-suite/config/tsconfig/back",
+    "compilerOptions": {
+        "composite": true,
+        "outDir": "build/out-types/back",
+        "baseUrl": ".",
+        "paths": {
+            "@app/*": ["app/*"],
+            "@shared/*": ["shared/*"]
+        }
+    },
+    "include": ["app/**/*", "shared/**/*"]
+}

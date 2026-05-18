@@ -1,0 +1,60 @@
+{
+    "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+    "appId": "io.cion.template",
+    "productName": "Cion Template",
+    "copyright": "Copyright © 2026 Cion Suite. Licensed under GPL-3.0-or-later.",
+    "artifactName": "${productName}-setup-${version}.${ext}",
+    "generateUpdatesFilesForAllChannels": false,
+    "npmRebuild": false,
+    "files": [
+        "build/out/**/*",
+        "package.json",
+        "!node_modules/**/*.md",
+        "!node_modules/**/*.map",
+        "!node_modules/**/*.ts",
+        "!node_modules/**/tsconfig.json",
+        "!node_modules/**/.eslintrc*",
+        "!node_modules/**/.editorconfig",
+        "!node_modules/**/CHANGELOG*"
+    ],
+    "icon": "icon",
+    "extraResources": [
+        {
+            "from": "app/splash.html",
+            "to": "splash.html"
+        }
+    ],
+    "directories": {
+        "buildResources": "public/assets",
+        "output": "build/dist"
+    },
+    "win": {
+        "target": ["nsis"]
+    },
+    "mac": {
+        "target": ["dmg"],
+        "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+        "target": ["AppImage"],
+        "category": "Development"
+    },
+    "nsis": {
+        "oneClick": false,
+        "perMachine": false,
+        "allowElevation": false,
+        "packElevateHelper": false,
+        "allowToChangeInstallationDirectory": true,
+        "runAfterFinish": true,
+        "unicode": true,
+        "deleteAppDataOnUninstall": true,
+        "include": "installer.nsh"
+    },
+    "publish": [
+        {
+            "provider": "generic",
+            "url": "https://example.com/updates/latest/",
+            "channel": "latest"
+        }
+    ]
+}
