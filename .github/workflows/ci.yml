@@ -18,14 +18,14 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          path: cion-template
+          path: cion-warden
 
-      - uses: ./cion-template/.github/actions/setup
+      - uses: ./cion-warden/.github/actions/setup
         with:
           cion-suite-token: ${{ secrets.CION_SUITE_PAT }}
 
       - name: Typecheck
-        working-directory: cion-template
+        working-directory: cion-warden
         run: pnpm typecheck
 
   lint:
@@ -35,14 +35,14 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          path: cion-template
+          path: cion-warden
 
-      - uses: ./cion-template/.github/actions/setup
+      - uses: ./cion-warden/.github/actions/setup
         with:
           cion-suite-token: ${{ secrets.CION_SUITE_PAT }}
 
       - name: Lint
-        working-directory: cion-template
+        working-directory: cion-warden
         run: pnpm lint
 
   build:
@@ -56,14 +56,14 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          path: cion-template
+          path: cion-warden
 
-      - uses: ./cion-template/.github/actions/setup
+      - uses: ./cion-warden/.github/actions/setup
         with:
           cion-suite-token: ${{ secrets.CION_SUITE_PAT }}
 
       - name: Build
-        working-directory: cion-template
+        working-directory: cion-warden
         run: pnpm build
 
   lockfile-strict-pr:
@@ -74,15 +74,15 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          path: cion-template
+          path: cion-warden
 
-      - uses: ./cion-template/.github/actions/setup
+      - uses: ./cion-warden/.github/actions/setup
         with:
           cion-suite-token: ${{ secrets.CION_SUITE_PAT }}
           frozen-lockfile: 'true'
 
-      - name: Verify cion-template lockfile is in sync (strict)
-        working-directory: cion-template
+      - name: Verify cion-warden lockfile is in sync (strict)
+        working-directory: cion-warden
         run: |
           echo "Lockfile verified — composite setup installed with --frozen-lockfile."
           echo "If this failed: run 'pnpm install' locally, commit the updated pnpm-lock.yaml."

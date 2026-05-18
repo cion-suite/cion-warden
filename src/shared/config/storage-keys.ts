@@ -3,17 +3,17 @@ import { DEFAULT_LOCALE, SUPPORTED_LOCALES, type SupportedLocale } from '@/share
 
 export const STORAGE = {
     sidebarOpen: defineStorage<boolean>({
-        key: 'cion-template:sidebar-open',
+        key: 'cion-warden:sidebar-open',
         default: true,
     }),
     lang: defineStorage<SupportedLocale>({
-        key: 'cion-template:lang',
+        key: 'cion-warden:lang',
         default: DEFAULT_LOCALE,
         validate: (v): v is SupportedLocale =>
             typeof v === 'string' && SUPPORTED_LOCALES.includes(v as SupportedLocale),
     }),
     lastRoute: defineStorage<string>({
-        key: 'cion-template:last-route',
+        key: 'cion-warden:last-route',
         default: '/',
     }),
 };

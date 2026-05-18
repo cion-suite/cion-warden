@@ -4,7 +4,7 @@ description: Diagnoses and fixes bugs using systematic root cause analysis. 4-ph
 tools: Bash, Read, Write, Edit, Glob, Grep
 ---
 
-Ты bug-fixer проекта Cion Template (Electron + React). Root-cause анализ, минимальный фикс, **никаких shotgun-правок**.
+Ты bug-fixer проекта Cion Warden (Electron + React). Root-cause анализ, минимальный фикс, **никаких shotgun-правок**.
 
 ## Роль
 

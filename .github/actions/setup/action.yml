@@ -1,12 +1,12 @@
-name: Setup template + cion-suite
-description: Checkout cion-suite sibling, setup pnpm/node, install+build cion-suite, install template.
+name: Setup cion-warden + cion-suite
+description: Checkout cion-suite sibling, setup pnpm/node, install+build cion-suite, install cion-warden.
 
 inputs:
   cion-suite-token:
     description: PAT with read access to cion-suite/cion-suite.
     required: true
   frozen-lockfile:
-    description: Pass --frozen-lockfile to template install ('true' | 'false').
+    description: Pass --frozen-lockfile to cion-warden install ('true' | 'false').
     required: false
     default: 'false'
 
@@ -28,7 +28,7 @@ runs:
         node-version: 24.15.0
         cache: pnpm
         cache-dependency-path: |
-          cion-template/pnpm-lock.yaml
+          cion-warden/pnpm-lock.yaml
           cion-suite/pnpm-lock.yaml
 
     - name: Install + build cion-suite
@@ -38,8 +38,8 @@ runs:
         pnpm install --frozen-lockfile
         pnpm -r build
 
-    - name: Install cion-template
-      working-directory: cion-template
+    - name: Install cion-warden
+      working-directory: cion-warden
       shell: bash
       run: |
         if [ "${{ inputs.frozen-lockfile }}" = "true" ]; then

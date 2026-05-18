@@ -7,7 +7,7 @@ export default [
     ...cionReact,
     ...cionFsd,
     {
-        name: 'cion-template/scripts',
+        name: 'cion-warden/scripts',
         files: ['scripts/**/*.{js,mjs,cjs}'],
         languageOptions: {
             globals: {
@@ -20,7 +20,7 @@ export default [
         },
     },
     {
-        name: 'cion-template/ignores',
+        name: 'cion-warden/ignores',
         ignores: ['build/**', 'src/shared/ui/shadcn/**'],
     },
 ];

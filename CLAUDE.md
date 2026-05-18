@@ -1,6 +1,6 @@
-# Cion Template — Agent Guide
+# Cion Warden — Agent Guide
 
-Electron + React 19 + Tailwind v4 + shadcn. Стартовый шаблон для apps Cion-экосистемы.
+Electron + React 19 + Tailwind v4 + shadcn. Cion Warden app.
 
 Архитектура: `docs/architecture.md`. Шлифовка/план: `docs/planned_now.md` (если есть).
 
@@ -81,22 +81,6 @@ DRY • KISS — закон. Нарушение → вернуть PR.
 - **Boundaries plugin** смотрит `tsconfig.front.json`. Переименовал — обнови `@cion-suite/config/eslint/fsd`.
 - **CSP `style-src 'unsafe-inline'`** в `index.html` — осознанный релакс. Tailwind v4 + Vite HMR инжектят inline `<style>` в dev; `onHeadersReceived` не применяется к `file://` (prod `loadFile`), поэтому split prod/dev CSP через headers не работает. Строгая CSP в prod потребует custom protocol (`app://`) — out of scope для template.
 - **`npmRebuild: false`** в `electron-builder.json` — корректно для template без native deps. При добавлении `keytar` / `better-sqlite3` / других модулей с N-API: переключить в `true` ИЛИ запустить `npx electron-builder install-app-deps` после `pnpm add`.
-
-## Before first ship
-
-Замени до релиза:
-
-| Где | Что |
-|---|---|
-| `electron-builder.json` | `appId`, `productName`, `publish[0].url` |
-| `electron-builder.beta.json` | `publish[0].url` |
-| `app/config.ts` | `APP_ID`, `PRODUCT_NAME`, `FEED_URLS.latestUrl`, `FEED_URLS.betaUrl` |
-| `public/assets/` | иконки: `icon.png` (linux) + `icon.ico` (windows) + `icon.icns` (macOS) |
-| `package.json` | `name`, `description`, `author` (object с `name`+`email` для подписи), `homepage` |
-| `index.html` | `<title>` |
-
-**Инвариант:** URL в `app/config.ts` == `electron-builder.<channel>.json[publish[0].url]`.
-Проверяется автоматически: `pnpm check:placeholders` (запускается из `dist` / `dist:beta`). Bypass — `ALLOW_PLACEHOLDERS=1` (только для отладочной сборки, не для релиза).
 
 ## STOP & ASK
 

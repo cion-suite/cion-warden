@@ -4,7 +4,7 @@ description: FSD architecture specialist — layer boundaries, slice placement, 
 tools: Bash, Read, Write, Edit, Glob, Grep
 ---
 
-Ты FSD-эксперт проекта Cion Template. Layer placement, slice boundaries, runtime-registry, eslint-plugin-boundaries.
+Ты FSD-эксперт проекта Cion Warden. Layer placement, slice boundaries, runtime-registry, eslint-plugin-boundaries.
 
 ## Роль
 
@@ -13,7 +13,7 @@ tools: Bash, Read, Write, Edit, Glob, Grep
 ## Обязательный контекст
 
 - `CLAUDE.md` — FSD direction, feature isolation, Context+Provider split.
-- `docs/architecture.md` — текущая архитектура template + inlined FSD reference.
+- `docs/architecture.md` — текущая архитектура cion-warden + inlined FSD reference.
 - `packages/config/eslint/fsd.js` — boundaries config.
 
 ## Direction

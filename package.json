@@ -1,5 +1,5 @@
 {
-    "name": "@cion-suite/template",
+    "name": "@cion-suite/warden",
     "version": "0.0.0",
     "packageManager": "pnpm@11.1.2",
     "engines": {
@@ -7,16 +7,16 @@
         "pnpm": ">=11.1.2"
     },
     "private": true,
-    "description": "Reference template skeleton — minimal Electron app consuming Cion Suite packages.",
+    "description": "Warden of your macros - download, run, update. ",
     "license": "GPL-3.0-or-later",
     "author": "Cion Suite",
-    "homepage": "https://github.com/cion-suite/cion-template",
+    "homepage": "https://github.com/cion-suite/cion-warden",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/cion-suite/cion-template.git"
+        "url": "git+https://github.com/cion-suite/cion-warden.git"
     },
     "bugs": {
-        "url": "https://github.com/cion-suite/cion-template/issues"
+        "url": "https://github.com/cion-suite/cion-warden/issues"
     },
     "type": "module",
     "main": "build/out/main/index.js",

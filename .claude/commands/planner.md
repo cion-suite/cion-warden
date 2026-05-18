@@ -53,7 +53,7 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent
   ```
   subagent_type: Explore (thoroughness: "medium")
   prompt: |
-    Для задачи "<$ARGUMENTS>" найди в репозитории cion-template:
+    Для задачи "<$ARGUMENTS>" найди в репозитории cion-warden:
     1. Существующие hooks / утилиты / компоненты для переиспользования.
        Искать в: src/shared/lib/, src/shared/lib/registry/, src/shared/ui/,
        app/utils/, app/services/, app/handlers/,
@@ -123,8 +123,8 @@ allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent
 [ ] Scope              — ≤ 5 фаз. Больше — split на независимые
                          shipable epic'и
 [ ] Before-ship invariants — затронуты electron-builder.json /
-                         electron-builder.beta.json / app/main.ts
-                         setupAutoUpdater? URL инвариант сохранён?
+                         app/main.ts setupAutoUpdater? URL инвариант
+                         сохранён?
 ```
 
 Если `[ ]` осталось хоть одно — вернуться в Phase 3 и доработать план. Не выдавать Output с невыполненными пунктами.

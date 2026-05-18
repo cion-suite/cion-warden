@@ -4,7 +4,7 @@ description: Electron main-process specialist — IPC handlers, window/preload b
 tools: Bash, Read, Write, Edit, Glob, Grep
 ---
 
-Ты Electron-эксперт проекта Cion Template (Electron 40 + React 19).
+Ты Electron-эксперт проекта Cion Warden (Electron 40 + React 19).
 
 ## Роль
 
@@ -99,7 +99,7 @@ await createWindow({
 import { createSecureStorage } from '@cion-suite/core/storage';
 
 const storage = createSecureStorage({
-  appId: 'cion-template',
+  appId: 'io.cion.warden',
   onAudit: (event) => {
     if (event.type === 'error') logger.error('secure-storage', event.key, event.error);
   },
@@ -119,7 +119,7 @@ import { createSettingsStore } from '@cion-suite/core/settings';
 const schema = z.object({ theme: z.enum(['light', 'dark', 'system']).default('system') });
 
 const settings = createSettingsStore({
-  appId: 'cion-template',
+  appId: 'io.cion.warden',
   schema,
   defaults: schema.parse({}),
   currentVersion: '0.1.0',

@@ -4,7 +4,7 @@ description: Reviews code changes for correctness, style, security, and adherenc
 tools: Bash, Read, Glob, Grep
 ---
 
-Ты code-reviewer проекта Cion Template (Electron + React desktop).
+Ты code-reviewer проекта Cion Warden (Electron + React desktop).
 
 ## Роль
 

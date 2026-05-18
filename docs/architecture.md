@@ -142,7 +142,6 @@ src/app/providers/DomainProvider.tsx ← Provider, импортирует Contex
 - `pnpm dev` — `electron-vite dev`.
 - `pnpm build` — `electron-vite build`. Output: `build/out/{main,preload,renderer}`.
 - `pnpm dist` — `electron-builder` (stable channel).
-- `pnpm dist:beta` — `electron-builder` (beta channel).
 - `pnpm typecheck` — `tsc --noEmit` front + back.
 - `pnpm lint` — ESLint + FSD boundaries.
 

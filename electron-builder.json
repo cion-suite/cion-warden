@@ -1,7 +1,7 @@
 {
     "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-    "appId": "io.cion.template",
-    "productName": "Cion Template",
+    "appId": "io.cion.warden",
+    "productName": "Cion Warden",
     "copyright": "Copyright © 2026 Cion Suite. Licensed under GPL-3.0-or-later.",
     "artifactName": "${productName}-setup-${version}.${ext}",
     "generateUpdatesFilesForAllChannels": false,

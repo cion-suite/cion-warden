@@ -1,4 +1,4 @@
-# Cion Template — Subagents
+# Cion Warden — Subagents
 
 Routing-таблица для делегирования задач специализированным агентам.
 
@@ -51,7 +51,7 @@ description: <Одно предложение про область>
 tools: Bash, Read, Write, Edit, Glob, Grep
 ---
 
-Ты <domain>-эксперт проекта Cion Template.
+Ты <domain>-эксперт проекта Cion Warden.
 
 ## Роль
 ## Обязательный контекст
