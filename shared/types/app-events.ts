@@ -7,7 +7,6 @@ declare module '@cion-suite/core/ipc' {
         'updater:downloaded': UpdaterInfo;
         'updater:error': { message: string };
         'updater:progress': UpdaterProgress;
-        'app:channel:changed': { isBeta: boolean };
     }
 }
 

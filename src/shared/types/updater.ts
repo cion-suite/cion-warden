@@ -1,11 +1,7 @@
-export type Outcome = { ok: true } | { ok: false; error: string };
-
-export interface UseUpdaterChannel {
-    supported: boolean;
-    isBeta: boolean | null;
-    loading: boolean;
-    setBeta: (next: boolean) => Promise<Outcome>;
-}
+export type Outcome =
+    | { ok: true }
+    | { ok: false; error: 'rate_limit'; retryAfter: number }
+    | { ok: false; error: string };
 
 export interface UseUpdaterCheck {
     supported: boolean;

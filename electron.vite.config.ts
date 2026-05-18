@@ -2,6 +2,9 @@ import { defineConfig } from 'electron-vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+
+const pkg = JSON.parse(readFileSync(resolve(import.meta.dirname, 'package.json'), 'utf-8')) as { version: string };
 
 const workspacePackages = ['@cion-suite/core'];
 
@@ -50,6 +53,7 @@ export default defineConfig({
 
         define: {
             __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+            __APP_VERSION__: JSON.stringify(pkg.version),
         },
         build: {
             outDir: 'build/out/renderer',

@@ -65,7 +65,7 @@ appEvents.emitTo(window, 'app:ready', { startedAt: Date.now() });
 declare module '@cion-suite/core/ipc' {
   interface BaseAppEventMap {
     'updater:available': UpdaterInfo;
-    'app:channel:changed': { isBeta: boolean };
+    'updater:downloaded': UpdaterInfo;
   }
 }
 ```

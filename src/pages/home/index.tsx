@@ -25,7 +25,7 @@ import {
     TooltipTrigger,
 } from '@/shared/ui/shadcn/tooltip';
 import { toast } from '@/shared/lib/toast';
-import { useUpdaterChannel } from '@/shared/lib/updater';
+import { useUpdaterCheckForUpdates } from '@/shared/lib/updater';
 import { i18n, useLocale, useT } from '@/shared/i18n';
 import { cn } from '@/shared/lib/utils';
 
@@ -49,8 +49,7 @@ function StatusDot({ status, className }: { status: Status; className?: string }
 type ActivityKey =
     | 'ready'
     | 'themeChanged'
-    | 'localeChanged'
-    | 'channelChanged';
+    | 'localeChanged';
 
 interface ActivityEntry {
     id: number;
@@ -65,14 +64,11 @@ export function HomePage() {
     const t = useT();
     const { theme, resolvedTheme } = useTheme();
     const locale = useLocale();
-    const updater = useUpdaterChannel();
+    const { supported: updaterSupported } = useUpdaterCheckForUpdates();
 
     const [readyAt, setReadyAt] = useState<number | null>(null);
     const [activity, setActivity] = useState<ActivityEntry[]>([]);
     const activityIdRef = useRef(0);
-
-    const updaterChannel =
-        updater.isBeta === null ? null : updater.isBeta ? 'beta' : 'latest';
 
     useAppEvent('app:ready', (data) => setReadyAt(data.startedAt));
 
@@ -118,14 +114,6 @@ export function HomePage() {
         }
     }, [locale]);
 
-    const prevChannel = useRef(updaterChannel);
-    useEffect(() => {
-        if (prevChannel.current !== updaterChannel && updaterChannel !== null) {
-            pushActivity('channelChanged', updaterChannel);
-            prevChannel.current = updaterChannel;
-        }
-    }, [updaterChannel]);
-
     return (
         <Tabs
             defaultValue="overview"
@@ -152,8 +140,7 @@ export function HomePage() {
                     theme={theme}
                     resolvedTheme={resolvedTheme}
                     locale={locale}
-                    updaterChannel={updaterChannel}
-                    updaterSupported={updater.supported}
+                    updaterSupported={updaterSupported}
                 />
             </TabsContent>
 
@@ -163,8 +150,7 @@ export function HomePage() {
                     theme={theme}
                     resolvedTheme={resolvedTheme}
                     locale={locale}
-                    updaterChannel={updaterChannel}
-                    updaterSupported={updater.supported}
+                    updaterSupported={updaterSupported}
                 />
             </TabsContent>
 
@@ -183,7 +169,6 @@ interface OverviewProps {
     theme: string | undefined;
     resolvedTheme: string | undefined;
     locale: string;
-    updaterChannel: 'beta' | 'latest' | null;
     updaterSupported: boolean;
 }
 
@@ -192,7 +177,6 @@ function OverviewTab({
     theme,
     resolvedTheme,
     locale,
-    updaterChannel,
     updaterSupported,
 }: OverviewProps) {
     const t = useT();
@@ -220,7 +204,7 @@ function OverviewTab({
         },
         {
             label: t('home.overview.updater'),
-            value: updaterSupported ? (updaterChannel ?? '—') : t('home.status.off'),
+            value: updaterSupported ? `v${__APP_VERSION__}` : t('home.status.off'),
             status: updaterSupported ? 'ok' : 'off',
         },
     ];
@@ -247,7 +231,6 @@ interface DiagnosticsProps {
     theme: string | undefined;
     resolvedTheme: string | undefined;
     locale: string;
-    updaterChannel: 'beta' | 'latest' | null;
     updaterSupported: boolean;
 }
 
@@ -256,7 +239,6 @@ function DiagnosticsTab({
     theme,
     resolvedTheme,
     locale,
-    updaterChannel,
     updaterSupported,
 }: DiagnosticsProps) {
     const t = useT();
@@ -292,7 +274,7 @@ function DiagnosticsTab({
                         status={updaterSupported ? 'ok' : 'off'}
                         value={
                             updaterSupported
-                                ? `${t('home.updater.channel')}: ${updaterChannel ?? '—'}`
+                                ? t('home.updater.available')
                                 : t('home.updater.missing')
                         }
                     />

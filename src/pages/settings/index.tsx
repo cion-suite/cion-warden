@@ -1,5 +1,8 @@
+import { useState } from 'react';
+import { useAppEvent } from '@cion-suite/core/ipc/renderer';
 import { useTheme } from 'next-themes';
 
+import { Badge } from '@/shared/ui/shadcn/badge';
 import { Button } from '@/shared/ui/shadcn/button';
 import { Card, CardContent } from '@/shared/ui/shadcn/card';
 import {
@@ -17,26 +20,47 @@ import {
 } from '@/shared/ui/shadcn/toggle-group';
 import { toast } from '@/shared/lib/toast';
 import { i18n, SUPPORTED_LOCALES, useLocale, useT } from '@/shared/i18n';
-import { useUpdaterChannel, useUpdaterCheckForUpdates } from '@/shared/lib/updater';
+import { useUpdaterCheckForUpdates } from '@/shared/lib/updater';
 
 const THEMES = ['light', 'dark'] as const;
+
+type UpdateStatus =
+    | { type: 'idle' }
+    | { type: 'up-to-date' }
+    | { type: 'available'; version: string }
+    | { type: 'downloaded'; version: string };
 
 export function SettingsPage() {
     const t = useT();
     const { theme, setTheme } = useTheme();
     const locale = useLocale();
 
-    const channel = useUpdaterChannel();
-    const { checking, check } = useUpdaterCheckForUpdates();
+    const { supported, checking, check } = useUpdaterCheckForUpdates();
+    const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ type: 'idle' });
 
-    const handleChannelChange = async (next: boolean) => {
-        const r = await channel.setBeta(next);
-        if (!r.ok) toast.error(r.error ?? t('error'));
-    };
+    useAppEvent('updater:not-available', () => setUpdateStatus({ type: 'up-to-date' }));
+    useAppEvent('updater:available', (d) => setUpdateStatus({ type: 'available', version: d.version }));
+    useAppEvent('updater:downloaded', (d) => setUpdateStatus({ type: 'downloaded', version: d.version }));
+
+    const statusText = checking
+        ? t('settings.updater.checking')
+        : updateStatus.type === 'up-to-date'
+          ? t('settings.updater.statusUpToDate')
+          : updateStatus.type === 'available'
+            ? t('settings.updater.statusAvailable', { version: updateStatus.version })
+            : updateStatus.type === 'downloaded'
+              ? t('settings.updater.statusDownloaded', { version: updateStatus.version })
+              : t('settings.updater.statusIdle');
 
     const handleCheckNow = async () => {
         const r = await check();
-        if (!r.ok) toast.error(r.error ?? t('error'));
+        if (!r.ok) {
+            if ('retryAfter' in r) {
+                toast.warning(t('settings.updater.rateLimited', { seconds: r.retryAfter }));
+            } else {
+                toast.error(r.error ?? t('error'));
+            }
+        }
     };
 
     return (
@@ -100,35 +124,35 @@ export function SettingsPage() {
                             <FieldGroup>
                                 <Field orientation="responsive">
                                     <FieldContent>
-                                        <FieldTitle>{t('settings.updater.label')}</FieldTitle>
+                                        <FieldTitle>{t('settings.updater.currentVersion')}</FieldTitle>
                                         <FieldDescription>
-                                            {channel.supported
+                                            {supported
                                                 ? t('settings.updater.description')
                                                 : t('settings.updater.unavailable')}
                                         </FieldDescription>
                                     </FieldContent>
-                                    {channel.supported && (
-                                        <div className="flex items-center gap-2">
-                                            <ToggleGroup
-                                                type="single"
-                                                variant="outline"
-                                                size="sm"
-                                                value={channel.isBeta ? 'beta' : 'stable'}
-                                                disabled={channel.loading}
-                                                onValueChange={(v) =>
-                                                    v &&
-                                                    void handleChannelChange(v === 'beta')
-                                                }
-                                            >
-                                                <ToggleGroupItem value="stable">
-                                                    {t('settings.updater.stable')}
-                                                </ToggleGroupItem>
-                                                <ToggleGroupItem value="beta">
-                                                    {t('settings.updater.beta')}
-                                                </ToggleGroupItem>
-                                            </ToggleGroup>
+                                    <Badge variant="outline" className="font-mono shrink-0">
+                                        v{__APP_VERSION__}
+                                    </Badge>
+                                </Field>
+
+                                {supported && (
+                                    <Field orientation="responsive">
+                                        <FieldContent>
+                                            <FieldTitle>{t('settings.updater.statusLabel')}</FieldTitle>
+                                            <FieldDescription>{statusText}</FieldDescription>
+                                        </FieldContent>
+                                        {updateStatus.type === 'downloaded' ? (
                                             <Button
-                                                variant="ghost"
+                                                variant="default"
+                                                size="sm"
+                                                onClick={() => window.app?.updater.quitAndInstall()}
+                                            >
+                                                {t('settings.updater.installNow')}
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                variant="outline"
                                                 size="sm"
                                                 disabled={checking}
                                                 onClick={() => void handleCheckNow()}
@@ -137,9 +161,9 @@ export function SettingsPage() {
                                                     ? t('settings.updater.checking')
                                                     : t('settings.updater.checkNow')}
                                             </Button>
-                                        </div>
-                                    )}
-                                </Field>
+                                        )}
+                                    </Field>
+                                )}
                             </FieldGroup>
                         </FieldSet>
                     </FieldGroup>

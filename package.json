@@ -26,7 +26,6 @@
         "preview": "electron-vite preview",
         "check:placeholders": "node scripts/check-placeholders.mjs",
         "dist": "pnpm check:placeholders && electron-vite build && electron-builder --config electron-builder.json",
-        "dist:beta": "pnpm check:placeholders && electron-vite build && electron-builder --config electron-builder.beta.json",
         "typecheck": "tsc -b --noEmit .",
         "lint": "eslint .",
         "ship": "pnpm typecheck && pnpm lint && pnpm build"

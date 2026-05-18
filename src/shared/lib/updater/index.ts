@@ -1,58 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAppEvent } from '@cion-suite/core/ipc/renderer';
 
 import { toast } from '@/shared/lib/toast';
-import type { Outcome, UseUpdaterChannel, UseUpdaterCheck } from '@/shared/types/updater';
-
-export function useUpdaterChannel(): UseUpdaterChannel {
-    const updater = window.app?.updater;
-    const supported = Boolean(updater);
-    const [isBeta, setIsBeta] = useState<boolean | null>(null);
-    const [loading, setLoading] = useState(supported);
-
-    useEffect(() => {
-        if (!updater) {
-            setLoading(false);
-            return;
-        }
-        let cancelled = false;
-        updater
-            .getChannel()
-            .then((r) => {
-                if (!cancelled) setIsBeta(r.isBeta);
-            })
-            .catch((e) => {
-                console.warn('[updater] getChannel failed', e);
-                if (!cancelled) setIsBeta(null);
-            })
-            .finally(() => {
-                if (!cancelled) setLoading(false);
-            });
-        return () => {
-            cancelled = true;
-        };
-    }, [updater]);
-
-    useAppEvent('app:channel:changed', (data) => setIsBeta(data.isBeta));
-
-    const setBeta = async (next: boolean): Promise<Outcome> => {
-        if (!updater) return { ok: false, error: 'updater bridge not available' };
-        let prev: boolean | null = null;
-        // Functional updater snapshots latest value; protects against double-click rollback to stale state.
-        setIsBeta((curr) => {
-            prev = curr;
-            return next;
-        });
-        const r = await updater.setChannel(next);
-        if (!r.ok) {
-            setIsBeta(prev);
-            return { ok: false, error: r.error };
-        }
-        return { ok: true };
-    };
-
-    return { supported, isBeta, loading, setBeta };
-}
+import { useT } from '@/shared/i18n';
+import type { Outcome, UseUpdaterCheck } from '@/shared/types/updater';
 
 export function useUpdaterCheckForUpdates(): UseUpdaterCheck {
     const updater = window.app?.updater;
@@ -64,7 +15,10 @@ export function useUpdaterCheckForUpdates(): UseUpdaterCheck {
         setChecking(true);
         try {
             const r = await updater.checkForUpdates();
-            if (!r.ok) return { ok: false, error: r.error };
+            if (!r.ok) {
+                if ('retryAfter' in r) return { ok: false, error: 'rate_limit', retryAfter: r.retryAfter };
+                return { ok: false, error: r.error };
+            }
             return { ok: true };
         } finally {
             setChecking(false);
@@ -74,8 +28,31 @@ export function useUpdaterCheckForUpdates(): UseUpdaterCheck {
     return { supported, checking, check };
 }
 
-export function useUpdaterErrorToast(): void {
+export function useUpdaterNotifications(): void {
+    const t = useT();
+    const downloadedVersionRef = useRef<string | null>(null);
+
     useAppEvent('updater:error', (data) => {
         toast.error(data.message);
+    });
+
+    useAppEvent('updater:not-available', () => {
+        toast.success(t('settings.updater.notAvailable'));
+    });
+
+    useAppEvent('updater:available', (data) => {
+        toast.info(t('settings.updater.available', { version: data.version }));
+    });
+
+    useAppEvent('updater:downloaded', (data) => {
+        if (downloadedVersionRef.current === data.version) return;
+        downloadedVersionRef.current = data.version;
+        toast(t('settings.updater.downloaded', { version: data.version }), {
+            duration: Infinity,
+            action: {
+                label: t('settings.updater.install'),
+                onClick: () => window.app?.updater.quitAndInstall(),
+            },
+        });
     });
 }

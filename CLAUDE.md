@@ -9,8 +9,7 @@ Electron + React 19 + Tailwind v4 + shadcn. Cion Warden app.
 ```bash
 pnpm dev          # electron-vite dev (main + preload + renderer)
 pnpm build        # electron-vite build (build/out/)
-pnpm dist         # build + electron-builder (latest)
-pnpm dist:beta    # build + electron-builder (beta)
+pnpm dist         # build + electron-builder
 pnpm typecheck    # tsc front + back
 pnpm lint         # ESLint + FSD boundaries
 ```

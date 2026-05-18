@@ -1,101 +1,76 @@
 import { app } from 'electron';
 import pkg from 'electron-updater';
-import { z } from 'zod';
+import type { ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater';
 import { appEvents, registerHandlers } from '@cion-suite/core/ipc';
-import { createSettingsStore } from '@cion-suite/core/settings';
 
 import type { UpdaterIpcResult } from '@shared/types';
 
-import type {
-    AutoUpdaterController,
-    CreateAutoUpdaterOptions,
-    UpdaterChannel,
-} from '../types/updater.js';
+import type { AutoUpdaterController, CreateAutoUpdaterOptions } from '../types/updater.js';
 
 const { autoUpdater } = pkg;
 
-const updaterStoreSchema = z.object({
-    betaChannel: z.boolean().default(false),
-});
+const RATE_MIN_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes between checks
+const RATE_MAX_PER_HOUR = 4;
+
+function notesToString(notes: UpdateInfo['releaseNotes']): string | undefined {
+    return typeof notes === 'string' ? notes : undefined;
+}
 
 export function createAutoUpdater(opts: CreateAutoUpdaterOptions): AutoUpdaterController {
     const log = opts.logger;
     let updateDownloaded = false;
-
-    const store = createSettingsStore({
-        appId: opts.appId,
-        schema: updaterStoreSchema,
-        defaults: { betaChannel: false },
-        currentVersion: app.getVersion(),
-        name: opts.storeName ?? 'updater',
-    });
-
-    const isBeta = (): boolean => store.get('betaChannel');
-
-    function resolveFeed(): { url: string; channel: UpdaterChannel } {
-        if (isBeta() && opts.feed.betaUrl) {
-            return { url: opts.feed.betaUrl, channel: 'beta' };
-        }
-        return { url: opts.feed.latestUrl, channel: 'latest' };
-    }
-
-    let lastFeed: { url: string; channel: UpdaterChannel } | null = null;
-
-    function applyFeed(): void {
-        const feed = resolveFeed();
-        if (lastFeed && lastFeed.url === feed.url && lastFeed.channel === feed.channel) return;
-        autoUpdater.setFeedURL({
-            provider: 'generic',
-            url: feed.url,
-            channel: feed.channel,
-        });
-        lastFeed = feed;
-        log?.info('updater feed set', feed.url, feed.channel);
-    }
+    let checkTimeoutId: NodeJS.Timeout | null = null;
+    let checkIntervalId: NodeJS.Timeout | null = null;
+    const checkTimestamps: number[] = [];
 
     autoUpdater.autoDownload = true;
     // main.ts before-quit handler installs pending updates explicitly; autoInstallOnAppQuit=true
     // would race against that path on quitAndInstall.
     autoUpdater.autoInstallOnAppQuit = false;
-    autoUpdater.allowDowngrade = !isBeta();
-    applyFeed();
+    autoUpdater.allowDowngrade = false;
 
-    autoUpdater.on('checking-for-update', () => log?.info('updater: checking'));
-    autoUpdater.on('update-available', (info) => {
+    const onChecking = (): void => log?.info('updater: checking');
+    const onAvailable = (info: UpdateInfo): void => {
         log?.info('updater: available', info.version);
         appEvents.emit('updater:available', {
             version: info.version,
-            releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : undefined,
+            releaseNotes: notesToString(info.releaseNotes),
             releaseName: info.releaseName ?? undefined,
             releaseDate: info.releaseDate,
         });
-    });
-    autoUpdater.on('update-not-available', () => {
+    };
+    const onNotAvailable = (): void => {
         log?.info('updater: not available');
         appEvents.emit('updater:not-available');
-    });
-    autoUpdater.on('error', (err) => {
+    };
+    const onError = (err: Error): void => {
         log?.error('updater error', err);
         appEvents.emit('updater:error', { message: err.message });
-    });
-    autoUpdater.on('download-progress', (p) => {
-        appEvents.emit('updater:progress', {
-            bytesPerSecond: p.bytesPerSecond,
-            percent: p.percent,
-            transferred: p.transferred,
-            total: p.total,
-        });
-    });
-    autoUpdater.on('update-downloaded', (info) => {
-        log?.info('updater: downloaded', info.version);
+    };
+    const onProgress = (p: ProgressInfo): void => {
+        appEvents.emit('updater:progress', p);
+    };
+    const onDownloaded = (event: UpdateDownloadedEvent): void => {
+        log?.info('updater: downloaded', event.version);
         updateDownloaded = true;
+        if (checkIntervalId) {
+            clearInterval(checkIntervalId);
+            checkIntervalId = null;
+        }
         appEvents.emit('updater:downloaded', {
-            version: info.version,
-            releaseNotes: typeof info.releaseNotes === 'string' ? info.releaseNotes : undefined,
-            releaseName: info.releaseName ?? undefined,
-            releaseDate: info.releaseDate,
+            version: event.version,
+            releaseNotes: notesToString(event.releaseNotes),
+            releaseName: event.releaseName ?? undefined,
+            releaseDate: event.releaseDate,
         });
-    });
+    };
+
+    autoUpdater.on('checking-for-update', onChecking);
+    autoUpdater.on('update-available', onAvailable);
+    autoUpdater.on('update-not-available', onNotAvailable);
+    autoUpdater.on('error', onError);
+    autoUpdater.on('download-progress', onProgress);
+    autoUpdater.on('update-downloaded', onDownloaded);
 
     function installPendingUpdate(): void {
         try {
@@ -108,21 +83,41 @@ export function createAutoUpdater(opts: CreateAutoUpdaterOptions): AutoUpdaterCo
     }
 
     async function scheduledCheck(): Promise<void> {
-        if (!app.isPackaged) {
-            log?.info('updater: skipped (dev mode)');
-            return;
-        }
+        if (updateDownloaded) return;
         try {
-            applyFeed();
             await autoUpdater.checkForUpdates();
         } catch (error) {
             log?.error('updater check failed', error);
         }
     }
 
+    function getRateLimitRetry(): number | null {
+        const now = Date.now();
+        const oneHourAgo = now - 60 * 60 * 1000;
+        while (checkTimestamps.length > 0 && (checkTimestamps[0] ?? 0) < oneHourAgo) {
+            checkTimestamps.shift();
+        }
+        const last = checkTimestamps[checkTimestamps.length - 1];
+        if (last != null) {
+            const elapsed = now - last;
+            if (elapsed < RATE_MIN_INTERVAL_MS) {
+                return Math.ceil((RATE_MIN_INTERVAL_MS - elapsed) / 1000);
+            }
+        }
+        const oldest = checkTimestamps[0];
+        if (checkTimestamps.length >= RATE_MAX_PER_HOUR && oldest != null) {
+            return Math.ceil((oldest + 60 * 60 * 1000 - now) / 1000);
+        }
+        return null;
+    }
+
     async function runCheck(): Promise<UpdaterIpcResult> {
+        const retryAfter = getRateLimitRetry();
+        if (retryAfter !== null) {
+            return { ok: false, error: 'rate_limit', retryAfter };
+        }
+        checkTimestamps.push(Date.now());
         try {
-            applyFeed();
             await autoUpdater.checkForUpdates();
             return { ok: true };
         } catch (error) {
@@ -135,34 +130,32 @@ export function createAutoUpdater(opts: CreateAutoUpdaterOptions): AutoUpdaterCo
         'updater:quit-and-install': () => {
             installPendingUpdate();
         },
-        'updater:get-channel': () => ({ isBeta: isBeta() }),
-        'updater:set-channel': async (_event, payload: unknown) => {
-            const parsed = z.boolean().safeParse(payload);
-            if (!parsed.success) {
-                return { ok: false, error: 'invalid payload: nextBeta must be boolean' };
-            }
-            const nextBeta = parsed.data;
-            store.set('betaChannel', nextBeta);
-            autoUpdater.allowDowngrade = !nextBeta;
-            appEvents.emit('app:channel:changed', { isBeta: nextBeta });
-            return runCheck();
-        },
     });
 
-    const checkTimeoutId = setTimeout(() => {
-        void scheduledCheck();
-    }, opts.initialDelay ?? 3000);
-
-    const checkIntervalId = setInterval(
-        () => {
+    if (app.isPackaged) {
+        checkTimeoutId = setTimeout(() => {
             void scheduledCheck();
-        },
-        opts.checkInterval ?? 60 * 60 * 1000
-    );
+        }, opts.initialDelay ?? 3000);
+
+        checkIntervalId = setInterval(
+            () => {
+                void scheduledCheck();
+            },
+            opts.checkInterval ?? 60 * 60 * 1000
+        );
+    } else {
+        log?.info('updater: scheduling skipped (dev mode)');
+    }
 
     function dispose(): void {
-        clearTimeout(checkTimeoutId);
-        clearInterval(checkIntervalId);
+        if (checkTimeoutId) clearTimeout(checkTimeoutId);
+        if (checkIntervalId) clearInterval(checkIntervalId);
+        autoUpdater.off('checking-for-update', onChecking);
+        autoUpdater.off('update-available', onAvailable);
+        autoUpdater.off('update-not-available', onNotAvailable);
+        autoUpdater.off('error', onError);
+        autoUpdater.off('download-progress', onProgress);
+        autoUpdater.off('update-downloaded', onDownloaded);
     }
 
     return {
