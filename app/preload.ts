@@ -33,7 +33,6 @@ const bridge: AppBridge = {
         listSource: (sourceId) => ipcRenderer.invoke('get-scripts:list-source', sourceId),
         syncSource: (sourceId) => ipcRenderer.invoke('get-scripts:sync-source', sourceId),
         download: (sourceId, fileName) => ipcRenderer.invoke('get-scripts:download', sourceId, fileName),
-        sync: () => ipcRenderer.invoke('get-scripts:sync'),
     },
 };
 

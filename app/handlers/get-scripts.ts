@@ -6,6 +6,7 @@ import type { RemoteScriptMeta } from '@shared/types/get-scripts.js';
 import type { GitVaultSource, VaultSource } from '@shared/types/vault.js';
 import { getGlobalVaultPath } from '../services/vault-paths.js';
 import { listSources } from '../services/sources-store.js';
+import { parseGithubUrl } from '../utils/github-url.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -30,12 +31,18 @@ export interface SourceScriptsResult {
     lastSyncedAt?: number;
 }
 
+interface LocalCacheEntry {
+    mtime: number;
+    size: number;
+    sha: string;
+}
+type LocalCache = Record<string, LocalCacheEntry>;
+
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function parseGithubUrl(url: string): { owner: string; repo: string } | null {
-    const m = url.match(/github\.com\/([^/]+)\/([^/.\s]+)/);
-    if (!m?.[1] || !m[2]) return null;
-    return { owner: m[1], repo: m[2].replace(/\.git$/, '') };
+function stripExt(fileName: string): string {
+    const ext = path.extname(fileName);
+    return ext ? fileName.slice(0, -ext.length) : fileName;
 }
 
 function gitBlobSha(content: Buffer): string {
@@ -49,6 +56,10 @@ function manifestPath(vaultBase: string, sourceId: string): string {
     return path.join(vaultBase, sourceId, '.manifest.json');
 }
 
+function localCachePath(vaultBase: string, sourceId: string): string {
+    return path.join(vaultBase, sourceId, '.local-cache.json');
+}
+
 async function readManifest(vaultBase: string, sourceId: string): Promise<ManifestFile | null> {
     try {
         return JSON.parse(
@@ -59,18 +70,40 @@ async function readManifest(vaultBase: string, sourceId: string): Promise<Manife
     }
 }
 
-async function checkLocalFile(
+async function readLocalCache(vaultBase: string, sourceId: string): Promise<LocalCache> {
+    try {
+        return JSON.parse(
+            await fs.readFile(localCachePath(vaultBase, sourceId), 'utf-8'),
+        ) as LocalCache;
+    } catch {
+        return {};
+    }
+}
+
+async function writeLocalCache(vaultBase: string, sourceId: string, cache: LocalCache): Promise<void> {
+    const p = localCachePath(vaultBase, sourceId);
+    await fs.mkdir(path.dirname(p), { recursive: true });
+    await fs.writeFile(p, JSON.stringify(cache), 'utf-8');
+}
+
+async function resolveLocalSha(
     scriptsDir: string,
     fileName: string,
-    remoteSha: string,
-): Promise<{ isDownloaded: boolean; hasUpdate: boolean; localSha?: string }> {
+    cached: LocalCacheEntry | undefined,
+): Promise<LocalCacheEntry | null> {
+    let stat;
     try {
-        const content = await fs.readFile(path.join(scriptsDir, fileName));
-        const localSha = gitBlobSha(content);
-        return { isDownloaded: true, hasUpdate: localSha !== remoteSha, localSha };
+        stat = await fs.stat(path.join(scriptsDir, fileName));
     } catch {
-        return { isDownloaded: false, hasUpdate: false };
+        return null;
     }
+    const mtime = stat.mtimeMs;
+    const size = stat.size;
+    if (cached && cached.mtime === mtime && cached.size === size) {
+        return cached;
+    }
+    const content = await fs.readFile(path.join(scriptsDir, fileName));
+    return { mtime, size, sha: gitBlobSha(content) };
 }
 
 async function manifestToScripts(
@@ -79,25 +112,44 @@ async function manifestToScripts(
     vaultBase: string,
 ): Promise<RemoteScriptMeta[]> {
     const scriptsDir = path.join(vaultBase, source.id, 'scripts');
-    return Promise.all(
+    const cache = await readLocalCache(vaultBase, source.id);
+    const nextCache: LocalCache = {};
+
+    const scripts = await Promise.all(
         manifest.scripts.map(async (item) => {
-            const ext = path.extname(item.fileName);
-            const name = ext ? item.fileName.slice(0, -ext.length) : item.fileName;
-            const local = await checkLocalFile(scriptsDir, item.fileName, item.sha);
+            const local = await resolveLocalSha(scriptsDir, item.fileName, cache[item.fileName]);
+            if (local) nextCache[item.fileName] = local;
             return {
                 id: `${source.id}:${item.fileName}`,
-                name,
+                name: stripExt(item.fileName),
                 fileName: item.fileName,
                 sourceId: source.id,
                 sourceName: source.name,
                 sha: item.sha,
-                localSha: local.localSha,
-                isDownloaded: local.isDownloaded,
-                hasUpdate: local.hasUpdate,
+                localSha: local?.sha,
+                isDownloaded: local !== null,
+                hasUpdate: local !== null && local.sha !== item.sha,
                 downloadUrl: item.downloadUrl ?? undefined,
             };
         }),
     );
+
+    if (!cacheEqual(cache, nextCache)) {
+        await writeLocalCache(vaultBase, source.id, nextCache).catch(() => {});
+    }
+    return scripts;
+}
+
+function cacheEqual(a: LocalCache, b: LocalCache): boolean {
+    const ak = Object.keys(a);
+    const bk = Object.keys(b);
+    if (ak.length !== bk.length) return false;
+    for (const k of ak) {
+        const av = a[k];
+        const bv = b[k];
+        if (!av || !bv || av.mtime !== bv.mtime || av.size !== bv.size || av.sha !== bv.sha) return false;
+    }
+    return true;
 }
 
 // ─── GitHub sync ─────────────────────────────────────────────────────────────
@@ -171,7 +223,7 @@ async function downloadFromGitSource(
 
     // Also download cfg/<name>.json if it exists (optional)
     try {
-        const baseName = fileName.replace(/\.[^.]+$/, '');
+        const baseName = stripExt(fileName);
         const cfgUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/scripts/cfg/${encodeURIComponent(baseName)}.json`;
         const cfgRes = await fetch(cfgUrl, { headers: { 'User-Agent': 'cion-warden/1.0' } });
         if (cfgRes.ok) {
@@ -186,11 +238,17 @@ async function downloadFromGitSource(
 
 // ─── Handler registration ────────────────────────────────────────────────────
 
+function requireString(value: unknown, field: string): string {
+    if (typeof value !== 'string' || value.length === 0) {
+        throw new Error(`Invalid ${field}`);
+    }
+    return value;
+}
+
 export function registerGetScriptHandlers(): void {
     registerHandlers({
-        // List scripts for a single source from cache (no API call)
         'get-scripts:list-source': async (_event, rawSourceId: unknown): Promise<SourceScriptsResult> => {
-            const sourceId = String(rawSourceId);
+            const sourceId = requireString(rawSourceId, 'sourceId');
             const sources = await listSources();
             const source = sources.find((s) => s.id === sourceId);
             if (!source) return { scripts: [] };
@@ -203,12 +261,11 @@ export function registerGetScriptHandlers(): void {
             return { scripts, lastSyncedAt: manifest.lastSyncedAt };
         },
 
-        // Sync a single source: hits GitHub API, writes manifest, returns fresh data
         'get-scripts:sync-source': async (
             _event,
             rawSourceId: unknown,
         ): Promise<{ scripts: RemoteScriptMeta[]; lastSyncedAt: number }> => {
-            const sourceId = String(rawSourceId);
+            const sourceId = requireString(rawSourceId, 'sourceId');
             const sources = await listSources();
             const source = sources.find((s) => s.id === sourceId);
             if (!source) throw new Error(`Source not found: ${sourceId}`);
@@ -216,7 +273,6 @@ export function registerGetScriptHandlers(): void {
             return syncGitSource(source, getGlobalVaultPath());
         },
 
-        // Aggregate list from all source caches (no API calls)
         'get-scripts:list': async (): Promise<RemoteScriptMeta[]> => {
             const sources = await listSources();
             const vaultBase = getGlobalVaultPath();
@@ -227,26 +283,26 @@ export function registerGetScriptHandlers(): void {
                     return manifestToScripts(source, manifest, vaultBase);
                 }),
             );
-            return results
-                .filter(
-                    (r): r is PromiseFulfilledResult<RemoteScriptMeta[]> =>
-                        r.status === 'fulfilled',
-                )
-                .flatMap((r) => r.value);
+            const out: RemoteScriptMeta[] = [];
+            for (let i = 0; i < results.length; i++) {
+                const r = results[i]!;
+                if (r.status === 'fulfilled') {
+                    out.push(...r.value);
+                } else {
+                    console.warn('[get-scripts:list] source failed', sources[i]?.id, r.reason);
+                }
+            }
+            return out;
         },
 
         'get-scripts:download': async (_event, rawSourceId: unknown, rawFileName: unknown) => {
-            const sourceId = String(rawSourceId);
-            const fileName = String(rawFileName);
+            const sourceId = requireString(rawSourceId, 'sourceId');
+            const fileName = requireString(rawFileName, 'fileName');
             const sources = await listSources();
             const source = sources.find((s) => s.id === sourceId);
             if (!source) throw new Error(`Source not found: ${sourceId}`);
             if (source.type !== 'git') throw new Error('Only git sources support download');
             await downloadFromGitSource(source, fileName, getGlobalVaultPath());
-        },
-
-        'get-scripts:sync': async () => {
-            // Legacy no-op — use sync-source per source instead
         },
     });
 }

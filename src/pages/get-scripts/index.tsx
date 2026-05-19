@@ -14,8 +14,9 @@ export function GetScriptsPage() {
     const t = useT();
     const [search, setSearch] = useState('');
     const [sourcesOpen, setSourcesOpen] = useState(false);
+    const [syncing, setSyncing] = useState(false);
 
-    const { scripts, loading, refresh } = useRemoteScripts();
+    const { scripts, setScripts, loading, refresh } = useRemoteScripts();
     const { sources, refresh: refreshSources } = useVaultSources();
 
     const q = search.trim().toLowerCase();
@@ -30,10 +31,46 @@ export function GetScriptsPage() {
         />,
     );
 
+    const handleSync = async () => {
+        const gitSources = sources.filter((s) => s.type === 'git');
+        if (gitSources.length === 0) {
+            await refresh();
+            return;
+        }
+        setSyncing(true);
+        try {
+            const results = await Promise.allSettled(
+                gitSources.map((s) => window.app!.getScripts.syncSource(s.id)),
+            );
+            const failed = results.filter((r) => r.status === 'rejected');
+            if (failed.length > 0) {
+                toast.error(t('error'));
+            } else {
+                toast.success(t('sources.syncDone'));
+            }
+            await refresh();
+        } finally {
+            setSyncing(false);
+        }
+    };
+
     const handleDownload = async (script: RemoteScriptMeta) => {
         await window.app?.getScripts.download(script.sourceId, script.fileName);
-        await refresh();
+        setScripts((prev) =>
+            prev.map((s) =>
+                s.id === script.id
+                    ? { ...s, isDownloaded: true, hasUpdate: false, localSha: s.sha }
+                    : s,
+            ),
+        );
         toast.success(t('getScripts.downloaded', { name: script.name }));
+    };
+
+    const handleSourcesChange = () => {
+        void (async () => {
+            await refreshSources();
+            await refresh();
+        })();
     };
 
     return (
@@ -41,8 +78,8 @@ export function GetScriptsPage() {
             <div className="mx-auto flex h-full w-full min-h-0 max-w-4xl flex-col">
                 <RemoteScriptList
                     scripts={filtered}
-                    loading={loading}
-                    onRefresh={() => void refresh()}
+                    loading={loading || syncing}
+                    onRefresh={() => void handleSync()}
                     onSources={() => setSourcesOpen(true)}
                     onDownload={handleDownload}
                 />
@@ -52,7 +89,7 @@ export function GetScriptsPage() {
                 open={sourcesOpen}
                 onOpenChange={setSourcesOpen}
                 sources={sources}
-                onSourcesChange={() => void refreshSources()}
+                onSourcesChange={handleSourcesChange}
             />
         </>
     );

@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { app } from 'electron';
 import type { GitVaultSource, VaultSource } from '@shared/types/vault.js';
+import { deriveGitName } from '../utils/github-url.js';
 
 function getPath(): string {
     return path.join(app.getPath('userData'), 'sources.json');
@@ -18,20 +19,6 @@ async function read(): Promise<VaultSource[]> {
 
 async function write(sources: VaultSource[]): Promise<void> {
     await fs.writeFile(getPath(), JSON.stringify(sources, null, 2), 'utf-8');
-}
-
-export function deriveGitName(url: string): string {
-    const m = url.match(/github\.com\/([^/]+)\/([^/.\s]+)/);
-    if (m?.[1] && m[2]) return `${m[1]}/${m[2].replace(/\.git$/, '')}`;
-    try {
-        const u = new URL(url);
-        const parts = u.pathname.replace(/\.git$/, '').split('/').filter(Boolean);
-        if (parts.length >= 2) return parts.slice(-2).join('/');
-        if (parts.length === 1) return parts[0]!;
-    } catch {
-        // ignore malformed URLs
-    }
-    return url;
 }
 
 export async function listSources(): Promise<VaultSource[]> {

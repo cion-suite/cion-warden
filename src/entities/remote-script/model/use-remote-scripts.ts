@@ -1,20 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useAsyncList } from '@/shared/lib/hooks';
 import type { RemoteScriptMeta } from '@shared/types/get-scripts';
 
 export function useRemoteScripts() {
-    const [scripts, setScripts] = useState<RemoteScriptMeta[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    const refresh = useCallback(async () => {
-        setLoading(true);
-        const list = (await window.app?.getScripts.list()) ?? [];
-        setScripts(list);
-        setLoading(false);
-    }, []);
-
-    useEffect(() => {
-        void refresh();
-    }, [refresh]);
-
-    return { scripts, loading, refresh };
+    const { items, setItems, loading, refresh } = useAsyncList<RemoteScriptMeta>(
+        () => window.app?.getScripts.list(),
+    );
+    return { scripts: items, setScripts: setItems, loading, refresh };
 }

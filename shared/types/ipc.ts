@@ -45,6 +45,5 @@ export interface AppBridge {
         listSource: (sourceId: string) => Promise<{ scripts: RemoteScriptMeta[]; lastSyncedAt?: number }>;
         syncSource: (sourceId: string) => Promise<{ scripts: RemoteScriptMeta[]; lastSyncedAt: number }>;
         download: (sourceId: string, fileName: string) => Promise<void>;
-        sync: () => Promise<void>;
     };
 }

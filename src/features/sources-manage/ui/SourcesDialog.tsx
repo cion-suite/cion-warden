@@ -18,14 +18,6 @@ import type { VaultSource } from '@shared/types/vault';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function formatLastSynced(ts: number): string {
-    const diff = Math.floor((Date.now() - ts) / 1000);
-    if (diff < 60) return '< 1 min ago';
-    if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} hr ago`;
-    return new Date(ts).toLocaleDateString();
-}
-
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
         <div className="flex flex-col gap-1.5 px-4 py-3">
@@ -101,6 +93,114 @@ function NewSourceItem({ onCancel }: { onCancel: () => void }) {
     );
 }
 
+// ─── Form-field blocks (shared between settings + new-source) ────────────────
+
+interface GitFormFieldsProps {
+    url: string;
+    onUrlChange: (v: string) => void;
+    branch: string;
+    onBranchChange: (v: string) => void;
+    isPrivate: boolean;
+    onIsPrivateChange: (v: boolean) => void;
+    autoFocusUrl?: boolean;
+}
+
+function GitFormFields({
+    url,
+    onUrlChange,
+    branch,
+    onBranchChange,
+    isPrivate,
+    onIsPrivateChange,
+    autoFocusUrl,
+}: GitFormFieldsProps) {
+    const t = useT();
+    return (
+        <>
+            <FieldRow label={t('sources.url')}>
+                <Input
+                    className="h-8"
+                    value={url}
+                    onChange={(e) => onUrlChange(e.target.value)}
+                    placeholder="https://github.com/user/repo"
+                    autoFocus={autoFocusUrl}
+                />
+            </FieldRow>
+            <FieldRow label={t('sources.branch')}>
+                <Input
+                    className="h-8"
+                    value={branch}
+                    onChange={(e) => onBranchChange(e.target.value)}
+                    placeholder="main"
+                />
+            </FieldRow>
+            <div className="flex items-center justify-between px-4 py-3">
+                <span className="text-sm font-medium">{t('sources.private')}</span>
+                <Switch checked={isPrivate} onCheckedChange={onIsPrivateChange} />
+            </div>
+        </>
+    );
+}
+
+interface ExternalFormFieldsProps {
+    name: string;
+    onNameChange: (v: string) => void;
+    scriptsUrl: string;
+    onScriptsUrlChange: (v: string) => void;
+    libsUrl: string;
+    onLibsUrlChange: (v: string) => void;
+    cfgUrl: string;
+    onCfgUrlChange: (v: string) => void;
+    namePlaceholder?: string;
+}
+
+function ExternalFormFields({
+    name,
+    onNameChange,
+    scriptsUrl,
+    onScriptsUrlChange,
+    libsUrl,
+    onLibsUrlChange,
+    cfgUrl,
+    onCfgUrlChange,
+    namePlaceholder,
+}: ExternalFormFieldsProps) {
+    const t = useT();
+    return (
+        <>
+            <FieldRow label={t('sources.name')}>
+                <Input
+                    className="h-8"
+                    value={name}
+                    onChange={(e) => onNameChange(e.target.value)}
+                    placeholder={namePlaceholder}
+                />
+            </FieldRow>
+            <FieldRow label={t('sources.scriptsUrl')}>
+                <Input
+                    className="h-8"
+                    value={scriptsUrl}
+                    onChange={(e) => onScriptsUrlChange(e.target.value)}
+                />
+            </FieldRow>
+            <FieldRow label={t('sources.libsUrl')}>
+                <Input
+                    className="h-8"
+                    value={libsUrl}
+                    onChange={(e) => onLibsUrlChange(e.target.value)}
+                />
+            </FieldRow>
+            <FieldRow label={t('sources.cfgUrl')}>
+                <Input
+                    className="h-8"
+                    value={cfgUrl}
+                    onChange={(e) => onCfgUrlChange(e.target.value)}
+                />
+            </FieldRow>
+        </>
+    );
+}
+
 // ─── Right panel: settings for existing source ───────────────────────────────
 
 function GitSettings({
@@ -130,33 +230,19 @@ function GitSettings({
 
     return (
         <div className="flex h-full flex-col">
-            {/* Header */}
             <div className="border-b px-4 py-3">
                 <p className="truncate font-semibold">{source.name}</p>
             </div>
 
-            {/* Form */}
             <div className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto">
-                <FieldRow label={t('sources.url')}>
-                    <Input
-                        className="h-8"
-                        value={url}
-                        onChange={(e) => setUrl(e.target.value)}
-                        placeholder="https://github.com/user/repo"
-                    />
-                </FieldRow>
-                <FieldRow label={t('sources.branch')}>
-                    <Input
-                        className="h-8"
-                        value={branch}
-                        onChange={(e) => setBranch(e.target.value)}
-                        placeholder="main"
-                    />
-                </FieldRow>
-                <div className="flex items-center justify-between px-4 py-3">
-                    <span className="text-sm font-medium">{t('sources.private')}</span>
-                    <Switch checked={isPrivate} onCheckedChange={setIsPrivate} />
-                </div>
+                <GitFormFields
+                    url={url}
+                    onUrlChange={setUrl}
+                    branch={branch}
+                    onBranchChange={setBranch}
+                    isPrivate={isPrivate}
+                    onIsPrivateChange={setIsPrivate}
+                />
             </div>
 
             <div className="border-t px-4 py-3">
@@ -205,30 +291,16 @@ function ExternalSettings({
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto">
-                <FieldRow label={t('sources.name')}>
-                    <Input className="h-8" value={name} onChange={(e) => setName(e.target.value)} />
-                </FieldRow>
-                <FieldRow label={t('sources.scriptsUrl')}>
-                    <Input
-                        className="h-8"
-                        value={scriptsUrl}
-                        onChange={(e) => setScriptsUrl(e.target.value)}
-                    />
-                </FieldRow>
-                <FieldRow label={t('sources.libsUrl')}>
-                    <Input
-                        className="h-8"
-                        value={libsUrl}
-                        onChange={(e) => setLibsUrl(e.target.value)}
-                    />
-                </FieldRow>
-                <FieldRow label={t('sources.cfgUrl')}>
-                    <Input
-                        className="h-8"
-                        value={cfgUrl}
-                        onChange={(e) => setCfgUrl(e.target.value)}
-                    />
-                </FieldRow>
+                <ExternalFormFields
+                    name={name}
+                    onNameChange={setName}
+                    scriptsUrl={scriptsUrl}
+                    onScriptsUrlChange={setScriptsUrl}
+                    libsUrl={libsUrl}
+                    onLibsUrlChange={setLibsUrl}
+                    cfgUrl={cfgUrl}
+                    onCfgUrlChange={setCfgUrl}
+                />
             </div>
 
             <div className="border-t px-4 py-3">
@@ -290,49 +362,31 @@ function NewSourcePanel({
 
     const gitFields = (
         <div className="flex flex-col divide-y divide-border">
-            <FieldRow label={t('sources.url')}>
-                <Input
-                    className="h-8"
-                    value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    placeholder="https://github.com/user/repo"
-                    autoFocus
-                />
-            </FieldRow>
-            <FieldRow label={t('sources.branch')}>
-                <Input
-                    className="h-8"
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    placeholder="main"
-                />
-            </FieldRow>
-            <div className="flex items-center justify-between px-4 py-3">
-                <span className="text-sm font-medium">{t('sources.private')}</span>
-                <Switch checked={isPrivate} onCheckedChange={setIsPrivate} />
-            </div>
+            <GitFormFields
+                url={url}
+                onUrlChange={setUrl}
+                branch={branch}
+                onBranchChange={setBranch}
+                isPrivate={isPrivate}
+                onIsPrivateChange={setIsPrivate}
+                autoFocusUrl
+            />
         </div>
     );
 
     const externalFields = (
         <div className="flex flex-col divide-y divide-border">
-            <FieldRow label={t('sources.name')}>
-                <Input
-                    className="h-8"
-                    value={extName}
-                    onChange={(e) => setExtName(e.target.value)}
-                    placeholder={t('sources.namePlaceholder')}
-                />
-            </FieldRow>
-            <FieldRow label={t('sources.scriptsUrl')}>
-                <Input className="h-8" value={scriptsUrl} onChange={(e) => setScriptsUrl(e.target.value)} />
-            </FieldRow>
-            <FieldRow label={t('sources.libsUrl')}>
-                <Input className="h-8" value={libsUrl} onChange={(e) => setLibsUrl(e.target.value)} />
-            </FieldRow>
-            <FieldRow label={t('sources.cfgUrl')}>
-                <Input className="h-8" value={cfgUrl} onChange={(e) => setCfgUrl(e.target.value)} />
-            </FieldRow>
+            <ExternalFormFields
+                name={extName}
+                onNameChange={setExtName}
+                scriptsUrl={scriptsUrl}
+                onScriptsUrlChange={setScriptsUrl}
+                libsUrl={libsUrl}
+                onLibsUrlChange={setLibsUrl}
+                cfgUrl={cfgUrl}
+                onCfgUrlChange={setCfgUrl}
+                namePlaceholder={t('sources.namePlaceholder')}
+            />
         </div>
     );
 
@@ -387,17 +441,16 @@ export function SourcesDialog({
     const t = useT();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [addingNew, setAddingNew] = useState(false);
-    const prevOpenRef = useRef(false);
+    const sourcesRef = useRef(sources);
+    sourcesRef.current = sources;
 
     useEffect(() => {
-        if (open && !prevOpenRef.current) {
-            setSelectedId(sources[0]?.id ?? null);
+        if (open) {
+            setSelectedId(sourcesRef.current[0]?.id ?? null);
             setAddingNew(false);
         }
-        prevOpenRef.current = open;
-    }, [open, sources]);
+    }, [open]);
 
-    // Keep selection valid when source list changes
     useEffect(() => {
         if (selectedId && !sources.find((s) => s.id === selectedId)) {
             setSelectedId(null);
@@ -424,7 +477,6 @@ export function SourcesDialog({
     const handleNewSaved = () => {
         setAddingNew(false);
         onSourcesChange();
-        // Select the newly added source (last in list after refresh)
     };
 
     const handleSaved = () => {
