@@ -6,6 +6,7 @@ import { installCrashReporter } from '@cion-suite/core/crash';
 
 import { APP_ID, PRODUCT_NAME } from '../config.js';
 import { settingsSchema } from './settings-schema.js';
+import { createSourceTokens } from './source-tokens.js';
 import type { AppServices, AppSettings } from '../types/services.js';
 
 export function bootServices(): AppServices {
@@ -35,5 +36,7 @@ export function bootServices(): AppServices {
         currentVersion: app.getVersion(),
     });
 
-    return { logger, storage, settings };
+    const sourceTokens = createSourceTokens({ storage, logger });
+
+    return { logger, storage, settings, sourceTokens };
 }

@@ -7,6 +7,8 @@ export interface GitVaultSource {
     url: string;
     branch: string;
     isPrivate: boolean;
+    /** Computed at listSources from secure-store; never persisted in sources.json. */
+    hasToken?: boolean;
 }
 
 export interface ExternalVaultSource {
