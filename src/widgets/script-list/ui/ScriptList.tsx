@@ -14,7 +14,6 @@ interface ScriptListProps {
     onStop: (id: string) => Promise<void>;
     onStopAll: () => Promise<void>;
     onRefresh: () => void;
-    onDelete: () => void;
 }
 
 export function ScriptList({
@@ -24,15 +23,12 @@ export function ScriptList({
     onStop,
     onStopAll,
     onRefresh,
-    onDelete,
 }: ScriptListProps) {
     const t = useT();
     const hasRunning = scripts.some((s) => s.status === 'running');
 
-
     return (
         <div className="flex h-full min-h-0 flex-col gap-3">
-            {/* Toolbar */}
             <div className="flex shrink-0 items-center gap-2">
                 <Button
                     variant="outline"
@@ -53,23 +49,18 @@ export function ScriptList({
                 </Button>
             </div>
 
-            {/* List area */}
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
                 {loading ? (
-                    <>
-                        <Skeleton className="h-16 rounded-lg" />
-                        <Skeleton className="h-16 rounded-lg" />
-                        <Skeleton className="h-16 rounded-lg" />
-                    </>
+                    Array.from({ length: 3 }, (_, i) => (
+                        <Skeleton key={i} className="h-16 rounded-lg" />
+                    ))
                 ) : scripts.length === 0 ? (
-                    <div className="flex h-full items-center justify-center">
-                        <Empty>
-                            <EmptyHeader>
-                                <EmptyTitle>{t('scripts.title')}</EmptyTitle>
-                                <EmptyDescription>{t('scripts.empty')}</EmptyDescription>
-                            </EmptyHeader>
-                        </Empty>
-                    </div>
+                    <Empty className="h-full">
+                        <EmptyHeader>
+                            <EmptyTitle>{t('scripts.title')}</EmptyTitle>
+                            <EmptyDescription>{t('scripts.empty')}</EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
                 ) : (
                     scripts.map((script) => (
                         <ScriptRow
@@ -77,7 +68,7 @@ export function ScriptList({
                             script={script}
                             onRun={onRun}
                             onStop={onStop}
-                            onDelete={onDelete}
+                            onDeleted={onRefresh}
                         />
                     ))
                 )}

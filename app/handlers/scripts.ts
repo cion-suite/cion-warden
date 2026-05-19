@@ -1,23 +1,30 @@
 import fsPromises from 'node:fs/promises';
-import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
-import { shell, BrowserWindow } from 'electron';
-import { spawn, execSync, execFile, spawnSync, type ChildProcess } from 'node:child_process';
+import { shell } from 'electron';
+import { spawn, execFile, spawnSync, type ChildProcess } from 'node:child_process';
 import { registerHandlers, appEvents } from '@cion-suite/core/ipc';
 import type { Dirent } from 'node:fs';
-import type { ScriptMeta, ScriptCfgFile } from '@shared/types/scripts.js';
+import type { ScriptCfgFile, ScriptCfgValues, ScriptMeta, ScriptStatus } from '@shared/types/scripts.js';
 import type { AppServices } from '../types/services.js';
+import { readJsonFile, writeJsonFile } from '../utils/json-file.js';
+import { requireString } from '../utils/ipc-args.js';
 
 const execFileAsync = promisify(execFile);
 
 const runningProcesses = new Map<string, ChildProcess>();
+const scriptStatuses = new Map<string, { status: ScriptStatus; errorMessage?: string }>();
+const scriptPathCache = new Map<string, string>();
+
+// Spawning powershell+WMI on every list call is expensive; cache for short bursts.
+const RUNNING_PATHS_TTL_MS = 1500;
+let runningPathsCache: { paths: Set<string>; at: number } | null = null;
 
 function killProcess(child: ChildProcess): void {
     if (process.platform === 'win32' && child.pid != null) {
         try {
-            execSync(`taskkill /pid ${child.pid} /f /t`, { stdio: 'ignore' });
+            spawnSync('taskkill', ['/pid', String(child.pid), '/f', '/t'], { stdio: 'ignore' });
         } catch {
             // process may already be dead
         }
@@ -35,34 +42,16 @@ function killAhkByPath(filePath: string): void {
     ], { stdio: 'ignore' });
 }
 
-const scriptStatuses = new Map<string, { status: 'idle' | 'running' | 'error'; errorMessage?: string }>();
-// id → filePath, updated on every scripts:list call
-const scriptPathCache = new Map<string, string>();
-
 function makeScriptId(filePath: string): string {
     return crypto.createHash('sha1').update(filePath).digest('hex').slice(0, 16);
 }
 
-async function readJsonFile<T>(filePath: string): Promise<T | undefined> {
-    try {
-        return JSON.parse(await fsPromises.readFile(filePath, 'utf-8')) as T;
-    } catch {
-        return undefined;
-    }
-}
-
-function emitStatusChange(
-    id: string,
-    status: 'idle' | 'running' | 'error',
-    errorMessage?: string,
-): void {
+function emitStatusChange(id: string, status: ScriptStatus, errorMessage?: string): void {
     scriptStatuses.set(id, { status, errorMessage });
-    for (const win of BrowserWindow.getAllWindows()) {
-        appEvents.emitTo(win, 'script:status-changed', { id, status, errorMessage });
-    }
+    appEvents.emit('script:status-changed', { id, status, errorMessage });
 }
 
-async function getRunningAhkPaths(): Promise<Set<string>> {
+async function fetchRunningAhkPaths(): Promise<Set<string>> {
     try {
         const { stdout } = await execFileAsync('powershell', [
             '-NoProfile',
@@ -71,7 +60,7 @@ async function getRunningAhkPaths(): Promise<Set<string>> {
         ]);
         const running = new Set<string>();
         for (const match of String(stdout).matchAll(/"([^"]+\.ahk)"/gi)) {
-            if (match[1]) running.add(path.normalize(match[1]));
+            if (match[1]) running.add(path.normalize(match[1]).toLowerCase());
         }
         return running;
     } catch {
@@ -79,64 +68,112 @@ async function getRunningAhkPaths(): Promise<Set<string>> {
     }
 }
 
+async function getRunningAhkPaths(): Promise<Set<string>> {
+    const now = Date.now();
+    if (runningPathsCache && now - runningPathsCache.at < RUNNING_PATHS_TTL_MS) {
+        return runningPathsCache.paths;
+    }
+    const paths = await fetchRunningAhkPaths();
+    runningPathsCache = { paths, at: now };
+    return paths;
+}
+
+function invalidateRunningPathsCache(): void {
+    runningPathsCache = null;
+}
+
+function reconcileStatus(id: string, osRunning: boolean): { status: ScriptStatus; errorMessage?: string } {
+    const prev = scriptStatuses.get(id);
+    if (osRunning) {
+        const next = { status: 'running' as const, errorMessage: prev?.errorMessage };
+        if (prev?.status !== 'running') scriptStatuses.set(id, next);
+        return next;
+    }
+    if (prev?.status === 'error') return prev;
+    if (prev?.status !== 'idle') scriptStatuses.set(id, { status: 'idle' });
+    return { status: 'idle' };
+}
+
+async function readScriptMeta(
+    scriptsDir: string,
+    file: Dirent,
+    runningAhkPaths: Set<string>,
+): Promise<ScriptMeta | null> {
+    if (!file.isFile()) return null;
+    const filePath = path.join(scriptsDir, file.name);
+    try {
+        const stat = await fsPromises.stat(filePath);
+        const ext = path.extname(file.name);
+        const name = ext ? file.name.slice(0, -ext.length) : file.name;
+        const cfgPath = path.join(scriptsDir, 'cfg', `${name}.json`);
+        const config = await readJsonFile<ScriptCfgFile>(cfgPath);
+        const id = makeScriptId(filePath);
+        scriptPathCache.set(id, filePath);
+
+        const osRunning = runningAhkPaths.has(path.normalize(filePath).toLowerCase());
+        const { status, errorMessage } = reconcileStatus(id, osRunning);
+
+        return {
+            id,
+            name,
+            filePath,
+            configPath: config ? cfgPath : undefined,
+            config,
+            status,
+            errorMessage,
+            modifiedAt: stat.mtimeMs,
+        };
+    } catch {
+        return null;
+    }
+}
+
 async function listScripts(globalVaultPath: string): Promise<ScriptMeta[]> {
     const runningAhkPaths = await getRunningAhkPaths();
-    const scripts: ScriptMeta[] = [];
-    let vaultEntries: Dirent[] = [];
+    let vaultEntries: Dirent[];
     try {
         vaultEntries = await fsPromises.readdir(globalVaultPath, { withFileTypes: true });
     } catch {
-        return scripts;
+        return [];
     }
-    for (const vault of vaultEntries) {
-        if (!vault.isDirectory()) continue;
-        const scriptsDir = path.join(globalVaultPath, vault.name, 'scripts');
-        let files: Dirent[] = [];
-        try {
-            files = await fsPromises.readdir(scriptsDir, { withFileTypes: true });
-        } catch {
-            continue;
-        }
-        for (const file of files) {
-            if (!file.isFile()) continue;
-            const filePath = path.join(scriptsDir, file.name);
+
+    const perVault = await Promise.all(
+        vaultEntries.map(async (vault): Promise<ScriptMeta[]> => {
+            if (!vault.isDirectory()) return [];
+            const scriptsDir = path.join(globalVaultPath, vault.name, 'scripts');
+            let files: Dirent[];
             try {
-                const stat = await fsPromises.stat(filePath);
-                const ext = path.extname(file.name);
-                const name = ext ? file.name.slice(0, -ext.length) : file.name;
-                const cfgPath = path.join(scriptsDir, 'cfg', `${name}.json`);
-                const hasCfg = fs.existsSync(cfgPath);
-                const config = hasCfg ? await readJsonFile<ScriptCfgFile>(cfgPath) : undefined;
-                const id = makeScriptId(filePath);
-                scriptPathCache.set(id, filePath);
-
-                const osRunning = runningAhkPaths.has(filePath);
-                const prev = scriptStatuses.get(id);
-                const status: 'idle' | 'running' | 'error' = osRunning
-                    ? 'running'
-                    : prev?.status === 'running'
-                      ? 'idle'
-                      : (prev?.status ?? 'idle');
-                if (status !== prev?.status) {
-                    scriptStatuses.set(id, { status });
-                }
-
-                scripts.push({
-                    id,
-                    name,
-                    filePath,
-                    configPath: hasCfg ? cfgPath : undefined,
-                    config,
-                    status,
-                    errorMessage: prev?.errorMessage,
-                    modifiedAt: stat.mtimeMs,
-                });
+                files = await fsPromises.readdir(scriptsDir, { withFileTypes: true });
             } catch {
-                // skip unreadable files
+                return [];
             }
+            const metas = await Promise.all(
+                files.map((f) => readScriptMeta(scriptsDir, f, runningAhkPaths)),
+            );
+            return metas.filter((m): m is ScriptMeta => m !== null);
+        }),
+    );
+
+    const scripts = perVault.flat();
+    pruneStaleEntries(new Set(scripts.map((s) => s.id)));
+    return scripts;
+}
+
+function pruneStaleEntries(liveIds: Set<string>): void {
+    for (const id of scriptPathCache.keys()) {
+        if (!liveIds.has(id)) {
+            scriptPathCache.delete(id);
+            scriptStatuses.delete(id);
         }
     }
-    return scripts;
+}
+
+function coerceCfgValues(raw: unknown): ScriptCfgValues {
+    const r = (raw ?? {}) as Partial<ScriptCfgValues>;
+    return {
+        hk: r.hk && typeof r.hk === 'object' ? r.hk : {},
+        val: r.val && typeof r.val === 'object' ? r.val : {},
+    };
 }
 
 export function registerScriptHandlers(_services: AppServices, globalVaultPath: string): void {
@@ -144,15 +181,17 @@ export function registerScriptHandlers(_services: AppServices, globalVaultPath: 
         'scripts:list': () => listScripts(globalVaultPath),
 
         'scripts:run': async (_event, rawId: unknown) => {
-            const id = String(rawId);
+            const id = requireString(rawId, 'id');
             if (runningProcesses.has(id)) return;
             const filePath = scriptPathCache.get(id);
             if (!filePath) return;
             emitStatusChange(id, 'running');
+            invalidateRunningPathsCache();
             const child = spawn(filePath, [], { shell: true, windowsHide: false });
             runningProcesses.set(id, child);
             child.on('exit', (code) => {
                 runningProcesses.delete(id);
+                invalidateRunningPathsCache();
                 const failed = code !== null && code !== 0;
                 emitStatusChange(
                     id,
@@ -162,12 +201,13 @@ export function registerScriptHandlers(_services: AppServices, globalVaultPath: 
             });
             child.on('error', (err) => {
                 runningProcesses.delete(id);
+                invalidateRunningPathsCache();
                 emitStatusChange(id, 'error', err.message);
             });
         },
 
         'scripts:stop': (_event, rawId: unknown) => {
-            const id = String(rawId);
+            const id = requireString(rawId, 'id');
             const child = runningProcesses.get(id);
             if (child) {
                 child.removeAllListeners('exit');
@@ -178,12 +218,13 @@ export function registerScriptHandlers(_services: AppServices, globalVaultPath: 
                 const filePath = scriptPathCache.get(id);
                 if (filePath) killAhkByPath(filePath);
             }
+            invalidateRunningPathsCache();
             emitStatusChange(id, 'idle');
         },
 
-        'scripts:stop-all': () => {
+        'scripts:stop-all': async () => {
             try {
-                execSync('taskkill /f /fi "IMAGENAME eq AutoHotkey*"', { stdio: 'ignore' });
+                await execFileAsync('taskkill', ['/f', '/fi', 'IMAGENAME eq AutoHotkey*']);
             } catch {
                 // no AHK processes running
             }
@@ -193,35 +234,28 @@ export function registerScriptHandlers(_services: AppServices, globalVaultPath: 
                 killProcess(child);
             }
             runningProcesses.clear();
-            const runningIds = [...scriptStatuses]
-                .filter(([, { status }]) => status === 'running')
-                .map(([id]) => id);
-            for (const id of runningIds) {
-                emitStatusChange(id, 'idle');
+            invalidateRunningPathsCache();
+            for (const [id, { status }] of scriptStatuses) {
+                if (status === 'running') emitStatusChange(id, 'idle');
             }
         },
 
         'scripts:delete': async (_event, rawPath: unknown) => {
-            await shell.trashItem(String(rawPath));
+            await shell.trashItem(requireString(rawPath, 'filePath'));
         },
 
         'scripts:open-in-explorer': (_event, rawPath: unknown) => {
-            shell.showItemInFolder(String(rawPath));
+            shell.showItemInFolder(requireString(rawPath, 'filePath'));
         },
 
         'scripts:config-get-values': async (_event, rawCfgPath: unknown) => {
-            const valuesPath = String(rawCfgPath).replace(/\.json$/, '.values.json');
-            return (await readJsonFile<Record<string, unknown>>(valuesPath)) ?? {};
+            const valuesPath = requireString(rawCfgPath, 'configPath').replace(/\.json$/, '.values.json');
+            return (await readJsonFile<Partial<ScriptCfgValues>>(valuesPath)) ?? {};
         },
 
-        'scripts:config-save-values': async (
-            _event,
-            rawCfgPath: unknown,
-            rawValues: unknown,
-        ) => {
-            const valuesPath = String(rawCfgPath).replace(/\.json$/, '.values.json');
-            const values = (rawValues ?? {}) as Record<string, unknown>;
-            await fsPromises.writeFile(valuesPath, JSON.stringify(values, null, 2), 'utf-8');
+        'scripts:config-save-values': async (_event, rawCfgPath: unknown, rawValues: unknown) => {
+            const valuesPath = requireString(rawCfgPath, 'configPath').replace(/\.json$/, '.values.json');
+            await writeJsonFile(valuesPath, coerceCfgValues(rawValues));
         },
     });
 }

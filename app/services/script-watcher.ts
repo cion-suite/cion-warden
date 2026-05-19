@@ -1,6 +1,6 @@
 import fs from 'node:fs';
+import fsPromises from 'node:fs/promises';
 import path from 'node:path';
-import { BrowserWindow } from 'electron';
 import { appEvents } from '@cion-suite/core/ipc';
 
 export interface ScriptWatcher {
@@ -8,41 +8,59 @@ export interface ScriptWatcher {
     stop(): void;
 }
 
+// fs.watch on Windows fires multiple events per change; batch them.
+const DEBOUNCE_MS = 150;
+
 function isScriptFile(relativePath: string): boolean {
-    // Expect: <vaultName>/<scripts>/<filename> — depth 3, not inside cfg/
+    // Expect: <vaultName>/scripts/<filename> — exclude nested dirs like cfg/.
     const parts = relativePath.replace(/\\/g, '/').split('/');
     return parts.length === 3 && parts[1] === 'scripts';
 }
 
+async function resolveType(filePath: string): Promise<'add' | 'change' | 'unlink'> {
+    try {
+        await fsPromises.stat(filePath);
+        return 'change';
+    } catch {
+        return 'unlink';
+    }
+}
+
 export function createScriptWatcher(): ScriptWatcher {
     let watcher: fs.FSWatcher | null = null;
+    const pending = new Map<string, NodeJS.Timeout>();
+
+    function schedule(filePath: string): void {
+        const existing = pending.get(filePath);
+        if (existing) clearTimeout(existing);
+        const handle = setTimeout(() => {
+            pending.delete(filePath);
+            void resolveType(filePath).then((type) => {
+                appEvents.emit('scripts:changed', { type, filePath });
+            });
+        }, DEBOUNCE_MS);
+        pending.set(filePath, handle);
+    }
 
     return {
         start(globalVaultPath: string) {
             if (watcher) return;
             try {
                 fs.mkdirSync(globalVaultPath, { recursive: true });
-                watcher = fs.watch(globalVaultPath, { recursive: true }, (eventType, filename) => {
+                watcher = fs.watch(globalVaultPath, { recursive: true }, (_eventType, filename) => {
                     if (!filename || !isScriptFile(filename)) return;
-                    const filePath = path.join(globalVaultPath, filename);
-                    const type =
-                        eventType === 'rename'
-                            ? fs.existsSync(filePath)
-                                ? 'add'
-                                : 'unlink'
-                            : 'change';
-                    for (const win of BrowserWindow.getAllWindows()) {
-                        appEvents.emitTo(win, 'scripts:changed', { type, filePath });
-                    }
+                    schedule(path.join(globalVaultPath, filename));
                 });
                 watcher.on('error', () => {
                     watcher = null;
                 });
             } catch {
-                // global_vault not watchable — ignore until it's created
+                // global_vault not watchable yet
             }
         },
         stop() {
+            for (const handle of pending.values()) clearTimeout(handle);
+            pending.clear();
             watcher?.close();
             watcher = null;
         },

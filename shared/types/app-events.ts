@@ -1,4 +1,5 @@
 import type { UpdaterInfo, UpdaterProgress } from './updater.js';
+import type { ScriptStatus } from './scripts.js';
 
 declare module '@cion-suite/core/ipc' {
     interface BaseAppEventMap {
@@ -9,7 +10,7 @@ declare module '@cion-suite/core/ipc' {
         'updater:progress': UpdaterProgress;
         'app:channel:changed': { isBeta: boolean };
         'scripts:changed': { type: 'add' | 'change' | 'unlink'; filePath: string };
-        'script:status-changed': { id: string; status: 'idle' | 'running' | 'error'; errorMessage?: string };
+        'script:status-changed': { id: string; status: ScriptStatus; errorMessage?: string };
     }
 }
 

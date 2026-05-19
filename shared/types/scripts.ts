@@ -16,13 +16,20 @@ export interface ScriptCfgFile {
     val?: Record<string, ValEntry>;
 }
 
+export type ScriptStatus = 'idle' | 'running' | 'error';
+
+export interface ScriptCfgValues {
+    hk: Record<string, string>;
+    val: Record<string, string | number | boolean>;
+}
+
 export interface ScriptMeta {
     id: string;
     name: string;
     filePath: string;
     configPath?: string;
     config?: ScriptCfgFile;
-    status: 'idle' | 'running' | 'error';
+    status: ScriptStatus;
     errorMessage?: string;
     modifiedAt?: number;
 }

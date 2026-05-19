@@ -16,14 +16,9 @@ import { Input } from '@/shared/ui/shadcn/input';
 import { Switch } from '@/shared/ui/shadcn/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/shadcn/tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/shared/ui/shadcn/tooltip';
-import type { ScriptMeta } from '@shared/types/scripts';
+import type { ScriptCfgValues, ScriptMeta } from '@shared/types/scripts';
 
-interface CfgValues {
-    hk: Record<string, string>;
-    val: Record<string, string | number | boolean>;
-}
-
-function buildDefaults(config: ScriptMeta['config']): CfgValues {
+function buildDefaults(config: ScriptMeta['config']): ScriptCfgValues {
     return {
         hk: Object.fromEntries(
             Object.entries(config?.hk ?? {}).map(([k, e]) => [k, e.key]),
@@ -53,22 +48,28 @@ export interface ScriptConfigDialogProps {
 
 export function ScriptConfigDialog({ script, open, onOpenChange }: ScriptConfigDialogProps) {
     const t = useT();
-    const [values, setValues] = useState<CfgValues>({ hk: {}, val: {} });
+    const [values, setValues] = useState<ScriptCfgValues>({ hk: {}, val: {} });
 
-    const hkEntries = Object.entries(script.config?.hk ?? {});
-    const valEntries = Object.entries(script.config?.val ?? {});
+    const { hk: cfgHk = {}, val: cfgVal = {} } = script.config ?? {};
+    const hkEntries = Object.entries(cfgHk);
+    const valEntries = Object.entries(cfgVal);
 
     useEffect(() => {
         if (!open || !script.configPath) return;
         const defaults = buildDefaults(script.config);
-        window.app?.scripts.getConfigValues(script.configPath).then((saved) => {
-            const s = saved as Partial<CfgValues>;
-            setValues({
-                hk: { ...defaults.hk, ...(s.hk ?? {}) },
-                val: { ...defaults.val, ...(s.val ?? {}) },
+        window.app?.scripts
+            .getConfigValues(script.configPath)
+            .then((saved) => {
+                setValues({
+                    hk: { ...defaults.hk, ...(saved.hk ?? {}) },
+                    val: { ...defaults.val, ...(saved.val ?? {}) },
+                });
+            })
+            .catch(() => {
+                setValues(defaults);
+                toast.error(t('error'));
             });
-        });
-    }, [open, script.configPath, script.config]);
+    }, [open, script.configPath, script.config, t]);
 
     const setHk = (key: string, v: string) =>
         setValues((prev) => ({ ...prev, hk: { ...prev.hk, [key]: v } }));
@@ -79,10 +80,7 @@ export function ScriptConfigDialog({ script, open, onOpenChange }: ScriptConfigD
     const handleSave = async () => {
         if (!script.configPath) return;
         try {
-            await window.app?.scripts.saveConfigValues(
-                script.configPath,
-                values as unknown as Record<string, unknown>,
-            );
+            await window.app?.scripts.saveConfigValues(script.configPath, values);
             onOpenChange(false);
         } catch {
             toast.error(t('error'));
@@ -151,7 +149,7 @@ export function ScriptConfigDialog({ script, open, onOpenChange }: ScriptConfigD
                                         </div>
                                         {typeof entry.val === 'boolean' ? (
                                             <Switch
-                                                checked={Boolean(current)}
+                                                checked={current === true}
                                                 onCheckedChange={(v) => setVal(key, v)}
                                             />
                                         ) : typeof entry.val === 'number' ? (

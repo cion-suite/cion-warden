@@ -26,16 +26,23 @@ interface ScriptRowProps {
     script: ScriptMeta;
     onRun: (id: string) => Promise<void>;
     onStop: (id: string) => Promise<void>;
-    onDelete: () => void;
+    onDeleted: () => void;
 }
 
-export function ScriptRow({ script, onRun, onStop, onDelete }: ScriptRowProps) {
+function formatModifiedAt(modifiedAt: number): string {
+    const d = new Date(modifiedAt);
+    const date = d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
+    const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return `${date} ${time}`;
+}
+
+export function ScriptRow({ script, onRun, onStop, onDeleted }: ScriptRowProps) {
     const t = useT();
     const [configOpen, setConfigOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
 
     const isRunning = script.status === 'running';
-    const hasConfig = !!script.configPath;
+    const hasConfig = Boolean(script.configPath);
 
     const handleRunStop = async () => {
         try {
@@ -50,21 +57,15 @@ export function ScriptRow({ script, onRun, onStop, onDelete }: ScriptRowProps) {
         try {
             await window.app?.scripts.delete(script.filePath);
             setDeleteOpen(false);
-            onDelete();
+            onDeleted();
         } catch {
             toast.error(t('error'));
         }
     };
 
-    const metaLine = (() => {
-        if (script.modifiedAt) {
-            const d = new Date(script.modifiedAt);
-            const date = d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });
-            const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-            return `${t('scripts.modified')}: ${date} ${time}`;
-        }
-        return '';
-    })();
+    const metaLine = script.modifiedAt
+        ? `${t('scripts.modified')}: ${formatModifiedAt(script.modifiedAt)}`
+        : '';
 
     return (
         <>
@@ -131,7 +132,7 @@ export function ScriptRow({ script, onRun, onStop, onDelete }: ScriptRowProps) {
                 </div>
             </div>
 
-            {hasConfig && (
+            {hasConfig && configOpen && (
                 <ScriptConfigDialog
                     script={script}
                     open={configOpen}
@@ -139,24 +140,26 @@ export function ScriptRow({ script, onRun, onStop, onDelete }: ScriptRowProps) {
                 />
             )}
 
-            <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>{t('scripts.delete')}</DialogTitle>
-                        <DialogDescription>
-                            {t('scripts.deleteConfirm', { name: script.name })}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <DialogFooter>
-                        <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
-                            {t('cancel')}
-                        </Button>
-                        <Button variant="destructive" onClick={() => void handleDeleteConfirm()}>
-                            {t('confirm')}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {deleteOpen && (
+                <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>{t('scripts.delete')}</DialogTitle>
+                            <DialogDescription>
+                                {t('scripts.deleteConfirm', { name: script.name })}
+                            </DialogDescription>
+                        </DialogHeader>
+                        <DialogFooter>
+                            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+                                {t('cancel')}
+                            </Button>
+                            <Button variant="destructive" onClick={() => void handleDeleteConfirm()}>
+                                {t('confirm')}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </>
     );
 }

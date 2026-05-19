@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import { useT } from '@/shared/i18n';
 import { useSetNavbarSlot } from '@/shared/lib/navbar-slot';
@@ -14,10 +14,8 @@ export function ScriptsPage() {
     const { scripts, loading, refresh } = useScripts();
     const { run, stop, stopAll } = useScriptRunner();
 
-    const filtered = useMemo(() => {
-        const q = search.trim().toLowerCase();
-        return q ? scripts.filter((s) => s.name.toLowerCase().includes(q)) : scripts;
-    }, [scripts, search]);
+    const q = search.trim().toLowerCase();
+    const filtered = q ? scripts.filter((s) => s.name.toLowerCase().includes(q)) : scripts;
 
     useSetNavbarSlot(
         <Input
@@ -37,7 +35,6 @@ export function ScriptsPage() {
                 onStop={stop}
                 onStopAll={stopAll}
                 onRefresh={() => void refresh()}
-                onDelete={() => void refresh()}
             />
         </div>
     );
