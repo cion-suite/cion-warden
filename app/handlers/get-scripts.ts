@@ -4,9 +4,15 @@ import crypto from 'node:crypto';
 import { registerHandlers } from '@cion-suite/core/ipc';
 import type { RemoteScriptMeta } from '@shared/types/get-scripts.js';
 import type { GitVaultSource, VaultSource } from '@shared/types/vault.js';
+import type { AppServices } from '../types/services.js';
+import type { SourceTokens } from '../services/source-tokens.js';
 import { getGlobalVaultPath } from '../services/vault-paths.js';
 import { listSources } from '../services/sources-store.js';
 import { parseGithubUrl } from '../utils/github-url.js';
+import { requireString } from '../utils/ipc-args.js';
+
+const SCRIPTS_DIR = 'scripts';
+const USER_AGENT = 'cion-warden/1.0';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -111,7 +117,7 @@ async function manifestToScripts(
     manifest: ManifestFile,
     vaultBase: string,
 ): Promise<RemoteScriptMeta[]> {
-    const scriptsDir = path.join(vaultBase, source.id, 'scripts');
+    const scriptsDir = path.join(vaultBase, source.id, SCRIPTS_DIR);
     const cache = await readLocalCache(vaultBase, source.id);
     const nextCache: LocalCache = {};
 
@@ -152,29 +158,50 @@ function cacheEqual(a: LocalCache, b: LocalCache): boolean {
     return true;
 }
 
+// ─── GitHub fetch helpers ────────────────────────────────────────────────────
+
+async function buildGitHeaders(
+    source: GitVaultSource,
+    tokens: SourceTokens,
+    accept?: string,
+): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
+    if (accept) headers.Accept = accept;
+    if (source.isPrivate) {
+        const token = await tokens.getToken(source.id);
+        if (token) headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+}
+
+function mapGithubError(res: Response, isPrivate: boolean): Error {
+    if (res.status === 403 && res.headers.get('x-ratelimit-remaining') === '0') {
+        const reset = res.headers.get('x-ratelimit-reset');
+        const waitUntil = reset ? new Date(Number(reset) * 1000).toLocaleTimeString() : 'unknown';
+        return new Error(`GitHub rate limit exceeded. Resets at ${waitUntil}`);
+    }
+    if (res.status === 401 || res.status === 403) return new Error('sources.tokenInvalid');
+    if (res.status === 404 && isPrivate) return new Error('sources.tokenNoAccess');
+    return new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+}
+
 // ─── GitHub sync ─────────────────────────────────────────────────────────────
 
 async function syncGitSource(
     source: GitVaultSource,
     vaultBase: string,
+    tokens: SourceTokens,
 ): Promise<{ scripts: RemoteScriptMeta[]; lastSyncedAt: number }> {
     const parsed = parseGithubUrl(source.url);
     if (!parsed) throw new Error('Only GitHub repositories are supported');
 
     const { owner, repo } = parsed;
     const branch = source.branch || 'main';
-    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/scripts?ref=${encodeURIComponent(branch)}`;
+    const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${SCRIPTS_DIR}?ref=${encodeURIComponent(branch)}`;
+    const headers = await buildGitHeaders(source, tokens, 'application/vnd.github+json');
 
-    const res = await fetch(apiUrl, {
-        headers: { 'User-Agent': 'cion-warden/1.0', Accept: 'application/vnd.github+json' },
-    });
-
-    if (res.status === 403 || res.status === 429) {
-        const reset = res.headers.get('x-ratelimit-reset');
-        const waitUntil = reset ? new Date(Number(reset) * 1000).toLocaleTimeString() : 'unknown';
-        throw new Error(`GitHub rate limit exceeded. Resets at ${waitUntil}`);
-    }
-    if (!res.ok) throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
+    const res = await fetch(apiUrl, { headers });
+    if (!res.ok) throw mapGithubError(res, source.isPrivate);
 
     const files = (await res.json()) as GithubFileEntry[];
     if (!Array.isArray(files)) throw new Error('Unexpected response from GitHub API');
@@ -182,7 +209,6 @@ async function syncGitSource(
     const scriptFiles = files.filter((f) => f.type === 'file');
     const lastSyncedAt = Date.now();
 
-    // Write manifest (caches remote state — no more API calls until next sync)
     const mPath = manifestPath(vaultBase, source.id);
     await fs.mkdir(path.dirname(mPath), { recursive: true });
     const manifest: ManifestFile = {
@@ -201,55 +227,83 @@ async function syncGitSource(
 
 // ─── Download ────────────────────────────────────────────────────────────────
 
+async function fetchFileContent(
+    source: GitVaultSource,
+    owner: string,
+    repo: string,
+    branch: string,
+    repoPath: string,
+    tokens: SourceTokens,
+): Promise<Buffer | null> {
+    if (source.isPrivate) {
+        const url = `https://api.github.com/repos/${owner}/${repo}/contents/${repoPath}?ref=${encodeURIComponent(branch)}`;
+        const headers = await buildGitHeaders(source, tokens, 'application/vnd.github.raw');
+        const res = await fetch(url, { headers });
+        if (res.status === 404) return null;
+        if (!res.ok) throw mapGithubError(res, true);
+        return Buffer.from(await res.arrayBuffer());
+    }
+    const url = `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${repoPath}`;
+    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+}
+
 async function downloadFromGitSource(
     source: GitVaultSource,
     fileName: string,
     vaultBase: string,
+    tokens: SourceTokens,
 ): Promise<void> {
     const parsed = parseGithubUrl(source.url);
     if (!parsed) throw new Error('Only GitHub repositories are supported');
 
     const { owner, repo } = parsed;
     const branch = source.branch || 'main';
-    const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/scripts/${encodeURIComponent(fileName)}`;
+    const scriptsDir = path.join(vaultBase, source.id, SCRIPTS_DIR);
 
-    const res = await fetch(rawUrl, { headers: { 'User-Agent': 'cion-warden/1.0' } });
-    if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
+    const content = await fetchFileContent(
+        source,
+        owner,
+        repo,
+        branch,
+        `${SCRIPTS_DIR}/${fileName}`,
+        tokens,
+    );
+    if (!content) {
+        if (source.isPrivate) throw new Error('sources.tokenNoAccess');
+        throw new Error(`Download failed: ${fileName} not found`);
+    }
 
-    const content = Buffer.from(await res.arrayBuffer());
-    const scriptsDir = path.join(vaultBase, source.id, 'scripts');
     await fs.mkdir(scriptsDir, { recursive: true });
     await fs.writeFile(path.join(scriptsDir, fileName), content);
 
-    // Also download cfg/<name>.json if it exists (optional)
-    try {
-        const baseName = stripExt(fileName);
-        const cfgUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/scripts/cfg/${encodeURIComponent(baseName)}.json`;
-        const cfgRes = await fetch(cfgUrl, { headers: { 'User-Agent': 'cion-warden/1.0' } });
-        if (cfgRes.ok) {
-            const cfgDir = path.join(scriptsDir, 'cfg');
-            await fs.mkdir(cfgDir, { recursive: true });
-            await fs.writeFile(path.join(cfgDir, `${baseName}.json`), Buffer.from(await cfgRes.arrayBuffer()));
-        }
-    } catch {
-        // config is optional
+    const baseName = stripExt(fileName);
+    const cfgContent = await fetchFileContent(
+        source,
+        owner,
+        repo,
+        branch,
+        `${SCRIPTS_DIR}/cfg/${baseName}.json`,
+        tokens,
+    ).catch(() => null);
+    if (cfgContent) {
+        const cfgDir = path.join(scriptsDir, 'cfg');
+        await fs.mkdir(cfgDir, { recursive: true });
+        await fs.writeFile(path.join(cfgDir, `${baseName}.json`), cfgContent);
     }
 }
 
 // ─── Handler registration ────────────────────────────────────────────────────
 
-function requireString(value: unknown, field: string): string {
-    if (typeof value !== 'string' || value.length === 0) {
-        throw new Error(`Invalid ${field}`);
-    }
-    return value;
-}
+export function registerGetScriptHandlers(services: AppServices): void {
+    const { logger, sourceTokens } = services;
 
-export function registerGetScriptHandlers(): void {
     registerHandlers({
         'get-scripts:list-source': async (_event, rawSourceId: unknown): Promise<SourceScriptsResult> => {
             const sourceId = requireString(rawSourceId, 'sourceId');
-            const sources = await listSources();
+            const sources = await listSources(logger);
             const source = sources.find((s) => s.id === sourceId);
             if (!source) return { scripts: [] };
 
@@ -266,15 +320,15 @@ export function registerGetScriptHandlers(): void {
             rawSourceId: unknown,
         ): Promise<{ scripts: RemoteScriptMeta[]; lastSyncedAt: number }> => {
             const sourceId = requireString(rawSourceId, 'sourceId');
-            const sources = await listSources();
+            const sources = await listSources(logger);
             const source = sources.find((s) => s.id === sourceId);
             if (!source) throw new Error(`Source not found: ${sourceId}`);
             if (source.type !== 'git') throw new Error('Only git sources support sync');
-            return syncGitSource(source, getGlobalVaultPath());
+            return syncGitSource(source, getGlobalVaultPath(), sourceTokens);
         },
 
         'get-scripts:list': async (): Promise<RemoteScriptMeta[]> => {
-            const sources = await listSources();
+            const sources = await listSources(logger);
             const vaultBase = getGlobalVaultPath();
             const results = await Promise.allSettled(
                 sources.map(async (source) => {
@@ -289,7 +343,7 @@ export function registerGetScriptHandlers(): void {
                 if (r.status === 'fulfilled') {
                     out.push(...r.value);
                 } else {
-                    console.warn('[get-scripts:list] source failed', sources[i]?.id, r.reason);
+                    logger.warn('[get-scripts:list] source failed', { sourceId: sources[i]?.id, error: r.reason });
                 }
             }
             return out;
@@ -298,11 +352,11 @@ export function registerGetScriptHandlers(): void {
         'get-scripts:download': async (_event, rawSourceId: unknown, rawFileName: unknown) => {
             const sourceId = requireString(rawSourceId, 'sourceId');
             const fileName = requireString(rawFileName, 'fileName');
-            const sources = await listSources();
+            const sources = await listSources(logger);
             const source = sources.find((s) => s.id === sourceId);
             if (!source) throw new Error(`Source not found: ${sourceId}`);
             if (source.type !== 'git') throw new Error('Only git sources support download');
-            await downloadFromGitSource(source, fileName, getGlobalVaultPath());
+            await downloadFromGitSource(source, fileName, getGlobalVaultPath(), sourceTokens);
         },
     });
 }

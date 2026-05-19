@@ -75,7 +75,7 @@ GitHub Personal Access Token для private-репозиториев. Token хр
 
 ---
 
-## Phase 3: Authenticated fetch в get-scripts
+## Phase 3: Authenticated fetch в get-scripts [done]
 
 - **What:** `syncGitSource` и `downloadFromGitSource` тянут токен из secure-store, добавляют `Authorization: Bearer <pat>` header. Private-репо download через GitHub Contents API. Логи через `Logger` (не `console.warn`). Различение 403 auth vs 403 rate-limit.
 - **Where:**
