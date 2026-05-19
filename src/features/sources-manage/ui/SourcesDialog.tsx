@@ -20,8 +20,8 @@ import type { VaultSource } from '@shared/types/vault';
 
 function FieldRow({ label, children }: { label: string; children: React.ReactNode }) {
     return (
-        <div className="flex flex-col gap-1.5 px-4 py-3">
-            <span className="text-sm font-medium">{label}</span>
+        <div className="flex flex-col gap-1 px-3 py-2">
+            <span className="text-xs font-medium text-muted-foreground">{label}</span>
             {children}
         </div>
     );
@@ -134,7 +134,7 @@ function GitFormFields({
                     placeholder="main"
                 />
             </FieldRow>
-            <div className="flex items-center justify-between px-4 py-3">
+            <div className="flex items-center justify-between px-3 py-2">
                 <span className="text-sm font-medium">{t('sources.private')}</span>
                 <Switch checked={isPrivate} onCheckedChange={onIsPrivateChange} />
             </div>
@@ -230,8 +230,8 @@ function GitSettings({
 
     return (
         <div className="flex h-full flex-col">
-            <div className="border-b px-4 py-3">
-                <p className="truncate font-semibold">{source.name}</p>
+            <div className="border-b px-3 py-2.5">
+                <p className="truncate text-sm font-semibold">{source.name}</p>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto">
@@ -245,7 +245,7 @@ function GitSettings({
                 />
             </div>
 
-            <div className="border-t px-4 py-3">
+            <div className="border-t px-3 py-2">
                 <Button
                     size="sm"
                     disabled={saving || !url.trim()}
@@ -286,8 +286,8 @@ function ExternalSettings({
 
     return (
         <div className="flex h-full flex-col">
-            <div className="border-b px-4 py-3">
-                <p className="truncate font-semibold">{source.name}</p>
+            <div className="border-b px-3 py-2.5">
+                <p className="truncate text-sm font-semibold">{source.name}</p>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto">
@@ -303,7 +303,7 @@ function ExternalSettings({
                 />
             </div>
 
-            <div className="border-t px-4 py-3">
+            <div className="border-t px-3 py-2">
                 <Button
                     size="sm"
                     disabled={saving || !name.trim()}
@@ -392,8 +392,8 @@ function NewSourcePanel({
 
     return (
         <div className="flex h-full flex-col">
-            <div className="border-b px-4 py-3">
-                <p className="font-semibold">{t('sources.newSource')}</p>
+            <div className="border-b px-3 py-2.5">
+                <p className="text-sm font-semibold">{t('sources.newSource')}</p>
             </div>
 
             <Tabs
@@ -411,7 +411,7 @@ function NewSourcePanel({
                 </div>
             </Tabs>
 
-            <div className="flex gap-2 border-t px-4 py-3">
+            <div className="flex gap-2 border-t px-3 py-2">
                 <Button variant="ghost" size="sm" onClick={onCancel}>
                     {t('cancel')}
                 </Button>
@@ -485,13 +485,13 @@ export function SourcesDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-3xl gap-0 overflow-hidden p-0">
+            <DialogContent className="sm:max-w-2xl gap-0 overflow-hidden p-0">
                 <DialogTitle className="sr-only">{t('sources.title')}</DialogTitle>
 
-                <div className="flex h-[min(420px,calc(100dvh-8rem))]">
+                <div className="flex h-[min(520px,calc(100dvh-2rem))]">
                     {/* ── Left panel ───────────────────────────────── */}
-                    <div className="flex w-[220px] shrink-0 flex-col border-r">
-                        <div className="border-b px-4 py-3 font-semibold">
+                    <div className="flex w-[180px] shrink-0 flex-col border-r">
+                        <div className="border-b px-3 py-2.5 text-sm font-semibold">
                             {t('sources.title')}
                         </div>
 
