@@ -23,6 +23,7 @@ export interface AppBridge {
         list: () => Promise<ScriptMeta[]>;
         run: (id: string) => Promise<void>;
         stop: (id: string) => Promise<void>;
+        stopAll: () => Promise<void>;
         delete: (filePath: string) => Promise<void>;
         openInExplorer: (filePath: string) => Promise<void>;
         getConfigValues: (configPath: string) => Promise<Record<string, unknown>>;

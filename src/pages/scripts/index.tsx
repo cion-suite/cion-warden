@@ -35,7 +35,7 @@ export function ScriptsPage() {
                 loading={loading}
                 onRun={run}
                 onStop={stop}
-                onStopAll={() => stopAll(scripts)}
+                onStopAll={stopAll}
                 onRefresh={() => void refresh()}
                 onDelete={() => void refresh()}
             />

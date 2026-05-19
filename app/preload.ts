@@ -15,6 +15,7 @@ const bridge: AppBridge = {
         list: () => ipcRenderer.invoke('scripts:list'),
         run: (id) => ipcRenderer.invoke('scripts:run', id),
         stop: (id) => ipcRenderer.invoke('scripts:stop', id),
+        stopAll: () => ipcRenderer.invoke('scripts:stop-all'),
         delete: (filePath) => ipcRenderer.invoke('scripts:delete', filePath),
         openInExplorer: (filePath) => ipcRenderer.invoke('scripts:open-in-explorer', filePath),
         getConfigValues: (configPath) => ipcRenderer.invoke('scripts:config-get-values', configPath),

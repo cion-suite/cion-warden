@@ -3,13 +3,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { shell, BrowserWindow } from 'electron';
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, execSync, type ChildProcess } from 'node:child_process';
 import { registerHandlers, appEvents } from '@cion-suite/core/ipc';
 import type { Dirent } from 'node:fs';
 import type { ScriptMeta, ScriptCfgFile } from '@shared/types/scripts.js';
 import type { AppServices } from '../types/services.js';
 
 const runningProcesses = new Map<string, ChildProcess>();
+
+function killProcess(child: ChildProcess): void {
+    if (process.platform === 'win32' && child.pid != null) {
+        try {
+            execSync(`taskkill /pid ${child.pid} /f /t`, { stdio: 'ignore' });
+        } catch {
+            // process may already be dead
+        }
+    } else {
+        child.kill();
+    }
+}
+
 const scriptStatuses = new Map<string, { status: 'idle' | 'running' | 'error'; errorMessage?: string }>();
 // id → filePath, updated on every scripts:list call
 const scriptPathCache = new Map<string, string>();
@@ -116,9 +129,26 @@ export function registerScriptHandlers(_services: AppServices, globalVaultPath: 
             const id = String(rawId);
             const child = runningProcesses.get(id);
             if (!child) return;
-            child.kill();
+            child.removeAllListeners('exit');
+            child.removeAllListeners('error');
+            killProcess(child);
             runningProcesses.delete(id);
             emitStatusChange(id, 'idle');
+        },
+
+        'scripts:stop-all': () => {
+            try {
+                execSync('taskkill /f /fi "IMAGENAME eq AutoHotkey*"', { stdio: 'ignore' });
+            } catch {
+                // no AHK processes running
+            }
+            for (const [id, child] of runningProcesses) {
+                child.removeAllListeners('exit');
+                child.removeAllListeners('error');
+                killProcess(child); // clean up the shell wrapper (cmd.exe)
+                emitStatusChange(id, 'idle');
+            }
+            runningProcesses.clear();
         },
 
         'scripts:delete': async (_event, rawPath: unknown) => {
