@@ -76,7 +76,7 @@ export function ScriptRow({ script, onRun, onStop, onDeleted }: ScriptRowProps) 
                 )}
             >
                 <div className="min-w-0 flex-1">
-                    <p className="truncate font-semibold leading-none">{script.name}</p>
+                    <p className="truncate text-sm font-semibold leading-none">{script.name}</p>
                     {metaLine && (
                         <p className="mt-1 truncate text-xs text-muted-foreground">{metaLine}</p>
                     )}
