@@ -5,5 +5,5 @@ export type {
     UpdaterChannelInfo,
     ErrorReport,
 } from './ipc.js';
-export type { ScriptMeta, ScriptConfig, ConfigField } from './scripts.js';
+export type { ScriptMeta, ScriptCfgFile, HkEntry, ValEntry } from './scripts.js';
 export type { VaultSource, GitVaultSource, ExternalVaultSource, VaultSourceType } from './vault.js';

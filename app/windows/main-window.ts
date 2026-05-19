@@ -21,10 +21,10 @@ export function focusMainWindow(): void {
 
 export async function openMainWindow(): Promise<BrowserWindow> {
     mainWindow = await createWindow({
-        width: 1100,
-        height: 520,
+        width: 900,
+        height: 450,
         minWidth: 800,
-        minHeight: 500,
+        minHeight: 400,
         icon: getIconPath(),
         preload: join(__dirname, '../preload/index.js'),
         url: process.env.ELECTRON_RENDERER_URL,

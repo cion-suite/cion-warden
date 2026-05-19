@@ -57,10 +57,6 @@ export function ScriptRow({ script, onRun, onStop, onDelete }: ScriptRowProps) {
     };
 
     const metaLine = (() => {
-        const parts: string[] = [];
-        if (script.config?.author) parts.push(`Author: ${script.config.author}`);
-        if (script.config?.version) parts.push(`v${script.config.version}`);
-        if (parts.length > 0) return parts.join(' · ');
         if (script.modifiedAt) {
             const d = new Date(script.modifiedAt);
             const date = d.toLocaleDateString(undefined, { month: '2-digit', day: '2-digit' });

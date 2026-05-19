@@ -6,7 +6,7 @@ import { shell, BrowserWindow } from 'electron';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { registerHandlers, appEvents } from '@cion-suite/core/ipc';
 import type { Dirent } from 'node:fs';
-import type { ScriptMeta, ScriptConfig } from '@shared/types/scripts.js';
+import type { ScriptMeta, ScriptCfgFile } from '@shared/types/scripts.js';
 import type { AppServices } from '../types/services.js';
 
 const runningProcesses = new Map<string, ChildProcess>();
@@ -63,7 +63,7 @@ async function listScripts(globalVaultPath: string): Promise<ScriptMeta[]> {
                 const name = ext ? file.name.slice(0, -ext.length) : file.name;
                 const cfgPath = path.join(scriptsDir, 'cfg', `${name}.json`);
                 const hasCfg = fs.existsSync(cfgPath);
-                const config = hasCfg ? await readJsonFile<ScriptConfig>(cfgPath) : undefined;
+                const config = hasCfg ? await readJsonFile<ScriptCfgFile>(cfgPath) : undefined;
                 const id = makeScriptId(filePath);
                 scriptPathCache.set(id, filePath);
                 const statusInfo = scriptStatuses.get(id);

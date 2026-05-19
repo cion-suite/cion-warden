@@ -1,16 +1,19 @@
-export interface ConfigField {
+export interface HkEntry {
     key: string;
-    label: string;
-    type: 'hotkey' | 'number' | 'text' | 'toggle';
-    default?: unknown;
-    description?: string;
+    description: string;
+    tooltip?: string;
 }
 
-export interface ScriptConfig {
-    name?: string;
-    author?: string;
-    version?: string;
-    fields?: ConfigField[];
+export interface ValEntry {
+    val: string | number | boolean;
+    description: string;
+    tooltip?: string;
+}
+
+export interface ScriptCfgFile {
+    $version?: number;
+    hk?: Record<string, HkEntry>;
+    val?: Record<string, ValEntry>;
 }
 
 export interface ScriptMeta {
@@ -18,7 +21,7 @@ export interface ScriptMeta {
     name: string;
     filePath: string;
     configPath?: string;
-    config?: ScriptConfig;
+    config?: ScriptCfgFile;
     status: 'idle' | 'running' | 'error';
     errorMessage?: string;
     modifiedAt?: number;
