@@ -9,6 +9,18 @@ const HomePage = lazy(() => import('@/pages/home').then((m) => ({ default: m.Hom
 const SettingsPage = lazy(() =>
     import('@/pages/settings').then((m) => ({ default: m.SettingsPage }))
 );
+const ScriptsPage = lazy(() =>
+    import('@/pages/scripts').then((m) => ({ default: m.ScriptsPage }))
+);
+const GetScriptsPage = lazy(() =>
+    import('@/pages/get-scripts').then((m) => ({ default: m.GetScriptsPage }))
+);
+const LibrariesPage = lazy(() =>
+    import('@/pages/libraries').then((m) => ({ default: m.LibrariesPage }))
+);
+const BindsPage = lazy(() =>
+    import('@/pages/binds').then((m) => ({ default: m.BindsPage }))
+);
 
 function RouteRestorer() {
     const { pathname } = useLocation();
@@ -23,9 +35,13 @@ export function AppRouter() {
             <Routes>
                 <Route element={<Layout />}>
                     <Route path={ROUTES.home} element={<HomePage />} />
+                    <Route path={ROUTES.scripts} element={<ScriptsPage />} />
+                    <Route path={ROUTES.getScripts} element={<GetScriptsPage />} />
+                    <Route path={ROUTES.libraries} element={<LibrariesPage />} />
+                    <Route path={ROUTES.binds} element={<BindsPage />} />
                     <Route path={ROUTES.settings} element={<SettingsPage />} />
                 </Route>
-                <Route path="*" element={<Navigate to={ROUTES.home} replace />} />
+                <Route path="*" element={<Navigate to={ROUTES.scripts} replace />} />
             </Routes>
         </Suspense>
     );

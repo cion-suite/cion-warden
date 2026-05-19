@@ -7,6 +7,9 @@ declare module '@cion-suite/core/ipc' {
         'updater:downloaded': UpdaterInfo;
         'updater:error': { message: string };
         'updater:progress': UpdaterProgress;
+        'app:channel:changed': { isBeta: boolean };
+        'scripts:changed': { type: 'add' | 'change' | 'unlink'; filePath: string };
+        'script:status-changed': { id: string; status: 'idle' | 'running' | 'error'; errorMessage?: string };
     }
 }
 

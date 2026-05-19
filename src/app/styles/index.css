@@ -132,18 +132,6 @@
     @apply bg-background/80 backdrop-blur-sm border border-border/50;
 }
 
-@property --scroll-fade-top {
-    syntax: '<length>';
-    initial-value: 0px;
-    inherits: false;
-}
-
-@property --scroll-fade-bottom {
-    syntax: '<length>';
-    initial-value: 0px;
-    inherits: false;
-}
-
 @utility scroll-fade {
     mask-image: linear-gradient(
         to bottom,
@@ -159,15 +147,15 @@
 @keyframes scroll-fade-anim {
     0% {
         --scroll-fade-top: 0px;
-        --scroll-fade-bottom: 16px;
+        --scroll-fade-bottom: 10px;
     }
-    0.01%,
-    99.99% {
-        --scroll-fade-top: 16px;
-        --scroll-fade-bottom: 16px;
+    5%,
+    95% {
+        --scroll-fade-top: 10px;
+        --scroll-fade-bottom: 10px;
     }
     100% {
-        --scroll-fade-top: 16px;
+        --scroll-fade-top: 10px;
         --scroll-fade-bottom: 0px;
     }
 }

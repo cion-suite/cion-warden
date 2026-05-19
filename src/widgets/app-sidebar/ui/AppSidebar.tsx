@@ -46,8 +46,16 @@ export function AppSidebar() {
         <Sidebar collapsible="icon">
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarGroupLabel>{t('nav.section.main')}</SidebarGroupLabel>
-                    <NavMenu items={NAV_BY_SECTION.main} />
+                    <SidebarGroupLabel>{t('nav.section.local')}</SidebarGroupLabel>
+                    <NavMenu items={NAV_BY_SECTION.local} />
+                </SidebarGroup>
+                <SidebarGroup>
+                    <SidebarGroupLabel>{t('nav.section.sources')}</SidebarGroupLabel>
+                    <NavMenu items={NAV_BY_SECTION.sources} />
+                </SidebarGroup>
+                <SidebarGroup>
+                    <SidebarGroupLabel>{t('nav.section.misc')}</SidebarGroupLabel>
+                    <NavMenu items={NAV_BY_SECTION.misc} />
                 </SidebarGroup>
             </SidebarContent>
             <SidebarFooter>

@@ -7,6 +7,9 @@ import { createAutoUpdater } from './services/updater.js';
 import { openMainWindow, focusMainWindow } from './windows/main-window.js';
 import { openSplashWindow, updateSplash, closeSplashWindow } from './windows/splash-window.js';
 import { registerSystemHandlers } from './handlers/system.js';
+import { registerScriptHandlers } from './handlers/scripts.js';
+import { getGlobalVaultPath, ensureGlobalVault } from './services/vault-paths.js';
+import { createScriptWatcher, type ScriptWatcher } from './services/script-watcher.js';
 import type { AppServices } from './types/services.js';
 import type { AutoUpdaterController } from './types/updater.js';
 
@@ -16,6 +19,7 @@ let processLogger: Pick<AppServices['logger'], 'error'> = {
     error: (...args: unknown[]) => console.error(...args),
 };
 let updater: AutoUpdaterController | null = null;
+let scriptWatcher: ScriptWatcher | null = null;
 let installingUpdate = false;
 
 process.on('uncaughtException', (error) => {
@@ -42,6 +46,11 @@ async function bootstrap(): Promise<void> {
 
         updateSplash(50, 'Registering handlers');
         registerSystemHandlers(services);
+        const globalVaultPath = getGlobalVaultPath();
+        await ensureGlobalVault();
+        registerScriptHandlers(services, globalVaultPath);
+        scriptWatcher = createScriptWatcher();
+        scriptWatcher.start(globalVaultPath);
 
         updateSplash(70, 'Configuring updater');
         updater = createAutoUpdater({
@@ -72,6 +81,7 @@ app.on('before-quit', (event) => {
 
 app.on('will-quit', () => {
     updater?.dispose();
+    scriptWatcher?.stop();
 });
 
 void bootstrap();

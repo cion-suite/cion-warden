@@ -9,6 +9,7 @@ import { Toaster } from '@/shared/ui/shadcn/sonner';
 import { I18nProvider } from './I18nProvider';
 import { ThemeProvider } from './ThemeProvider';
 import { QueryProvider } from './QueryProvider';
+import { NavbarSlotProvider } from './NavbarSlotProvider';
 
 export function AppProvider({ children }: { children: ReactNode }) {
     return (
@@ -16,12 +17,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
             <I18nProvider>
                 <ThemeProvider>
                     <QueryProvider>
-                        <TooltipProvider>
-                            <HashRouter>
-                                {children}
-                                <Toaster position="bottom-right" richColors />
-                            </HashRouter>
-                        </TooltipProvider>
+                        <NavbarSlotProvider>
+                            <TooltipProvider>
+                                <HashRouter>
+                                    {children}
+                                    <Toaster position="bottom-right" richColors />
+                                </HashRouter>
+                            </TooltipProvider>
+                        </NavbarSlotProvider>
                     </QueryProvider>
                 </ThemeProvider>
             </I18nProvider>

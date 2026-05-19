@@ -2,7 +2,7 @@ import type { LucideIcon } from 'lucide-react';
 
 import type { RoutePath } from './routes';
 
-export type NavSection = 'main' | 'footer';
+export type NavSection = 'local' | 'sources' | 'misc' | 'footer';
 
 export interface NavItem {
     path: RoutePath;
