@@ -5,7 +5,6 @@ import { Layout } from '@/widgets/app-layout';
 import { ROUTES } from '@/shared/config/routes';
 import { STORAGE } from '@/shared/config/storage-keys';
 
-const HomePage = lazy(() => import('@/pages/home').then((m) => ({ default: m.HomePage })));
 const SettingsPage = lazy(() =>
     import('@/pages/settings').then((m) => ({ default: m.SettingsPage }))
 );
@@ -34,7 +33,6 @@ export function AppRouter() {
             <RouteRestorer />
             <Routes>
                 <Route element={<Layout />}>
-                    <Route path={ROUTES.home} element={<HomePage />} />
                     <Route path={ROUTES.scripts} element={<ScriptsPage />} />
                     <Route path={ROUTES.getScripts} element={<GetScriptsPage />} />
                     <Route path={ROUTES.libraries} element={<LibrariesPage />} />

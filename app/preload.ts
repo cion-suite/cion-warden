@@ -22,6 +22,19 @@ const bridge: AppBridge = {
         saveConfigValues: (configPath, values) =>
             ipcRenderer.invoke('scripts:config-save-values', configPath, values),
     },
+    sources: {
+        list: () => ipcRenderer.invoke('sources:list'),
+        add: (source) => ipcRenderer.invoke('sources:add', source),
+        remove: (id) => ipcRenderer.invoke('sources:remove', id),
+        update: (id, patch) => ipcRenderer.invoke('sources:update', id, patch),
+    },
+    getScripts: {
+        list: () => ipcRenderer.invoke('get-scripts:list'),
+        listSource: (sourceId) => ipcRenderer.invoke('get-scripts:list-source', sourceId),
+        syncSource: (sourceId) => ipcRenderer.invoke('get-scripts:sync-source', sourceId),
+        download: (sourceId, fileName) => ipcRenderer.invoke('get-scripts:download', sourceId, fileName),
+        sync: () => ipcRenderer.invoke('get-scripts:sync'),
+    },
 };
 
 contextBridge.exposeInMainWorld('app', bridge);

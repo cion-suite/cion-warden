@@ -8,6 +8,8 @@ import { openMainWindow, focusMainWindow } from './windows/main-window.js';
 import { openSplashWindow, updateSplash, closeSplashWindow } from './windows/splash-window.js';
 import { registerSystemHandlers } from './handlers/system.js';
 import { registerScriptHandlers } from './handlers/scripts.js';
+import { registerSourceHandlers } from './handlers/sources.js';
+import { registerGetScriptHandlers } from './handlers/get-scripts.js';
 import { getGlobalVaultPath, ensureGlobalVault } from './services/vault-paths.js';
 import { createScriptWatcher, type ScriptWatcher } from './services/script-watcher.js';
 import type { AppServices } from './types/services.js';
@@ -49,6 +51,8 @@ async function bootstrap(): Promise<void> {
         const globalVaultPath = getGlobalVaultPath();
         await ensureGlobalVault();
         registerScriptHandlers(services, globalVaultPath);
+        registerSourceHandlers();
+        registerGetScriptHandlers();
         scriptWatcher = createScriptWatcher();
         scriptWatcher.start(globalVaultPath);
 
