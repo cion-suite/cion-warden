@@ -49,7 +49,7 @@ GitHub Personal Access Token для private-репозиториев. Token хр
 
 ---
 
-## Phase 2: IPC + handlers + preload-bridge
+## Phase 2: IPC + handlers + preload-bridge [done]
 
 - **What:** Новые IPC методы: `sources:set-token`, `sources:remove-token`, `sources:test-token`, `sources:get-token-mask`. `sources:list` дополняет git-источники `hasToken`. **`sources:remove` + `sources:update` — server-side очистка токена** (single source of truth, без race из renderer).
 - **Where:**

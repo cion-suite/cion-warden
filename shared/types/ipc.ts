@@ -39,6 +39,10 @@ export interface AppBridge {
         add: (source: Omit<VaultSource, 'id'>) => Promise<VaultSource>;
         remove: (id: string) => Promise<void>;
         update: (id: string, patch: Record<string, unknown>) => Promise<VaultSource>;
+        setToken: (id: string, token: string) => Promise<void>;
+        removeToken: (id: string) => Promise<void>;
+        testToken: (id: string) => Promise<{ ok: true } | { ok: false; status: number; message: string }>;
+        getTokenMask: (id: string) => Promise<string | null>;
     };
     getScripts: {
         list: () => Promise<RemoteScriptMeta[]>;

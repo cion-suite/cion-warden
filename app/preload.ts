@@ -27,6 +27,10 @@ const bridge: AppBridge = {
         add: (source) => ipcRenderer.invoke('sources:add', source),
         remove: (id) => ipcRenderer.invoke('sources:remove', id),
         update: (id, patch) => ipcRenderer.invoke('sources:update', id, patch),
+        setToken: (id, token) => ipcRenderer.invoke('sources:set-token', id, token),
+        removeToken: (id) => ipcRenderer.invoke('sources:remove-token', id),
+        testToken: (id) => ipcRenderer.invoke('sources:test-token', id),
+        getTokenMask: (id) => ipcRenderer.invoke('sources:get-token-mask', id),
     },
     getScripts: {
         list: () => ipcRenderer.invoke('get-scripts:list'),

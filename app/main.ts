@@ -51,7 +51,7 @@ async function bootstrap(): Promise<void> {
         const globalVaultPath = getGlobalVaultPath();
         await ensureGlobalVault();
         registerScriptHandlers(services, globalVaultPath);
-        registerSourceHandlers();
+        registerSourceHandlers(services);
         registerGetScriptHandlers();
         scriptWatcher = createScriptWatcher();
         scriptWatcher.start(globalVaultPath);
