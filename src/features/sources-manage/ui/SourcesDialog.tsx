@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { RefreshCw, Plus, Trash2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Plus, Trash2 } from 'lucide-react';
 
 import { useT } from '@/shared/i18n';
 import { toast } from '@/shared/lib/toast';
@@ -58,10 +58,14 @@ function SourceItem({
             )}
             onClick={onSelect}
         >
-            <Badge variant="outline" className="shrink-0 text-xs">
-                {source.type === 'git' ? 'GIT' : 'NOT GIT'}
-            </Badge>
-            <span className="min-w-0 flex-1 truncate text-xs">{source.name}</span>
+            {source.type === 'git' && (
+                <Badge variant="outline" className="shrink-0 text-xs">GIT</Badge>
+            )}
+            <span className="min-w-0 flex-1 truncate text-xs">
+                {source.type === 'git'
+                    ? (source.name.split('/').pop() ?? source.name)
+                    : source.name}
+            </span>
             <Button
                 variant="ghost"
                 size="icon-sm"
@@ -110,28 +114,7 @@ function GitSettings({
     const [url, setUrl] = useState(source.url);
     const [branch, setBranch] = useState(source.branch);
     const [isPrivate, setIsPrivate] = useState(source.isPrivate);
-    const [lastSyncedAt, setLastSyncedAt] = useState<number | undefined>();
-    const [syncing, setSyncing] = useState(false);
     const [saving, setSaving] = useState(false);
-
-    useEffect(() => {
-        window.app?.getScripts
-            .listSource(source.id)
-            .then((r) => setLastSyncedAt(r?.lastSyncedAt));
-    }, [source.id]);
-
-    const handleSync = async () => {
-        setSyncing(true);
-        try {
-            const res = await window.app?.getScripts.syncSource(source.id);
-            setLastSyncedAt(res?.lastSyncedAt);
-            toast.success(t('sources.syncDone'));
-        } catch (e) {
-            toast.error(e instanceof Error ? e.message : t('error'));
-        } finally {
-            setSyncing(false);
-        }
-    };
 
     const handleSave = async () => {
         setSaving(true);
@@ -150,27 +133,6 @@ function GitSettings({
             {/* Header */}
             <div className="border-b px-4 py-3">
                 <p className="truncate font-semibold">{source.name}</p>
-            </div>
-
-            {/* Sync bar */}
-            <div className="flex items-center gap-3 border-b px-4 py-2.5">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={syncing}
-                    onClick={() => void handleSync()}
-                >
-                    <RefreshCw
-                        data-icon="inline-start"
-                        className={cn(syncing && 'animate-spin')}
-                    />
-                    {t('sources.sync')}
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                    {lastSyncedAt
-                        ? `${t('sources.lastSynced')} ${formatLastSynced(lastSyncedAt)}`
-                        : t('sources.neverSynced')}
-                </span>
             </div>
 
             {/* Form */}
@@ -376,6 +338,10 @@ function NewSourcePanel({
 
     return (
         <div className="flex h-full flex-col">
+            <div className="border-b px-4 py-3">
+                <p className="font-semibold">{t('sources.newSource')}</p>
+            </div>
+
             <Tabs
                 value={type}
                 onValueChange={(v) => setType(v as 'git' | 'external')}
@@ -410,7 +376,6 @@ interface SourcesDialogProps {
     onOpenChange: (open: boolean) => void;
     sources: VaultSource[];
     onSourcesChange: () => void;
-    onScriptsChange: () => void;
 }
 
 export function SourcesDialog({
@@ -422,6 +387,15 @@ export function SourcesDialog({
     const t = useT();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [addingNew, setAddingNew] = useState(false);
+    const prevOpenRef = useRef(false);
+
+    useEffect(() => {
+        if (open && !prevOpenRef.current) {
+            setSelectedId(sources[0]?.id ?? null);
+            setAddingNew(false);
+        }
+        prevOpenRef.current = open;
+    }, [open, sources]);
 
     // Keep selection valid when source list changes
     useEffect(() => {

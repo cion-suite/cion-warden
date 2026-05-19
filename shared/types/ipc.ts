@@ -2,7 +2,10 @@ import type { ScriptMeta } from './scripts.js';
 import type { VaultSource } from './vault.js';
 import type { RemoteScriptMeta } from './get-scripts.js';
 
-export type UpdaterIpcResult = { ok: true } | { ok: false; error: string };
+export type UpdaterIpcResult =
+    | { ok: true }
+    | { ok: false; error: 'rate_limit'; retryAfter: number }
+    | { ok: false; error: string };
 
 export interface UpdaterChannelInfo {
     isBeta: boolean;

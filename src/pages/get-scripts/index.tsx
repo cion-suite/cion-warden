@@ -53,7 +53,6 @@ export function GetScriptsPage() {
                 onOpenChange={setSourcesOpen}
                 sources={sources}
                 onSourcesChange={() => void refreshSources()}
-                onScriptsChange={() => void refresh()}
             />
         </>
     );
