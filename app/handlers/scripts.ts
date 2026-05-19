@@ -2,12 +2,15 @@ import fsPromises from 'node:fs/promises';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { promisify } from 'node:util';
 import { shell, BrowserWindow } from 'electron';
-import { spawn, execSync, type ChildProcess } from 'node:child_process';
+import { spawn, execSync, execFile, spawnSync, type ChildProcess } from 'node:child_process';
 import { registerHandlers, appEvents } from '@cion-suite/core/ipc';
 import type { Dirent } from 'node:fs';
 import type { ScriptMeta, ScriptCfgFile } from '@shared/types/scripts.js';
 import type { AppServices } from '../types/services.js';
+
+const execFileAsync = promisify(execFile);
 
 const runningProcesses = new Map<string, ChildProcess>();
 
@@ -21,6 +24,15 @@ function killProcess(child: ChildProcess): void {
     } else {
         child.kill();
     }
+}
+
+function killAhkByPath(filePath: string): void {
+    const escaped = filePath.replace(/'/g, "''");
+    spawnSync('powershell', [
+        '-NoProfile',
+        '-Command',
+        `Get-CimInstance Win32_Process | Where-Object { $_.Name -like 'AutoHotkey*' -and $_.CommandLine -like '*${escaped}*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }`,
+    ], { stdio: 'ignore' });
 }
 
 const scriptStatuses = new Map<string, { status: 'idle' | 'running' | 'error'; errorMessage?: string }>();
@@ -50,7 +62,25 @@ function emitStatusChange(
     }
 }
 
+async function getRunningAhkPaths(): Promise<Set<string>> {
+    try {
+        const { stdout } = await execFileAsync('powershell', [
+            '-NoProfile',
+            '-Command',
+            "Get-CimInstance Win32_Process | Where-Object Name -like 'AutoHotkey*' | Select-Object -ExpandProperty CommandLine",
+        ]);
+        const running = new Set<string>();
+        for (const match of String(stdout).matchAll(/"([^"]+\.ahk)"/gi)) {
+            if (match[1]) running.add(path.normalize(match[1]));
+        }
+        return running;
+    } catch {
+        return new Set();
+    }
+}
+
 async function listScripts(globalVaultPath: string): Promise<ScriptMeta[]> {
+    const runningAhkPaths = await getRunningAhkPaths();
     const scripts: ScriptMeta[] = [];
     let vaultEntries: Dirent[] = [];
     try {
@@ -79,15 +109,26 @@ async function listScripts(globalVaultPath: string): Promise<ScriptMeta[]> {
                 const config = hasCfg ? await readJsonFile<ScriptCfgFile>(cfgPath) : undefined;
                 const id = makeScriptId(filePath);
                 scriptPathCache.set(id, filePath);
-                const statusInfo = scriptStatuses.get(id);
+
+                const osRunning = runningAhkPaths.has(filePath);
+                const prev = scriptStatuses.get(id);
+                const status: 'idle' | 'running' | 'error' = osRunning
+                    ? 'running'
+                    : prev?.status === 'running'
+                      ? 'idle'
+                      : (prev?.status ?? 'idle');
+                if (status !== prev?.status) {
+                    scriptStatuses.set(id, { status });
+                }
+
                 scripts.push({
                     id,
                     name,
                     filePath,
                     configPath: hasCfg ? cfgPath : undefined,
                     config,
-                    status: statusInfo?.status ?? 'idle',
-                    errorMessage: statusInfo?.errorMessage,
+                    status,
+                    errorMessage: prev?.errorMessage,
                     modifiedAt: stat.mtimeMs,
                 });
             } catch {
@@ -128,11 +169,15 @@ export function registerScriptHandlers(_services: AppServices, globalVaultPath: 
         'scripts:stop': (_event, rawId: unknown) => {
             const id = String(rawId);
             const child = runningProcesses.get(id);
-            if (!child) return;
-            child.removeAllListeners('exit');
-            child.removeAllListeners('error');
-            killProcess(child);
-            runningProcesses.delete(id);
+            if (child) {
+                child.removeAllListeners('exit');
+                child.removeAllListeners('error');
+                killProcess(child);
+                runningProcesses.delete(id);
+            } else {
+                const filePath = scriptPathCache.get(id);
+                if (filePath) killAhkByPath(filePath);
+            }
             emitStatusChange(id, 'idle');
         },
 
@@ -142,13 +187,18 @@ export function registerScriptHandlers(_services: AppServices, globalVaultPath: 
             } catch {
                 // no AHK processes running
             }
-            for (const [id, child] of runningProcesses) {
+            for (const [, child] of runningProcesses) {
                 child.removeAllListeners('exit');
                 child.removeAllListeners('error');
-                killProcess(child); // clean up the shell wrapper (cmd.exe)
-                emitStatusChange(id, 'idle');
+                killProcess(child);
             }
             runningProcesses.clear();
+            const runningIds = [...scriptStatuses]
+                .filter(([, { status }]) => status === 'running')
+                .map(([id]) => id);
+            for (const id of runningIds) {
+                emitStatusChange(id, 'idle');
+            }
         },
 
         'scripts:delete': async (_event, rawPath: unknown) => {
