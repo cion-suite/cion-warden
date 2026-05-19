@@ -93,7 +93,7 @@ GitHub Personal Access Token для private-репозиториев. Token хр
 
 ---
 
-## Phase 4: UI — PAT field в SourcesDialog (skill `/shadcn`)
+## Phase 4: UI — PAT field в SourcesDialog (skill `/shadcn`) [done]
 
 - **What:** В `GitFormFields` (новый-source + settings-existing) добавить условный PAT-блок. Поведение по UX-контракту выше.
 - **Where:**

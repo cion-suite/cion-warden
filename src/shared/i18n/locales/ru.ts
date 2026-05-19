@@ -130,7 +130,7 @@ export const ru = {
             external: 'Внешний',
             url: 'URL репозитория',
             branch: 'Ветка',
-            private: 'Приватный репо',
+            private: 'Приватный',
             scriptsUrl: 'URL скриптов',
             libsUrl: 'URL библиотек',
             cfgUrl: 'URL конфигов',
@@ -144,6 +144,13 @@ export const ru = {
             noScripts: 'Скриптов нет. Нажмите Sync для загрузки.',
             newSource: 'Новый источник…',
             syncDone: 'Синхронизировано',
+            token: 'Personal access token',
+            tokenPlaceholder: 'github_pat_...',
+            tokenChange: 'Заменить токен',
+            tokenInvalid: 'Недействительный токен',
+            tokenNoAccess: 'Токен не даёт доступ к этому репозиторию',
+            tokenSaved: 'Токен сохранён',
+            tokenSaveError: 'Не удалось сохранить токен',
         },
         settings: {
             groups: {

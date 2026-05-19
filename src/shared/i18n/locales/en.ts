@@ -130,7 +130,7 @@ export const en = {
             external: 'External',
             url: 'Repository URL',
             branch: 'Branch',
-            private: 'Private repo',
+            private: 'Private',
             scriptsUrl: 'Scripts URL',
             libsUrl: 'Libraries URL',
             cfgUrl: 'Config URL',
@@ -144,6 +144,13 @@ export const en = {
             noScripts: 'No scripts found. Click Sync to fetch from remote.',
             newSource: 'New source…',
             syncDone: 'Synced successfully',
+            token: 'Personal access token',
+            tokenPlaceholder: 'github_pat_...',
+            tokenChange: 'Replace token',
+            tokenInvalid: 'Invalid token',
+            tokenNoAccess: 'Token does not grant access to this repository',
+            tokenSaved: 'Token saved',
+            tokenSaveError: 'Failed to save token',
         },
         settings: {
             groups: {

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 
 import { useT } from '@/shared/i18n';
 import { toast } from '@/shared/lib/toast';
@@ -12,6 +12,11 @@ import {
     DialogTitle,
 } from '@/shared/ui/shadcn/dialog';
 import { Input } from '@/shared/ui/shadcn/input';
+import {
+    InputGroup,
+    InputGroupAddon,
+    InputGroupInput,
+} from '@/shared/ui/shadcn/input-group';
 import { Switch } from '@/shared/ui/shadcn/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/shadcn/tabs';
 import type { VaultSource } from '@shared/types/vault';
@@ -40,24 +45,36 @@ function SourceItem({
     onSelect: () => void;
     onDelete: () => void;
 }) {
+    const t = useT();
+    const title =
+        source.type === 'git' ? (source.name.split('/').pop() ?? source.name) : source.name;
+
     return (
         <div
             className={cn(
-                'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-2 transition-colors',
+                'group flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 transition-colors',
                 selected
                     ? 'bg-accent text-accent-foreground'
-                    : 'text-muted-foreground hover:bg-accent/50 hover:text-foreground',
+                    : 'hover:bg-accent/50',
             )}
             onClick={onSelect}
         >
-            {source.type === 'git' && (
-                <Badge variant="outline" className="shrink-0 text-xs">GIT</Badge>
-            )}
-            <span className="min-w-0 flex-1 truncate text-xs">
-                {source.type === 'git'
-                    ? (source.name.split('/').pop() ?? source.name)
-                    : source.name}
-            </span>
+            <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm font-medium">{title}</span>
+                <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
+                    {source.type === 'git' ? (
+                        <>
+                            {source.isPrivate && <Lock className="size-3" />}
+                            <span>
+                                GIT
+                                {source.isPrivate ? ` · ${t('sources.private').toLowerCase()}` : ''}
+                            </span>
+                        </>
+                    ) : (
+                        <span>{t('sources.external')}</span>
+                    )}
+                </span>
+            </div>
             <Button
                 variant="ghost"
                 size="icon-sm"
@@ -103,6 +120,11 @@ interface GitFormFieldsProps {
     isPrivate: boolean;
     onIsPrivateChange: (v: boolean) => void;
     autoFocusUrl?: boolean;
+    token: string;
+    onTokenChange: (v: string) => void;
+    tokenLocked: boolean;
+    onUnlock: () => void;
+    mask: string | null;
 }
 
 function GitFormFields({
@@ -113,6 +135,11 @@ function GitFormFields({
     isPrivate,
     onIsPrivateChange,
     autoFocusUrl,
+    token,
+    onTokenChange,
+    tokenLocked,
+    onUnlock,
+    mask,
 }: GitFormFieldsProps) {
     const t = useT();
     return (
@@ -138,6 +165,34 @@ function GitFormFields({
                 <span className="text-sm font-medium">{t('sources.private')}</span>
                 <Switch checked={isPrivate} onCheckedChange={onIsPrivateChange} />
             </div>
+            {isPrivate && (
+                <FieldRow label={t('sources.token')}>
+                    <InputGroup>
+                        <InputGroupInput
+                            type={tokenLocked ? 'text' : 'password'}
+                            disabled={tokenLocked}
+                            value={tokenLocked ? (mask ?? '') : token}
+                            onChange={(e) => onTokenChange(e.target.value)}
+                            placeholder={t('sources.tokenPlaceholder')}
+                            autoComplete="off"
+                            spellCheck={false}
+                        />
+                        {tokenLocked && (
+                            <InputGroupAddon align="inline-end">
+                                <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={t('sources.tokenChange')}
+                                    title={t('sources.tokenChange')}
+                                    onClick={onUnlock}
+                                >
+                                    <Pencil />
+                                </Button>
+                            </InputGroupAddon>
+                        )}
+                    </InputGroup>
+                </FieldRow>
+            )}
         </>
     );
 }
@@ -214,12 +269,33 @@ function GitSettings({
     const [url, setUrl] = useState(source.url);
     const [branch, setBranch] = useState(source.branch);
     const [isPrivate, setIsPrivate] = useState(source.isPrivate);
+    const [token, setToken] = useState('');
+    const [tokenLocked, setTokenLocked] = useState(source.hasToken ?? false);
+    const [mask, setMask] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        if (source.hasToken) {
+            void window.app?.sources.getTokenMask(source.id).then(setMask);
+        } else {
+            setMask(null);
+        }
+    }, [source.id, source.hasToken]);
 
     const handleSave = async () => {
         setSaving(true);
         try {
             await window.app?.sources.update(source.id, { url, branch, isPrivate });
+            const trimmed = token.trim();
+            if (isPrivate && trimmed.length > 0 && !tokenLocked) {
+                try {
+                    await window.app?.sources.setToken(source.id, trimmed);
+                    toast.success(t('sources.tokenSaved'));
+                } catch {
+                    toast.error(t('sources.tokenSaveError'));
+                    return;
+                }
+            }
             onSaved();
         } catch {
             toast.error(t('error'));
@@ -242,6 +318,14 @@ function GitSettings({
                     onBranchChange={setBranch}
                     isPrivate={isPrivate}
                     onIsPrivateChange={setIsPrivate}
+                    token={token}
+                    onTokenChange={setToken}
+                    tokenLocked={tokenLocked}
+                    onUnlock={() => {
+                        setTokenLocked(false);
+                        setToken('');
+                    }}
+                    mask={mask}
                 />
             </div>
 
@@ -330,6 +414,7 @@ function NewSourcePanel({
     const [url, setUrl] = useState('');
     const [branch, setBranch] = useState('main');
     const [isPrivate, setIsPrivate] = useState(false);
+    const [token, setToken] = useState('');
     const [extName, setExtName] = useState('');
     const [scriptsUrl, setScriptsUrl] = useState('');
     const [libsUrl, setLibsUrl] = useState('');
@@ -341,17 +426,29 @@ function NewSourcePanel({
     const handleSave = async () => {
         setSaving(true);
         try {
-            const data =
-                type === 'git'
-                    ? ({ type: 'git' as const, name: '', url, branch, isPrivate } as const)
-                    : ({
-                          type: 'external' as const,
-                          name: extName,
-                          scriptsUrl,
-                          libsUrl,
-                          cfgUrl,
-                      } as const);
-            await window.app?.sources.add(data);
+            if (type === 'git') {
+                const data = { type: 'git' as const, name: '', url, branch, isPrivate } as const;
+                const created = await window.app?.sources.add(data);
+                const trimmed = token.trim();
+                if (created && isPrivate && trimmed.length > 0) {
+                    try {
+                        await window.app?.sources.setToken(created.id, trimmed);
+                        toast.success(t('sources.tokenSaved'));
+                    } catch {
+                        toast.error(t('sources.tokenSaveError'));
+                        return;
+                    }
+                }
+            } else {
+                const data = {
+                    type: 'external' as const,
+                    name: extName,
+                    scriptsUrl,
+                    libsUrl,
+                    cfgUrl,
+                } as const;
+                await window.app?.sources.add(data);
+            }
             onSaved();
         } catch {
             toast.error(t('error'));
@@ -370,6 +467,11 @@ function NewSourcePanel({
                 isPrivate={isPrivate}
                 onIsPrivateChange={setIsPrivate}
                 autoFocusUrl
+                token={token}
+                onTokenChange={setToken}
+                tokenLocked={false}
+                onUnlock={() => undefined}
+                mask={null}
             />
         </div>
     );

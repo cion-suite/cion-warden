@@ -10,6 +10,13 @@ import { RemoteScriptList } from '@/widgets/remote-list';
 import type { RemoteScriptMeta } from '@shared/types/get-scripts';
 import { toast } from '@/shared/lib/toast';
 
+const TOKEN_ERROR_KEYS = new Set(['sources.tokenInvalid', 'sources.tokenNoAccess']);
+
+function toErrorKey(err: unknown): string {
+    const msg = err instanceof Error ? err.message : '';
+    return TOKEN_ERROR_KEYS.has(msg) ? msg : 'error';
+}
+
 export function GetScriptsPage() {
     const t = useT();
     const [search, setSearch] = useState('');
@@ -42,9 +49,9 @@ export function GetScriptsPage() {
             const results = await Promise.allSettled(
                 gitSources.map((s) => window.app!.getScripts.syncSource(s.id)),
             );
-            const failed = results.filter((r) => r.status === 'rejected');
-            if (failed.length > 0) {
-                toast.error(t('error'));
+            const firstFailed = results.find((r) => r.status === 'rejected');
+            if (firstFailed) {
+                toast.error(t(toErrorKey(firstFailed.reason)));
             } else {
                 toast.success(t('sources.syncDone'));
             }
@@ -55,7 +62,12 @@ export function GetScriptsPage() {
     };
 
     const handleDownload = async (script: RemoteScriptMeta) => {
-        await window.app?.getScripts.download(script.sourceId, script.fileName);
+        try {
+            await window.app?.getScripts.download(script.sourceId, script.fileName);
+        } catch (err) {
+            toast.error(t(toErrorKey(err)));
+            return;
+        }
         setScripts((prev) =>
             prev.map((s) =>
                 s.id === script.id
