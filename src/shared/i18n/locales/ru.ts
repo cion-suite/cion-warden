@@ -144,6 +144,7 @@ export const ru = {
             noScripts: 'Скриптов нет. Нажмите Sync для загрузки.',
             newSource: 'Новый источник…',
             syncDone: 'Синхронизировано',
+            repoNotFound: 'Репозиторий не найден. Возможно, удалён или стал приватным — проверьте URL и видимость',
             token: 'Personal access token',
             tokenPlaceholder: 'github_pat_...',
             tokenChange: 'Заменить токен',

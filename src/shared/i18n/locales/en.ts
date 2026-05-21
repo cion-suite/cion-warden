@@ -144,6 +144,7 @@ export const en = {
             noScripts: 'No scripts found. Click Sync to fetch from remote.',
             newSource: 'New source…',
             syncDone: 'Synced successfully',
+            repoNotFound: 'Repository not found. May have been deleted or made private — verify URL and visibility',
             token: 'Personal access token',
             tokenPlaceholder: 'github_pat_...',
             tokenChange: 'Replace token',

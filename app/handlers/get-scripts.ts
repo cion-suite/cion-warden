@@ -10,9 +10,9 @@ import { getGlobalVaultPath } from '../services/vault-paths.js';
 import { listSources } from '../services/sources-store.js';
 import { parseGithubUrl } from '../utils/github-url.js';
 import { requireString } from '../utils/ipc-args.js';
+import { GITHUB_USER_AGENT, probeRepo } from '../utils/github-api.js';
 
 const SCRIPTS_DIR = 'scripts';
-const USER_AGENT = 'cion-warden/1.0';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -165,7 +165,7 @@ async function buildGitHeaders(
     tokens: SourceTokens,
     accept?: string,
 ): Promise<Record<string, string>> {
-    const headers: Record<string, string> = { 'User-Agent': USER_AGENT };
+    const headers: Record<string, string> = { 'User-Agent': GITHUB_USER_AGENT };
     if (accept) headers.Accept = accept;
     if (source.isPrivate) {
         const token = await tokens.getToken(source.id);
@@ -182,6 +182,7 @@ function mapGithubError(res: Response, isPrivate: boolean): Error {
     }
     if (res.status === 401 || res.status === 403) return new Error('sources.tokenInvalid');
     if (res.status === 404 && isPrivate) return new Error('sources.tokenNoAccess');
+    if (res.status === 404) return new Error('sources.repoNotFound');
     return new Error(`GitHub API error: ${res.status} ${res.statusText}`);
 }
 
@@ -244,10 +245,29 @@ async function fetchFileContent(
         return Buffer.from(await res.arrayBuffer());
     }
     const url = `https://raw.githubusercontent.com/${owner}/${repo}/${encodeURIComponent(branch)}/${repoPath}`;
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+    const res = await fetch(url, { headers: { 'User-Agent': GITHUB_USER_AGENT } });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
     return Buffer.from(await res.arrayBuffer());
+}
+
+// Public download 404 is ambiguous: file deleted OR repo became private/deleted.
+// Probe the repo endpoint to disambiguate. Cached briefly because the unauth
+// rate limit is 60/hour/IP — repeat clicks shouldn't burn it.
+const PUBLIC_REPO_PROBE_TTL_MS = 60_000;
+const publicRepoProbeCache = new Map<string, { exists: boolean; at: number }>();
+
+async function probePublicRepoExists(owner: string, repo: string): Promise<boolean> {
+    const key = `${owner}/${repo}`;
+    const cached = publicRepoProbeCache.get(key);
+    if (cached && Date.now() - cached.at < PUBLIC_REPO_PROBE_TTL_MS) return cached.exists;
+    try {
+        const { ok } = await probeRepo(owner, repo);
+        publicRepoProbeCache.set(key, { exists: ok, at: Date.now() });
+        return ok;
+    } catch {
+        return true;
+    }
 }
 
 async function downloadFromGitSource(
@@ -273,6 +293,8 @@ async function downloadFromGitSource(
     );
     if (!content) {
         if (source.isPrivate) throw new Error('sources.tokenNoAccess');
+        const repoExists = await probePublicRepoExists(owner, repo);
+        if (!repoExists) throw new Error('sources.repoNotFound');
         throw new Error(`Download failed: ${fileName} not found`);
     }
 

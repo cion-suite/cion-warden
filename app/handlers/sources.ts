@@ -4,6 +4,7 @@ import type { AppServices } from '../types/services.js';
 import { listSources, addSource, removeSource, updateSource } from '../services/sources-store.js';
 import { requireString } from '../utils/ipc-args.js';
 import { parseGithubUrl } from '../utils/github-url.js';
+import { probeRepo } from '../utils/github-api.js';
 
 async function enrichWithToken(
     sources: VaultSource[],
@@ -30,13 +31,7 @@ async function testToken(
     if (!token) return { ok: false, status: 0, message: 'No token' };
     const parsed = parseGithubUrl(source.url);
     if (!parsed) return { ok: false, status: 0, message: 'Invalid GitHub URL' };
-    const res = await fetch(`https://api.github.com/repos/${parsed.owner}/${parsed.repo}`, {
-        headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'User-Agent': 'cion-warden/1.0',
-        },
-    });
+    const res = await probeRepo(parsed.owner, parsed.repo, token);
     if (res.ok) return { ok: true };
     return { ok: false, status: res.status, message: res.statusText };
 }

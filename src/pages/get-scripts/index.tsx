@@ -10,11 +10,18 @@ import { RemoteScriptList } from '@/widgets/remote-list';
 import type { RemoteScriptMeta } from '@shared/types/get-scripts';
 import { toast } from '@/shared/lib/toast';
 
-const TOKEN_ERROR_KEYS = new Set(['sources.tokenInvalid', 'sources.tokenNoAccess']);
+const KNOWN_ERROR_KEYS = new Set([
+    'sources.tokenInvalid',
+    'sources.tokenNoAccess',
+    'sources.repoNotFound',
+]);
 
 function toErrorKey(err: unknown): string {
     const msg = err instanceof Error ? err.message : '';
-    return TOKEN_ERROR_KEYS.has(msg) ? msg : 'error';
+    for (const key of KNOWN_ERROR_KEYS) {
+        if (msg.includes(key)) return key;
+    }
+    return 'error';
 }
 
 export function GetScriptsPage() {
