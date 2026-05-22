@@ -1,6 +1,7 @@
 import { Download, Plug, RefreshCw } from 'lucide-react';
 
 import { useT } from '@/shared/i18n';
+import { cn } from '@/shared/lib/utils';
 import { Button } from '@/shared/ui/shadcn/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/shared/ui/shadcn/empty';
 import { Skeleton } from '@/shared/ui/shadcn/skeleton';
@@ -10,6 +11,7 @@ import { RemoteLibraryRow } from './RemoteLibraryRow';
 interface RemoteLibraryListProps {
     libs: RemoteLibraryMeta[];
     loading: boolean;
+    refreshing: boolean;
     busyIds: ReadonlySet<string>;
     bulkBusy: boolean;
     canBulkDownload: boolean;
@@ -25,6 +27,7 @@ interface RemoteLibraryListProps {
 export function RemoteLibraryList({
     libs,
     loading,
+    refreshing,
     busyIds,
     bulkBusy,
     canBulkDownload,
@@ -58,29 +61,26 @@ export function RemoteLibraryList({
                 <Button
                     variant="ghost"
                     size="icon-sm"
+                    disabled={refreshing}
                     onClick={onRefresh}
                     title={t('scripts.refresh')}
                 >
-                    <RefreshCw />
+                    <RefreshCw className={cn(refreshing && 'animate-spin')} />
                 </Button>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
                 {loading ? (
-                    <>
-                        <Skeleton className="h-16 rounded-lg" />
-                        <Skeleton className="h-16 rounded-lg" />
-                        <Skeleton className="h-16 rounded-lg" />
-                    </>
+                    Array.from({ length: 3 }, (_, i) => (
+                        <Skeleton key={i} className="h-16 rounded-lg" />
+                    ))
                 ) : libs.length === 0 ? (
-                    <div className="flex h-full items-center justify-center">
-                        <Empty>
-                            <EmptyHeader>
-                                <EmptyTitle>{t('libs.title')}</EmptyTitle>
-                                <EmptyDescription>{t('libs.empty')}</EmptyDescription>
-                            </EmptyHeader>
-                        </Empty>
-                    </div>
+                    <Empty className="h-full">
+                        <EmptyHeader>
+                            <EmptyTitle>{t('libs.title')}</EmptyTitle>
+                            <EmptyDescription>{t('libs.empty')}</EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
                 ) : (
                     libs.map((lib) => (
                         <RemoteLibraryRow

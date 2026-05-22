@@ -41,7 +41,7 @@ export function LibrariesPage() {
             const results = (await window.app?.vault.syncAll()) ?? [];
             const firstFailed = results.find((r) => !r.ok);
             if (firstFailed) {
-                toast.error(t(toErrorKey(new Error(firstFailed.error ?? ''))));
+                toast.error(toErrorKey(new Error(firstFailed.error ?? ''), t));
             } else if (results.length > 0) {
                 toast.success(t('sources.syncDone'));
             }
@@ -60,10 +60,11 @@ export function LibrariesPage() {
 
     return (
         <>
-            <div className="mx-auto flex h-full w-full min-h-0 max-w-4xl flex-col p-4">
+            <div className="mx-auto flex h-full w-full min-h-0 max-w-4xl flex-col">
                 <RemoteLibraryList
                     libs={filtered}
-                    loading={loading || syncing}
+                    loading={loading}
+                    refreshing={syncing}
                     busyIds={actions.busyIds}
                     bulkBusy={actions.bulkBusy}
                     canBulkDownload={canBulkDownload}

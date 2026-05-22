@@ -82,17 +82,28 @@ export function registerLibHandlers(services: AppServices): void {
             const targeted =
                 rawSourceId == null ? gitSources : gitSources.filter((s) => s.id === rawSourceId);
 
+            const results = await Promise.allSettled(
+                targeted.map((source) =>
+                    downloadAllLibs(source, {
+                        vaultBase: getGlobalVaultPath(),
+                        tokens: sourceTokens,
+                        logger,
+                    }).then((res) => {
+                        appEvents.emit('libs:changed', { sourceId: source.id, libId: '*' });
+                        return res;
+                    }),
+                ),
+            );
+
             let ok = 0;
             let failed = 0;
-            for (const source of targeted) {
-                const res = await downloadAllLibs(source, {
-                    vaultBase: getGlobalVaultPath(),
-                    tokens: sourceTokens,
-                    logger,
-                });
-                ok += res.ok;
-                failed += res.failed;
-                if (res.ok > 0) appEvents.emit('libs:changed', { sourceId: source.id, libId: '*' });
+            for (const r of results) {
+                if (r.status === 'fulfilled') {
+                    ok += r.value.ok;
+                    failed += r.value.failed;
+                } else {
+                    failed++;
+                }
             }
             return { ok, failed };
         },

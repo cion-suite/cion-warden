@@ -68,8 +68,8 @@ async function fetchFileContent(
 }
 
 function assertInside(root: string, child: string): void {
-    const r = path.resolve(root) + path.sep;
-    if (!path.resolve(child).startsWith(r)) {
+    const rel = path.relative(path.resolve(root), path.resolve(child));
+    if (rel.startsWith('..') || path.isAbsolute(rel)) {
         throw new Error(`Path escapes vault: ${child}`);
     }
 }

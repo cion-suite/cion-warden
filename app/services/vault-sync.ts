@@ -82,16 +82,17 @@ async function doSync(
         if (!existing) {
             throw new Error('vault-sync: 304 without cached manifest');
         }
-        const updated: ManifestFile = { ...existing, lastSyncedAt: now, lastCheckedAt: now };
+        const updated: ManifestFile = { ...existing, lastCheckedAt: now };
         await writeManifest(vaultBase, source.id, updated);
         const built = await buildCachedResult(source, updated, vaultBase, true);
-        emitSynced(source.id, now, true);
+        emitSynced(source.id, updated.lastSyncedAt, true);
         return built;
     }
 
     const { tree } = result;
     if (tree.truncated) {
         logger.warn('vault-sync: tree truncated', { sourceId: source.id });
+        throw new Error('vault.treeTruncated');
     }
 
     const { scripts, cfgs } = deriveScriptsFromTree(tree.tree, source.url, branch);
@@ -100,7 +101,6 @@ async function doSync(
     const manifest: ManifestFile = {
         version: MANIFEST_VERSION,
         etag: result.etag,
-        commitSha: existing?.commitSha ?? null,
         treeSha: tree.sha,
         branch,
         lastSyncedAt: now,

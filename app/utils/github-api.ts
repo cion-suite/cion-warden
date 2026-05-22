@@ -29,7 +29,8 @@ export function encodeRepoPath(repoPath: string): string {
 }
 
 export function isRateLimited(status: number, rateLimit: RateLimitInfo | null): boolean {
-    return status === 403 && rateLimit?.remaining === 0;
+    if (status !== 403 || !rateLimit) return false;
+    return Number.isFinite(rateLimit.remaining) && rateLimit.remaining <= 0;
 }
 
 export function rateLimitMessage(info: RateLimitInfo): string {

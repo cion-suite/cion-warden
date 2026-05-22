@@ -4,33 +4,31 @@ import { toast } from '@/shared/lib/toast';
 import { toErrorKey } from '@/shared/lib/source-errors';
 import type { RemoteLibraryMeta } from '@shared/types/libs';
 
-function withId(prev: ReadonlySet<string>, id: string): Set<string> {
-    const next = new Set(prev);
-    next.add(id);
-    return next;
-}
-
-function withoutId(prev: ReadonlySet<string>, id: string): Set<string> {
-    const next = new Set(prev);
-    next.delete(id);
+function bumpCount(prev: ReadonlyMap<string, number>, id: string, delta: 1 | -1): Map<string, number> {
+    const next = new Map(prev);
+    const v = (next.get(id) ?? 0) + delta;
+    if (v <= 0) next.delete(id);
+    else next.set(id, v);
     return next;
 }
 
 export function useLibActions(onChanged: () => void) {
     const t = useT();
-    const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(() => new Set());
+    const [busyCounts, setBusyCounts] = useState<ReadonlyMap<string, number>>(() => new Map());
     const [bulkBusy, setBulkBusy] = useState(false);
 
+    const busyIds: ReadonlySet<string> = new Set(busyCounts.keys());
+
     const runOne = async (lib: RemoteLibraryMeta, op: () => Promise<void>, successKey: string) => {
-        setBusyIds((prev) => withId(prev, lib.id));
+        setBusyCounts((prev) => bumpCount(prev, lib.id, 1));
         try {
             await op();
             toast.success(t(successKey, { name: lib.name }));
             onChanged();
         } catch (err) {
-            toast.error(t(toErrorKey(err)));
+            toast.error(toErrorKey(err, t));
         } finally {
-            setBusyIds((prev) => withoutId(prev, lib.id));
+            setBusyCounts((prev) => bumpCount(prev, lib.id, -1));
         }
     };
 
@@ -54,7 +52,7 @@ export function useLibActions(onChanged: () => void) {
             else toast.success(t('libs.bulkDone', { ok: res.ok }));
             onChanged();
         } catch (err) {
-            toast.error(t(toErrorKey(err)));
+            toast.error(toErrorKey(err, t));
         } finally {
             setBulkBusy(false);
         }

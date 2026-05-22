@@ -36,7 +36,6 @@ export interface ManifestLibEntry {
 export interface ManifestFile {
     version: number;
     etag: string | null;
-    commitSha: string | null;
     treeSha: string | null;
     branch: string;
     lastSyncedAt: number;
@@ -99,7 +98,6 @@ function normalizeManifest(raw: Partial<ManifestFile> & { scripts?: ManifestScri
     return {
         version: raw.version ?? 1,
         etag: raw.etag ?? null,
-        commitSha: raw.commitSha ?? null,
         treeSha: raw.treeSha ?? null,
         branch: raw.branch ?? 'main',
         lastSyncedAt: raw.lastSyncedAt ?? 0,
@@ -121,7 +119,7 @@ export async function readLocalCache(vaultBase: string, sourceId: string): Promi
 }
 
 async function atomicWriteFile(p: string, content: string): Promise<void> {
-    const tmp = `${p}.${process.pid}.${Date.now()}.tmp`;
+    const tmp = `${p}.${crypto.randomUUID()}.tmp`;
     await fs.writeFile(tmp, content, 'utf-8');
     await fs.rename(tmp, p);
 }

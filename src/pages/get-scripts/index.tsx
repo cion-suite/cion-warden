@@ -44,7 +44,7 @@ export function GetScriptsPage() {
             const results = (await window.app?.vault.syncAll()) ?? [];
             const firstFailed = results.find((r) => !r.ok);
             if (firstFailed) {
-                toast.error(t(toErrorKey(new Error(firstFailed.error ?? ''))));
+                toast.error(toErrorKey(new Error(firstFailed.error ?? ''), t));
             } else if (results.length > 0) {
                 toast.success(t('sources.syncDone'));
             }
@@ -58,7 +58,7 @@ export function GetScriptsPage() {
         try {
             await window.app?.getScripts.download(script.sourceId, script.fileName);
         } catch (err) {
-            toast.error(t(toErrorKey(err)));
+            toast.error(toErrorKey(err, t));
             return;
         }
         setScripts((prev) =>
@@ -83,7 +83,8 @@ export function GetScriptsPage() {
             <div className="mx-auto flex h-full w-full min-h-0 max-w-4xl flex-col">
                 <RemoteScriptList
                     scripts={filtered}
-                    loading={loading || syncing}
+                    loading={loading}
+                    refreshing={syncing}
                     onRefresh={() => void handleSync()}
                     onSources={() => setSourcesOpen(true)}
                     onDownload={handleDownload}

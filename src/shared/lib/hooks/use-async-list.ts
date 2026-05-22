@@ -9,15 +9,20 @@ export function useAsyncList<T>(loader: () => Promise<T[] | undefined> | undefin
     const tokenRef = useRef(0);
     const pendingRef = useRef<Promise<void> | null>(null);
     const dirtyRef = useRef(false);
+    const everLoadedRef = useRef(false);
 
     const runOnce = async (): Promise<void> => {
         const myToken = ++tokenRef.current;
-        setLoading(true);
+        const isColdLoad = !everLoadedRef.current;
+        if (isColdLoad) setLoading(true);
         try {
             const list = (await loaderRef.current()) ?? [];
-            if (myToken === tokenRef.current) setItems(list);
+            if (myToken === tokenRef.current) {
+                setItems(list);
+                everLoadedRef.current = true;
+            }
         } finally {
-            if (myToken === tokenRef.current) setLoading(false);
+            if (isColdLoad && myToken === tokenRef.current) setLoading(false);
         }
     };
 
@@ -28,11 +33,14 @@ export function useAsyncList<T>(loader: () => Promise<T[] | undefined> | undefin
         }
         const run = async (): Promise<void> => {
             try {
-                await runOnce();
-                while (dirtyRef.current) {
+                do {
                     dirtyRef.current = false;
-                    await runOnce();
-                }
+                    try {
+                        await runOnce();
+                    } catch {
+                        // swallow so dirty drains and pending clears on failure
+                    }
+                } while (dirtyRef.current);
             } finally {
                 pendingRef.current = null;
             }

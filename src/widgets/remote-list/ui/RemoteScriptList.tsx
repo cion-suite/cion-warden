@@ -3,6 +3,7 @@ import { Plug, RefreshCw } from 'lucide-react';
 
 import { useT } from '@/shared/i18n';
 import { toast } from '@/shared/lib/toast';
+import { cn } from '@/shared/lib/utils';
 import { Button } from '@/shared/ui/shadcn/button';
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from '@/shared/ui/shadcn/empty';
 import { Skeleton } from '@/shared/ui/shadcn/skeleton';
@@ -12,6 +13,7 @@ import { RemoteScriptRow } from './RemoteScriptRow';
 interface RemoteScriptListProps {
     scripts: RemoteScriptMeta[];
     loading: boolean;
+    refreshing: boolean;
     onRefresh: () => void;
     onSources: () => void;
     onDownload: (script: RemoteScriptMeta) => Promise<void>;
@@ -20,6 +22,7 @@ interface RemoteScriptListProps {
 export function RemoteScriptList({
     scripts,
     loading,
+    refreshing,
     onRefresh,
     onSources,
     onDownload,
@@ -49,29 +52,26 @@ export function RemoteScriptList({
                 <Button
                     variant="ghost"
                     size="icon-sm"
+                    disabled={refreshing}
                     onClick={onRefresh}
                     title={t('scripts.refresh')}
                 >
-                    <RefreshCw />
+                    <RefreshCw className={cn(refreshing && 'animate-spin')} />
                 </Button>
             </div>
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pr-1">
                 {loading ? (
-                    <>
-                        <Skeleton className="h-16 rounded-lg" />
-                        <Skeleton className="h-16 rounded-lg" />
-                        <Skeleton className="h-16 rounded-lg" />
-                    </>
+                    Array.from({ length: 3 }, (_, i) => (
+                        <Skeleton key={i} className="h-16 rounded-lg" />
+                    ))
                 ) : scripts.length === 0 ? (
-                    <div className="flex h-full items-center justify-center">
-                        <Empty>
-                            <EmptyHeader>
-                                <EmptyTitle>{t('getScripts.title')}</EmptyTitle>
-                                <EmptyDescription>{t('getScripts.empty')}</EmptyDescription>
-                            </EmptyHeader>
-                        </Empty>
-                    </div>
+                    <Empty className="h-full">
+                        <EmptyHeader>
+                            <EmptyTitle>{t('getScripts.title')}</EmptyTitle>
+                            <EmptyDescription>{t('getScripts.empty')}</EmptyDescription>
+                        </EmptyHeader>
+                    </Empty>
                 ) : (
                     scripts.map((script) => (
                         <RemoteScriptRow
