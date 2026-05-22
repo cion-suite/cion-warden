@@ -26,6 +26,7 @@ export interface AppBridge {
     };
     scripts: {
         list: () => Promise<ScriptMeta[]>;
+        probeExternal: () => Promise<{ anyRunning: boolean }>;
         run: (id: string) => Promise<void>;
         stop: (id: string) => Promise<void>;
         stopAll: () => Promise<void>;

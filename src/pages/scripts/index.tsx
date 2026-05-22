@@ -11,7 +11,7 @@ export function ScriptsPage() {
     const t = useT();
     const [search, setSearch] = useState('');
 
-    const { scripts, loading, refresh } = useScripts();
+    const { scripts, loading, refresh, hasAnyRunning, probeExternal } = useScripts();
     const { run, stop, stopAll } = useScriptRunner();
 
     const q = search.trim().toLowerCase();
@@ -31,10 +31,20 @@ export function ScriptsPage() {
             <ScriptList
                 scripts={filtered}
                 loading={loading}
+                hasAnyRunning={hasAnyRunning}
                 onRun={run}
                 onStop={stop}
-                onStopAll={stopAll}
-                onRefresh={() => void refresh()}
+                onStopAll={async () => {
+                    try {
+                        await stopAll();
+                    } finally {
+                        void probeExternal();
+                    }
+                }}
+                onRefresh={() => {
+                    void refresh();
+                    void probeExternal();
+                }}
             />
         </div>
     );

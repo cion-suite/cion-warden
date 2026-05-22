@@ -23,7 +23,7 @@ function Fallback({ error, resetErrorBoundary }: FallbackProps) {
                 </CardDescription>
             </CardHeader>
             <CardContent>
-                <pre className="overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap text-muted-foreground">
+                <pre className="max-h-[min(50vh,320px)] overflow-y-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap text-muted-foreground">
                     {stack ?? getErrorMessage(error)}
                 </pre>
             </CardContent>

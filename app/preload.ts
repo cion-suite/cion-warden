@@ -13,6 +13,7 @@ const bridge: AppBridge = {
     },
     scripts: {
         list: () => ipcRenderer.invoke('scripts:list'),
+        probeExternal: () => ipcRenderer.invoke('scripts:probe-external'),
         run: (id) => ipcRenderer.invoke('scripts:run', id),
         stop: (id) => ipcRenderer.invoke('scripts:stop', id),
         stopAll: () => ipcRenderer.invoke('scripts:stop-all'),

@@ -10,6 +10,7 @@ import { ScriptRow } from './ScriptRow';
 interface ScriptListProps {
     scripts: ScriptMeta[];
     loading: boolean;
+    hasAnyRunning: boolean;
     onRun: (id: string) => Promise<void>;
     onStop: (id: string) => Promise<void>;
     onStopAll: () => Promise<void>;
@@ -19,13 +20,13 @@ interface ScriptListProps {
 export function ScriptList({
     scripts,
     loading,
+    hasAnyRunning,
     onRun,
     onStop,
     onStopAll,
     onRefresh,
 }: ScriptListProps) {
     const t = useT();
-    const hasRunning = scripts.some((s) => s.status === 'running');
 
     return (
         <div className="flex h-full min-h-0 flex-col gap-3">
@@ -33,7 +34,7 @@ export function ScriptList({
                 <Button
                     variant="outline"
                     size="sm"
-                    disabled={!hasRunning}
+                    disabled={!hasAnyRunning}
                     onClick={() => void onStopAll()}
                 >
                     {t('scripts.stopAll')}

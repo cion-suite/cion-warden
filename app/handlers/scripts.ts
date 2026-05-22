@@ -17,7 +17,9 @@ const runningProcesses = new Map<string, ChildProcess>();
 const scriptStatuses = new Map<string, { status: ScriptStatus; errorMessage?: string }>();
 const scriptPathCache = new Map<string, string>();
 
-// Spawning powershell+WMI on every list call is expensive; cache for short bursts.
+// Probing the OS for AHK processes is slow (PowerShell+WMI, ~500-800ms cold).
+// Kept off the critical path of `scripts:list`; only `scripts:probe-external`
+// pays it. Short TTL coalesces bursts (repeated Stop All probes).
 const RUNNING_PATHS_TTL_MS = 1500;
 let runningPathsCache: { paths: Set<string>; at: number } | null = null;
 
@@ -51,16 +53,25 @@ function emitStatusChange(id: string, status: ScriptStatus, errorMessage?: strin
     appEvents.emit('script:status-changed', { id, status, errorMessage });
 }
 
+// Matches both quoted ("C:\\dir with space\\foo.ahk") and unquoted (C:\\foo.ahk) forms.
+// AHK CommandLine may omit quotes when path has no spaces or is launched from cmd/drag-drop.
+const AHK_PATH_REGEX = /(?:"([^"]+\.ahk)"|(\S+\.ahk))/gi;
+
 async function fetchRunningAhkPaths(): Promise<Set<string>> {
     try {
-        const { stdout } = await execFileAsync('powershell', [
-            '-NoProfile',
-            '-Command',
-            "Get-CimInstance Win32_Process | Where-Object Name -like 'AutoHotkey*' | Select-Object -ExpandProperty CommandLine",
-        ]);
+        const { stdout } = await execFileAsync(
+            'powershell',
+            [
+                '-NoProfile',
+                '-Command',
+                "Get-CimInstance Win32_Process | Where-Object Name -like 'AutoHotkey*' | Select-Object -ExpandProperty CommandLine",
+            ],
+            { timeout: 5000 },
+        );
         const running = new Set<string>();
-        for (const match of String(stdout).matchAll(/"([^"]+\.ahk)"/gi)) {
-            if (match[1]) running.add(path.normalize(match[1]).toLowerCase());
+        for (const match of String(stdout).matchAll(AHK_PATH_REGEX)) {
+            const raw = match[1] ?? match[2];
+            if (raw) running.add(path.normalize(raw).toLowerCase());
         }
         return running;
     } catch {
@@ -82,23 +93,7 @@ function invalidateRunningPathsCache(): void {
     runningPathsCache = null;
 }
 
-function reconcileStatus(id: string, osRunning: boolean): { status: ScriptStatus; errorMessage?: string } {
-    const prev = scriptStatuses.get(id);
-    if (osRunning) {
-        const next = { status: 'running' as const, errorMessage: prev?.errorMessage };
-        if (prev?.status !== 'running') scriptStatuses.set(id, next);
-        return next;
-    }
-    if (prev?.status === 'error') return prev;
-    if (prev?.status !== 'idle') scriptStatuses.set(id, { status: 'idle' });
-    return { status: 'idle' };
-}
-
-async function readScriptMeta(
-    scriptsDir: string,
-    file: Dirent,
-    runningAhkPaths: Set<string>,
-): Promise<ScriptMeta | null> {
+async function readScriptMeta(scriptsDir: string, file: Dirent): Promise<ScriptMeta | null> {
     if (!file.isFile()) return null;
     const filePath = path.join(scriptsDir, file.name);
     try {
@@ -110,8 +105,9 @@ async function readScriptMeta(
         const id = makeScriptId(filePath);
         scriptPathCache.set(id, filePath);
 
-        const osRunning = runningAhkPaths.has(path.normalize(filePath).toLowerCase());
-        const { status, errorMessage } = reconcileStatus(id, osRunning);
+        const prev = scriptStatuses.get(id);
+        const status: ScriptStatus = prev?.status ?? 'idle';
+        const errorMessage = prev?.errorMessage;
 
         return {
             id,
@@ -129,7 +125,6 @@ async function readScriptMeta(
 }
 
 async function listScripts(globalVaultPath: string): Promise<ScriptMeta[]> {
-    const runningAhkPaths = await getRunningAhkPaths();
     let vaultEntries: Dirent[];
     try {
         vaultEntries = await fsPromises.readdir(globalVaultPath, { withFileTypes: true });
@@ -147,9 +142,7 @@ async function listScripts(globalVaultPath: string): Promise<ScriptMeta[]> {
             } catch {
                 return [];
             }
-            const metas = await Promise.all(
-                files.map((f) => readScriptMeta(scriptsDir, f, runningAhkPaths)),
-            );
+            const metas = await Promise.all(files.map((f) => readScriptMeta(scriptsDir, f)));
             return metas.filter((m): m is ScriptMeta => m !== null);
         }),
     );
@@ -157,6 +150,29 @@ async function listScripts(globalVaultPath: string): Promise<ScriptMeta[]> {
     const scripts = perVault.flat();
     pruneStaleEntries(new Set(scripts.map((s) => s.id)));
     return scripts;
+}
+
+// Reconciles OS-discovered AHK processes against our tracked scripts and
+// returns whether any AHK process is running anywhere on the system (for the
+// `Stop All` button enable state). Emits `script:status-changed` for known
+// scripts whose OS state diverges from our cached status.
+async function probeExternalAhk(): Promise<{ anyRunning: boolean }> {
+    const ahkPaths = await getRunningAhkPaths();
+
+    for (const [id, filePath] of scriptPathCache) {
+        const normalized = path.normalize(filePath).toLowerCase();
+        const osRunning = ahkPaths.has(normalized);
+        const prev = scriptStatuses.get(id);
+        const internallyRunning = runningProcesses.has(id);
+
+        if (osRunning && prev?.status !== 'running') {
+            emitStatusChange(id, 'running');
+        } else if (!osRunning && !internallyRunning && prev?.status === 'running') {
+            emitStatusChange(id, 'idle');
+        }
+    }
+
+    return { anyRunning: ahkPaths.size > 0 || runningProcesses.size > 0 };
 }
 
 function pruneStaleEntries(liveIds: Set<string>): void {
@@ -179,6 +195,8 @@ function coerceCfgValues(raw: unknown): ScriptCfgValues {
 export function registerScriptHandlers(_services: AppServices, globalVaultPath: string): void {
     registerHandlers({
         'scripts:list': () => listScripts(globalVaultPath),
+
+        'scripts:probe-external': () => probeExternalAhk(),
 
         'scripts:run': async (_event, rawId: unknown) => {
             const id = requireString(rawId, 'id');
