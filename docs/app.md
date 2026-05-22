@@ -2,7 +2,9 @@
 
 ## Overview
 
-Менеджер скриптов. Sidebar всегда присутствует (свёрнут или развёрнут). Четыре рабочие вкладки + настройки. Источники (Vault) — не отдельная вкладка, а конфигурируются через маленькую кнопку в тулбаре каждой вкладки и через Settings.
+Менеджер скриптов. Sidebar всегда присутствует (collapsible icon mode). Пять вкладок: Scripts, Get Scripts, Libraries, Binds, Settings.
+
+Источники (Vault) — не отдельная вкладка. Управляются через кнопку `[🔌 Sources]` в тулбаре вкладок Get Scripts и Libraries; открывают общий `SourcesDialog` (modal).
 
 ---
 
@@ -10,340 +12,371 @@
 
 ```
 Local
-  └─ Scripts
+  └─ Scripts          /scripts          FileCode2
 
 Sources
-  ├─ Get Scripts
-  └─ Libraries
+  ├─ Get Scripts      /get-scripts      Download
+  └─ Libraries        /libraries        Library
 
 Misc
-  └─ Binds
+  └─ Binds            /binds            Keyboard
 
-Settings
+Footer
+  └─ Settings         /settings         Settings
 ```
 
-Иконки + подписи. Активный item — accent. Группы — muted-заголовки (не кликабельны).
+Конфиг навигации — `src/shared/config/nav.ts` (`NAV_BY_SECTION`). Роуты — `src/shared/config/routes.ts` (`ROUTES`). Sidebar — `src/widgets/app-sidebar/`.
+
+Иконки + подписи. Активный item — accent. Группы — muted-заголовки, не кликабельны.
 
 ---
 
 ## Sources Management (Vault)
 
-**Не вкладка** — управляется через:
-- Кнопка `🔌` / gear-иконка в тулбаре вкладок Get Scripts, Libraries, Binds
-- Кнопка в Settings → секция "Sources"
-
-Открывает **Sheet** (side-drawer) или отдельное окно со списком источников.
+**Не вкладка** — общий `SourcesDialog` (modal), вызывается через `[🔌 Sources]` в тулбарах Get Scripts / Libraries. Источники — глобальный стейт, агрегируются обеими вкладками.
 
 ### Source Types
 
 **Git Repository:**
-- URL, branch (default: `main`)
-- Private toggle → Personal Access Token (в `createSecureStorage` по id источника)
+- `url` (e.g. `https://github.com/user/repo`)
+- `branch` (default: `main`)
+- `isPrivate` toggle → Personal Access Token хранится через `@cion-suite/core/storage` (`createSecureStorage`) по `sourceId`. Никогда не персистится в JSON.
+- `hasToken` — computed-флаг, отдаётся renderer'у при `sources:list` из secure-store, без значения токена.
 - Ожидаемая структура репо:
   ```
-  scripts/        ← скрипты
-  scripts/cfg/    ← JSON-конфиги
+  scripts/        ← .ahk / .py / etc.
+  scripts/cfg/    ← JSON-конфиги (имя совпадает со скриптом)
   lib/            ← библиотеки
-  presets/        ← JSON-пресеты (если нет — игнорируем)
   ```
 
-**External (Google Drive, etc.):**
-- Name
-- Scripts URL, Libs URL, Configs URL (3 прямых ссылки на папки/файлы)
+**External (Google Drive и т.п.):**
+- `name`
+- `scriptsUrl`, `libsUrl`, `cfgUrl` — три прямые ссылки на папки/файлы
 
-**Default source** — один гит-репозиторий задаётся при первом запуске. Остальные — опциональные дополнительные источники. Все данные (Get Scripts, Libraries) — агрегат из всех источников.
+### Dialog Layout (`SourcesDialog`)
 
-### Sources Sheet/Window Layout
+Split-panel modal (`sm:max-w-2xl`, fixed `h-[min(520px,calc(100dvh-2rem))]`):
 
 ```
-Sources                                [× Close]
-─────────────────────────────────────────────────
-  ● github.com/user/my-scripts   [Git]  [⚙] [✕]
-  ● drive.google.com/...         [Ext]  [⚙] [✕]
-
-  [+ Add Source]
+┌─────────────────────────────────────────────────────┐
+│  Sources                                            │  (sr-only title)
+├──────────────┬──────────────────────────────────────┤
+│  Sources     │  selected.name                       │
+├──────────────┼──────────────────────────────────────┤
+│  • repo-a    │  url     [_____________________]     │
+│    GIT · 🔒  │  branch  [_____________________]     │
+│  • repo-b    │  private [○————]                     │
+│    GIT       │  token   [••••••••••••][✎]           │  (если private)
+│  • drive-c   │                                      │
+│    EXTERNAL  │                                      │
+│  ┌──────────┐│                                      │
+│  │ NEW      ││                                      │
+│  └──────────┘│                                      │
+│              │                                      │
+├──────────────┼──────────────────────────────────────┤
+│  [+ Add]     │                          [Save]      │
+└──────────────┴──────────────────────────────────────┘
 ```
+
+- **Left panel:** список источников. Каждый item — название + бейдж типа (`GIT`/`EXTERNAL`) + lock-иконка для private. Hover → trash-кнопка справа.
+- **Right panel:**
+  - Существующий источник → `GitSettings` / `ExternalSettings` (форма + Save).
+  - `[+ Add]` → `NewSourcePanel` с табами `Git` / `External`, форма соответствующего типа.
+- **Token UX:** при `hasToken === true` поле `token` блокируется, показывается mask из `sources:get-token-mask`. Карандаш разлочивает поле для ввода нового значения.
+- **Empty selection:** `"Select a source"` placeholder.
 
 ---
 
 ## Page: Scripts
 
-**Суть:** реалтайм список локальных скриптов из папки.
+**Суть:** локальные скрипты из watched-папки. Run/Stop, конфиг, удаление.
 
 ### Layout
 
+Page (`src/pages/scripts/index.tsx`) монтирует `<ScriptList>`. Поисковая строка инжектится в navbar через `useSetNavbarSlot`.
+
 ```
 ┌───────────────────────────────────────────────────────┐
-│  Scripts                        [Search]    [Refresh] │
-│  Stop All                                             │
+│  [navbar: ........................ [search]    ]      │
+├───────────────────────────────────────────────────────┤
+│  [Stop All]                                  [↻]      │
 ├───────────────────────────────────────────────────────┤
 │  script-one                                           │
-│  Modified: 04.05 22:38          [...] [⚙] [▷ Run]    │
+│  Modified: 04/05 22:38     [⋯] [⚙] [▷ Run]            │
 ├───────────────────────────────────────────────────────┤
-│  script-two                                           │
-│  Modified: 04.05 22:38          [...] [⚙] [⏹ Stop]   │
-├───────────────────────────────────────────────────────┤
-│  (empty state: drop scripts here or open folder)      │
+│  script-two                            (running)      │
+│  Modified: 04/05 22:38     [⋯] [⚙] [□ Stop]           │
 └───────────────────────────────────────────────────────┘
 ```
 
-### Row
+### Toolbar (внутри page)
 
-- **Левая часть:** имя скрипта (bold) + мета (Modified: дата, или name/author/version из конфига)
-- **Правая часть:** `...` menu → [Open in Explorer / Delete (confirm)] | `⚙` (конфиг) | `▷ Run` / `⏹ Stop`
-- Run/Stop — одна кнопка, меняет label и действие
+- `[Stop All]` — `outline`, disabled если `!hasAnyRunning`. Дёргает `scripts:stop-all` + `probeExternal`.
+- `[↻]` — `ghost icon-sm`. Refresh + `probeExternal`.
 
-### Script Config Dialog
+### Row (`ScriptRow`)
 
-Открывается по `⚙`. Modal с табами:
+- **Left:** `name` (semibold truncate) + `Modified: MM/DD HH:MM` (если есть `modifiedAt`).
+- **Right (group):**
+  - `[⋯]` dropdown:
+    - `Open in Explorer` → `scripts:open-in-explorer`
+    - `Delete` (destructive) → confirmation Dialog → `scripts:delete`
+  - `[⚙]` — `ghost icon-sm`. Disabled если `!script.configPath`. Открывает `ScriptConfigDialog`.
+  - `[▷ Run] / [□ Stop]` — одна кнопка, меняется по `script.status === 'running'`. Run = `default`, Stop = `secondary`.
+- **State indicator:** `border-primary/30` при `isRunning`.
 
-**Tab: Hotkeys**
-- Строки: `label | [key chip]`
-- Клик на чип → режим записи → нажми клавишу → сохраняется
+### Script Config Dialog (`ScriptConfigDialog`)
 
-**Tab: Values**
-- Строки: `label [?tooltip] | input`
-- Типы: number input, text input, toggle
-- `[Save]` внизу
+Modal (`max-w-sm`) с двумя табами:
 
-Схема конфига — из `cfg/<scriptName>.json`. Если конфига нет — кнопка `⚙` disabled.
+- **Hotkeys** (`hk` из `ScriptCfgFile`): label + опциональный `[?]` tooltip + `<KeyBindInput>` (chip с режимом записи клавиши).
+- **Values** (`val`): label + tooltip + input по типу (`boolean` → Switch, `number` → numeric Input w24, `string` → text Input w24).
+
+Default-таб — `hotkeys` если есть `hk`-записи, иначе `values`. Disabled-таб если соответствующих записей нет.
+
+Сохранение: `scripts:config-save-values(configPath, values)`. Загрузка: `scripts:config-get-values(configPath)`, мерж с дефолтами из `script.config`.
 
 ### Directory Watching
 
-- Main: `chokidar.watch(scriptsDir)` → events `add/change/unlink`
-- `appEvents.emitTo(win, 'scripts:changed', { type, filePath })`
-- Renderer: `useAppEvent('scripts:changed', ...)` → обновляет список
-- IPC `scripts:list` → `ScriptMeta[]` при монтировании
+- Main: `chokidar.watch(scriptsDir)` → events `add` / `change` / `unlink`.
+- `appEvents.emit('scripts:changed', { type, filePath })`.
+- Renderer: `useScripts` слушает `scripts:changed` → refresh + `probeExternal`.
+- Renderer: `useAppEvent('script:status-changed', ...)` → обновляет статус строки.
+- IPC `scripts:list` при монтировании.
+
+### Slices
+
+- `entities/script/` — `useScripts()` (list + hasAnyRunning + probeExternal).
+- `features/script-runner/` — `useScriptRunner()` (run/stop/stopAll).
+- `features/script-config/` — `ScriptConfigDialog`.
+- `widgets/script-list/` — `ScriptList` + `ScriptRow`.
 
 ---
 
 ## Page: Get Scripts
 
-**Суть:** агрегат доступных скриптов из всех источников. Скачать к себе с конфигом.
+**Суть:** агрегат удалённых скриптов из всех источников. Download / Update / показ статуса.
 
 ### Layout
 
+Page (`src/pages/get-scripts/index.tsx`) монтирует `<RemoteScriptList>` + `<SourcesDialog>`. Поиск — в navbar slot.
+
 ```
 ┌───────────────────────────────────────────────────────┐
-│  Get Scripts            [Search]  [🔌 Sources] [↺]    │
-│  ⏱ Last sync: 04.05 22:18                             │
+│  [navbar: ........................ [search]    ]      │
+├───────────────────────────────────────────────────────┤
+│  [🔌 Sources]                                  [↻]    │
 ├───────────────────────────────────────────────────────┤
 │  script-one                                           │
-│  Modified: 04.05 22:13 | Author: dev   [...]  [↓ Get] │
+│  user/my-repo                            [↓ Get]      │
 ├───────────────────────────────────────────────────────┤
-│  script-two            (downloaded, update available) │
-│  Modified: 04.05 22:13 | Author: dev   [...] [⚙][↓🔴]│
+│  script-two                                           │
+│  user/my-repo            [Update available] [↓ Update]│
 ├───────────────────────────────────────────────────────┤
-│  script-three          (downloaded, up to date)       │
-│  Modified: 04.05 22:13 | Author: dev   [...]  [Manage]│
+│  script-three                                         │
+│  user/my-repo                            [Up to date] │
 └───────────────────────────────────────────────────────┘
 ```
 
-### Row states
+### Toolbar
 
-| State | Action button |
-|---|---|
-| Не скачан | `[↓ Get]` |
-| Скачан, актуален | `[Manage]` |
-| Скачан, есть обновление | `[⚙ Manage]` + иконка обновления с красной точкой |
+- `[🔌 Sources]` — `outline`. Открывает `SourcesDialog`.
+- `[↻]` — `ghost icon-sm`. Запускает `handleSync`: параллельный `get-scripts:sync-source` по всем git-источникам через `Promise.allSettled`, затем `refresh()`. Тосты успех/ошибка (известные коды — `sources.tokenInvalid`, `sources.tokenNoAccess`, `sources.repoNotFound`).
 
-### `[↓ Get]` Flow
+### Row (`RemoteScriptRow`)
 
-Скачивает скрипт + соответствующий `cfg/<name>.json` (если есть) → кладёт в `scriptsDir` / `scriptsDir/cfg/`.
+- **Left:** `name` (semibold) + `sourceName` (muted).
+- **Right (group):**
+  - Бейдж `Update available` (`destructive` variant) если `hasUpdate`.
+  - Action button:
+    - `!isDownloaded` → `[↓ Get]` (`default`).
+    - `isDownloaded && hasUpdate` → `[↓ Update]` (`outline`).
+    - `isDownloaded && !hasUpdate` → `[Up to date]` (`ghost`, disabled).
 
-### `[🔌 Sources]` Button
+### Download Flow
 
-Открывает Sources Sheet (см. Sources Management).
+`window.app.getScripts.download(sourceId, fileName)` качает скрипт + соответствующий `cfg/<name>.json` (если присутствует в источнике) в локальные `scriptsDir` / `scriptsDir/cfg/`. Renderer оптимистично патчит строку: `{ isDownloaded: true, hasUpdate: false, localSha: sha }`. Тост успеха.
+
+### Sync Semantics
+
+- `sources:list` — текущие источники.
+- `get-scripts:list` — последний агрегат всех источников из persisted cache.
+- `get-scripts:list-source(sourceId)` — кэш одного источника.
+- `get-scripts:sync-source(sourceId)` — pull свежего листинга (GitHub API для git, fetch URL для external) + сравнение `sha` ↔ `localSha`.
+
+### Slices
+
+- `entities/remote-script/` — `useRemoteScripts()`.
+- `entities/vault-source/` — `useVaultSources()`.
+- `features/sources-manage/` — `SourcesDialog`.
+- `widgets/remote-list/` — `RemoteScriptList` + `RemoteScriptRow`.
 
 ---
 
 ## Page: Libraries
 
-**Суть:** агрегат библиотек из всех источников. Скачать / обновить / удалить локально.
+**Суть:** агрегат библиотек из всех источников. Download / Update / Delete локальных копий. Зеркалит паттерн Get Scripts с дополнениями: bulk-download и `[⋯]` row-menu.
+
+> **Status:** spec, не реализовано. Текущая страница — empty skeleton (`src/pages/libraries/index.tsx`).
 
 ### Layout
 
 ```
 ┌───────────────────────────────────────────────────────┐
-│  Libraries          [🔌 Sources]  [↓ Download All] [↺]│
-│  ⏱ Last sync: 04.05 22:23                             │
+│  [navbar: ........................ [search]    ]      │
+├───────────────────────────────────────────────────────┤
+│  [🔌 Sources]            [↓ Download All]      [↻]    │
 ├───────────────────────────────────────────────────────┤
 │  FindText                                             │
-│  Modified: 04.05 | Author: dev      [...]  [↓ Download│
+│  user/my-repo                            [↓ Download] │
 ├───────────────────────────────────────────────────────┤
 │  headers                                              │
-│  Modified: 04.05 | Author: dev      [...]  [↓ Update] │
+│  user/my-repo            [Update available] [↓ Update]│
 ├───────────────────────────────────────────────────────┤
 │  json                                                 │
-│  Modified: 25.03 | Author: dev      [...]  [↓ Update] │
+│  user/my-repo                       [⋯] [↓ Update]    │
 ├───────────────────────────────────────────────────────┤
-│  key_decode        (downloaded, up to date)           │
-│  Modified: 04.05 | Author: dev      [...]  [✓ Latest] │
+│  key_decode                                           │
+│  user/my-repo                       [⋯] [✓ Latest]    │
 └───────────────────────────────────────────────────────┘
 ```
 
-### Row actions
+### Toolbar
 
-- `[↓ Download]` — скачать в `libsDir`
-- `[↓ Update]` — перезаписать локальный файл
-- `[✓ Latest]` — disabled (актуально)
-- `...` menu → [Open local folder] [Open in browser] [Delete local]
+- `[🔌 Sources]` — общий `SourcesDialog` (reuse из get-scripts).
+- `[↓ Download All]` — `outline`. Качает все ещё-не-скачанные библиотеки последовательно. Прогресс через тост + `libs:bulk-progress` event (опционально).
+- `[↻]` — sync source listing (как get-scripts).
+
+### Row (`RemoteLibraryRow`)
+
+- **Left:** `name` (semibold) + `sourceName` (muted).
+- **Right (group):**
+  - `Update available` бейдж (если `hasUpdate`).
+  - `[⋯]` dropdown (только если `isDownloaded`):
+    - `Open local folder` → `libs:open-local`
+    - `Open in browser` → `libs:open-web` (если `webUrl`)
+    - `Delete local` (destructive, confirmation) → `libs:delete`
+  - Action button:
+    - `!isDownloaded` → `[↓ Download]` (`default`)
+    - `isDownloaded && hasUpdate` → `[↓ Update]` (`outline`)
+    - `isDownloaded && !hasUpdate` → `[✓ Latest]` (`ghost`, disabled)
+
+### Slices (планируемые)
+
+- `entities/remote-library/` — `useRemoteLibraries()`.
+- `features/lib-manage/` — download/update/delete actions.
+- `widgets/remote-list/` — добавить `RemoteLibraryList` / `RemoteLibraryRow` либо параметризовать существующий remote-list (общий `RemoteItemRow`).
 
 ---
 
 ## Page: Binds
 
-**Суть:** глобальные пресеты с биндами и значениями для скриптов. Хранятся в `presetsDir`.
+> **Status:** skeleton (`src/pages/binds/index.tsx`). Спецификация — TBD после реализации Libraries.
 
-### Два режима в зависимости от количества пресетов
-
-#### Режим A: 1 пресет (или пресетов нет)
-
-Сразу показывает форму пресета. Если пресетов нет — empty state с `[+ Create Preset]`.
-
-```
-┌───────────────────────────────────────────────────────┐
-│  Binds                              [🔌 Sources] [↺]  │
-├───────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────┐  │
-│  │  Базовые бинды                                  │  │
-│  │  ─────────────────────────────────────────────  │  │
-│  │  Прыжок-уклон          [  Space  ]              │  │
-│  │  Подбор предметов       [  X  ]                 │  │
-│  │  Активация ульты        [  4  ]                 │  │
-│  │  Парейровать атаку      [  E  ]                 │  │
-│  │                                  [↺ Сбросить]  │  │
-│  └─────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────┘
-```
-
-#### Режим B: 2+ пресетов
-
-Сначала сетка карточек:
-
-```
-┌───────────────────────────────────────────────────────┐
-│  Binds                             [🔌 Sources]        │
-├───────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐                   │
-│  │  keybinds    │  │  hotkeys     │                   │
-│  │  6 entries   │  │  4 entries   │                   │
-│  └──────────────┘  └──────────────┘                   │
-└───────────────────────────────────────────────────────┘
-```
-
-Клик по карточке → навигация на страницу пресета:
-
-```
-┌───────────────────────────────────────────────────────┐
-│  ← Binds / keybinds                                   │
-├───────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────┐  │
-│  │  keybinds                                       │  │
-│  │  ─────────────────────────────────────────────  │  │
-│  │  Attack         [  F1  ]                        │  │
-│  │  Defend         [  F2  ]                        │  │
-│  │                                  [↺ Сбросить]  │  │
-│  └─────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────┘
-```
-
-Назад — через breadcrumb `← Binds / name` или стрелку.
-
-### Key Chip Interaction
-
-Клик на `[Space]` → chip переходит в режим `[press key...]` → пользователь нажимает клавишу → chip обновляется → автосохранение.
-
-### Preset Schema
-
-Пресет — JSON с секциями:
-
-```json
-{
-  "title": "Базовые бинды",
-  "fields": [
-    { "key": "jump", "label": "Прыжок-уклон", "type": "hotkey", "default": "Space" },
-    { "key": "pickup", "label": "Подбор предметов", "type": "hotkey", "default": "X" },
-    { "key": "delay", "label": "Pre-cast delay (ms)", "type": "number", "default": 1000 }
-  ]
-}
-```
-
-Значения хранятся отдельно (user values) рядом со схемой или в отдельном файле.
+Краткая идея: глобальные пресеты хоткеев и значений, переиспользуемые скриптами. Хранятся в `presetsDir`. UI — карточки пресетов + sub-page с формой (key-chip + inputs).
 
 ---
 
 ## Data Model
 
-```typescript
+Все интерфейсы — в `shared/types/` (видны и main, и renderer через alias `@shared/types`).
+
+```ts
 // shared/types/scripts.ts
-interface ScriptMeta {
-  id: string;           // hash от filePath
-  name: string;
-  filePath: string;
-  configPath?: string;
-  config?: ScriptConfig;
-  status: 'idle' | 'running' | 'error';
-  errorMessage?: string;
+export interface HkEntry {
+    key: string;
+    description: string;
+    tooltip?: string;
 }
 
-interface ScriptConfig {
-  name?: string;
-  author?: string;
-  version?: string;
-  fields?: ConfigField[];
+export interface ValEntry {
+    val: string | number | boolean;
+    description: string;
+    tooltip?: string;
 }
 
-interface ConfigField {
-  key: string;
-  label: string;
-  type: 'hotkey' | 'number' | 'text' | 'toggle';
-  default?: unknown;
-  description?: string;
+export interface ScriptCfgFile {
+    $version?: number;
+    hk?: Record<string, HkEntry>;
+    val?: Record<string, ValEntry>;
 }
 
+export type ScriptStatus = 'idle' | 'running' | 'error';
+
+export interface ScriptCfgValues {
+    hk: Record<string, string>;
+    val: Record<string, string | number | boolean>;
+}
+
+export interface ScriptMeta {
+    id: string;
+    name: string;
+    filePath: string;
+    configPath?: string;
+    config?: ScriptCfgFile;
+    status: ScriptStatus;
+    errorMessage?: string;
+    modifiedAt?: number;
+}
+```
+
+```ts
+// shared/types/get-scripts.ts
+export interface RemoteScriptMeta {
+    id: string;
+    name: string;
+    fileName: string;
+    sourceId: string;
+    sourceName: string;
+    sha?: string;
+    localSha?: string;
+    isDownloaded: boolean;
+    hasUpdate: boolean;
+    downloadUrl?: string;
+}
+```
+
+```ts
 // shared/types/vault.ts
-type VaultSourceType = 'git' | 'external';
+export type VaultSourceType = 'git' | 'external';
 
-interface GitVaultSource {
-  id: string;
-  type: 'git';
-  name: string;
-  url: string;
-  branch: string;
-  isPrivate: boolean;
+export interface GitVaultSource {
+    id: string;
+    type: 'git';
+    name: string;
+    url: string;
+    branch: string;
+    isPrivate: boolean;
+    hasToken?: boolean; // computed at listSources, never persisted
 }
 
-interface ExternalVaultSource {
-  id: string;
-  type: 'external';
-  name: string;
-  scriptsUrl: string;
-  libsUrl: string;
-  cfgUrl: string;
+export interface ExternalVaultSource {
+    id: string;
+    type: 'external';
+    name: string;
+    scriptsUrl: string;
+    libsUrl: string;
+    cfgUrl: string;
 }
 
-// shared/types/libs.ts
-interface LibraryMeta {
-  id: string;
-  name: string;
-  sourceId: string;
-  modifiedAt?: string;
-  author?: string;
-  webUrl?: string;
-  localPath?: string;
-  isDownloaded: boolean;
-  hasUpdate: boolean;
-}
+export type VaultSource = GitVaultSource | ExternalVaultSource;
+```
 
-// shared/types/presets.ts
-interface PresetSchema {
-  title: string;
-  fields: ConfigField[];
-}
-
-interface PresetValues {
-  [key: string]: unknown;
+```ts
+// shared/types/libs.ts  (планируется)
+export interface RemoteLibraryMeta {
+    id: string;
+    name: string;
+    fileName: string;
+    sourceId: string;
+    sourceName: string;
+    sha?: string;
+    localSha?: string;
+    isDownloaded: boolean;
+    hasUpdate: boolean;
+    downloadUrl?: string;
+    webUrl?: string;
+    localPath?: string;
 }
 ```
 
@@ -351,48 +384,81 @@ interface PresetValues {
 
 ## IPC Contracts
 
+Бридж — `AppBridge` в `shared/types/ipc.ts`, экспонируется через `contextBridge` в `app/preload.ts`. Регистрация хендлеров — `registerHandlers(map)` из `@cion-suite/core/ipc`.
+
+### Текущие каналы
+
 ```
-scripts:list          → ScriptMeta[]
-scripts:delete        (filePath) → void
-scripts:run           (id) → void
-scripts:stop          (id) → void
-scripts:open-folder   → void
+// scripts
+scripts:list                () → ScriptMeta[]
+scripts:probe-external      () → { anyRunning: boolean }
+scripts:run                 (id) → void
+scripts:stop                (id) → void
+scripts:stop-all            () → void
+scripts:delete              (filePath) → void
+scripts:open-in-explorer    (filePath) → void
+scripts:config-get-values   (configPath) → Partial<ScriptCfgValues>
+scripts:config-save-values  (configPath, values) → void
 
-sources:list          → VaultSource[]
-sources:add           (source) → VaultSource
-sources:remove        (id) → void
-sources:update        (id, patch) → VaultSource
+// sources (vault)
+sources:list                () → VaultSource[]            // git items имеют hasToken
+sources:add                 (Omit<VaultSource,'id'>) → VaultSource
+sources:remove              (id) → void
+sources:update              (id, patch) → VaultSource
+sources:set-token           (id, token) → void
+sources:remove-token        (id) → void
+sources:test-token          (id) → { ok:true } | { ok:false; status; message }
+sources:get-token-mask      (id) → string | null
 
-get-scripts:list      → RemoteScriptMeta[]   // агрегат всех источников
-get-scripts:download  (sourceId, name) → void
-get-scripts:sync      → void
+// get-scripts
+get-scripts:list            () → RemoteScriptMeta[]
+get-scripts:list-source     (sourceId) → { scripts; lastSyncedAt? }
+get-scripts:sync-source     (sourceId) → { scripts; lastSyncedAt }
+get-scripts:download        (sourceId, fileName) → void
 
-libs:list             → LibraryMeta[]
-libs:download         (id) → void
-libs:update           (id) → void
-libs:delete           (id) → void
-libs:open-local       (id) → void
-libs:open-web         (id) → void
+// system + updater (для контекста)
+system:renderer-ready       () → void
+errors:report               (ErrorReport) → void
+updater:check-for-updates   () → UpdaterIpcResult
+updater:quit-and-install    () → void
+```
 
-presets:list          → PresetInfo[]          // { name, fieldCount }
-presets:get-schema    (name) → PresetSchema
-presets:get-values    (name) → PresetValues
-presets:set-value     (name, key, value) → void
-presets:reset         (name) → void
-presets:create        (name) → void
-presets:delete        (name) → void
+### Планируемые (Libraries)
+
+```
+libs:list                   () → RemoteLibraryMeta[]
+libs:list-source            (sourceId) → { libs; lastSyncedAt? }
+libs:sync-source            (sourceId) → { libs; lastSyncedAt }
+libs:download               (sourceId, fileName) → void
+libs:download-all           () → void                     // или возвращать summary
+libs:delete                 (id) → void
+libs:open-local             (id) → void
+libs:open-web               (id) → void
 ```
 
 ---
 
 ## App Events
 
-```typescript
-// shared/types/app-events.ts — augmentation BaseAppEventMap
-interface BaseAppEventMap {
-  'scripts:changed': { type: 'add' | 'change' | 'unlink'; filePath: string };
-  'script:status-changed': { id: string; status: 'idle' | 'running' | 'error'; errorMessage?: string };
-  'sources:sync-progress': { sourceId: string; done: number; total: number };
+Единый канал `app:event`. Augmentation `BaseAppEventMap` — `shared/types/app-events.ts`. Main: `appEvents.emit(name, payload)` / `emitTo(win, ...)`. Renderer: `useAppEvent(name, handler)`. **Никогда** `win.webContents.send()`.
+
+```ts
+declare module '@cion-suite/core/ipc' {
+    interface BaseAppEventMap {
+        // updater
+        'updater:available': UpdaterInfo;
+        'updater:not-available': void;
+        'updater:downloaded': UpdaterInfo;
+        'updater:error': { message: string };
+        'updater:progress': UpdaterProgress;
+        'app:channel:changed': { isBeta: boolean };
+
+        // scripts
+        'scripts:changed': { type: 'add' | 'change' | 'unlink'; filePath: string };
+        'script:status-changed': { id: string; status: ScriptStatus; errorMessage?: string };
+
+        // планируется: 'libs:changed', 'libs:bulk-progress'
+    }
 }
 ```
 
@@ -400,114 +466,76 @@ interface BaseAppEventMap {
 
 ## FSD Placement
 
+### Текущая структура
+
 ```
 src/
 ├── pages/
-│   ├── scripts/         ← ScriptsPage
-│   ├── get-scripts/     ← GetScriptsPage
-│   ├── libraries/       ← LibrariesPage
-│   ├── binds/           ← BindsPage (cards или форма)
-│   ├── preset-detail/   ← PresetDetailPage (sub-page от binds)
-│   └── settings/        ← extend existing
+│   ├── scripts/          ← ScriptsPage (реализовано)
+│   ├── get-scripts/      ← GetScriptsPage (реализовано)
+│   ├── libraries/        ← skeleton
+│   ├── binds/            ← skeleton
+│   └── settings/         ← appearance + updater
 │
 ├── widgets/
-│   ├── app-sidebar/     ← extend: Local/Sources/Misc groups
-│   ├── script-list/     ← список строк скриптов
-│   ├── remote-list/     ← общий виджет строк для Get Scripts + Libraries
-│   ├── preset-cards/    ← сетка карточек пресетов
-│   ├── preset-form/     ← форма пресета (key chips + inputs)
-│   └── sources-sheet/   ← Sheet управления источниками
+│   ├── app-layout/
+│   ├── app-navbar/
+│   ├── app-sidebar/      ← Local / Sources / Misc + footer
+│   ├── script-list/      ← ScriptList + ScriptRow
+│   └── remote-list/      ← RemoteScriptList + RemoteScriptRow
 │
 ├── features/
-│   ├── script-runner/   ← run/stop + status events
-│   ├── script-config/   ← диалог с табами Hotkeys/Values
-│   ├── sources-manage/  ← add/edit/delete источников
-│   ├── get-scripts-sync/ ← fetch + download remote scripts
-│   ├── lib-manage/      ← download/update/delete libs
-│   └── preset-edit/     ← set-value, reset, create, delete
+│   ├── script-runner/    ← useScriptRunner (run/stop/stopAll)
+│   ├── script-config/    ← ScriptConfigDialog
+│   └── sources-manage/   ← SourcesDialog (git+external, token UX)
 │
 ├── entities/
-│   ├── script/          ← ScriptMeta + useScripts()
-│   ├── vault-source/    ← VaultSource + useSources()
-│   ├── library/         ← LibraryMeta + useLibraries()
-│   └── preset/          ← PresetInfo/Schema/Values + usePresets()
+│   ├── script/           ← useScripts
+│   ├── remote-script/    ← useRemoteScripts
+│   └── vault-source/     ← useVaultSources
 │
 └── shared/
-    └── types/
-        ├── scripts.ts
-        ├── vault.ts
-        ├── libs.ts
-        ├── presets.ts
-        └── app-events.ts
+    ├── config/           ← nav.ts, routes.ts
+    ├── i18n/             ← useT, locales
+    ├── lib/              ← navbar-slot, toast, hooks, utils, local-storage, updater
+    └── ui/               ← shadcn primitives + key-bind-input
 ```
+
+### Планируемые добавления для Libraries
+
+```
+src/
+├── pages/libraries/      ← реализовать LibrariesPage
+├── widgets/remote-list/  ← добавить RemoteLibraryList + RemoteLibraryRow
+│                          (либо обобщить в RemoteItemList/Row)
+├── features/lib-manage/  ← download/update/delete/openLocal/openWeb
+└── entities/remote-library/ ← useRemoteLibraries
+```
+
+`shared/types/libs.ts` — новый файл.
 
 ---
 
-## Settings — дополнения
+## Settings — план
 
-Новая секция "Paths":
-- Scripts folder (browse-кнопка)
-- Libraries folder (browse-кнопка)
-- Presets folder (browse-кнопка)
+Сейчас Settings содержит только Appearance (theme/locale) + Updates. Планируется добавить:
 
-Новая секция "Sources": кнопка "Manage Sources" → открывает Sources Sheet.
+- **Paths** — Scripts folder / Libraries folder (browse-кнопки, persist через `@cion-suite/core/settings`).
+- **Sources** — кнопка `Manage Sources` (дублирует вход из тулбаров вкладок).
 
 Defaults через `app.getPath('userData')`:
 - `<userData>/scripts/`
 - `<userData>/lib/`
-- `<userData>/presets/`
-
----
-
-## Implementation Phases
-
-### Phase 1 — Routing & Navigation
-1. Роуты `/scripts`, `/get-scripts`, `/libraries`, `/binds`, `/binds/:presetName`
-2. `app-sidebar`: группы Local / Sources / Misc + nav-items
-3. Skeleton-страницы
-
-### Phase 2 — Scripts Page
-1. Main: chokidar watcher + IPC handlers
-2. Entity `script/` + `useScripts()`
-3. Widget `script-list/`
-4. Feature `script-runner/`
-5. Feature `script-config/` — диалог Hotkeys + Values
-
-### Phase 3 — Sources Management
-1. Entity `vault-source/` + settings store
-2. Feature `sources-manage/` — add/edit/delete
-3. Widget `sources-sheet/`
-
-### Phase 4 — Get Scripts Page
-1. IPC: fetch remote scripts list (aggregate)
-2. Feature `get-scripts-sync/`
-3. Widget `remote-list/` (shared с Libraries)
-
-### Phase 5 — Libraries Page
-1. IPC: fetch libs list + download/update/delete
-2. Feature `lib-manage/`
-3. Reuse `remote-list/` widget
-
-### Phase 6 — Binds Page
-1. IPC: presets CRUD
-2. Entity `preset/`
-3. Widget `preset-cards/` + `preset-form/`
-4. Feature `preset-edit/`
-5. Sub-route `/binds/:presetName`
-
-### Phase 7 — Settings Paths + Sources button
 
 ---
 
 ## Verification
 
-- `pnpm dev` → все 5 вкладок открываются без ошибок
-- Scripts: добавить файл в папку → строка появляется без refresh; удалить → исчезает
-- Run/Stop: кнопка меняется на Stop, при повторном нажатии — обратно Run
-- Config dialog: открывается, hotkey chip перехватывает нажатие, Save сохраняет
-- Sources Sheet: добавить Git-источник → закрыть → открыть Get Scripts → скрипты из репо видны
-- Get Scripts: Download → файл появляется в scriptsDir → на Scripts-вкладке видна строка
-- Libraries: Download → Update (при изменении) → Open local folder открывает проводник
-- Binds: 1 пресет → сразу форма; 2+ → карточки → клик → форма → breadcrumb назад
-- Key chip: клик → ввод клавиши → значение обновляется
-- `pnpm typecheck` → 0 ошибок; `pnpm lint` → 0 FSD violations
+- `pnpm dev` → 5 вкладок открываются без ошибок.
+- Scripts: добавление файла в watched-папку → строка появляется без refresh; удаление → исчезает.
+- Run/Stop: кнопка переключается, при ошибке скрипт получает `status: 'error'` + `errorMessage`.
+- `StopAll` disabled до `hasAnyRunning`.
+- Config dialog: открывается только при наличии `configPath`; hk-chip перехватывает нажатие; Save вызывает `scripts:config-save-values`.
+- SourcesDialog: add git (private + token) → `sources:add` + `sources:set-token`; mask виден после reopen; Edit unlock → новый токен сохраняется.
+- Get Scripts: refresh → `sync-source` по всем git-источникам; ошибки токена/доступа дают правильный i18n-ключ; Download → строка переходит в `up-to-date`.
+- `pnpm typecheck` → 0 ошибок; `pnpm lint` → 0 FSD violations.

@@ -1,6 +1,8 @@
 import type { ScriptMeta, ScriptCfgValues } from './scripts.js';
 import type { VaultSource } from './vault.js';
 import type { RemoteScriptMeta } from './get-scripts.js';
+import type { RemoteLibraryMeta } from './libs.js';
+import type { VaultSyncResult, VaultSourceListResult } from './vault-sync.js';
 
 export type UpdaterIpcResult =
     | { ok: true }
@@ -50,5 +52,19 @@ export interface AppBridge {
         listSource: (sourceId: string) => Promise<{ scripts: RemoteScriptMeta[]; lastSyncedAt?: number }>;
         syncSource: (sourceId: string) => Promise<{ scripts: RemoteScriptMeta[]; lastSyncedAt: number }>;
         download: (sourceId: string, fileName: string) => Promise<void>;
+    };
+    libs: {
+        list: () => Promise<RemoteLibraryMeta[]>;
+        listSource: (sourceId: string) => Promise<{ libs: RemoteLibraryMeta[]; lastSyncedAt?: number }>;
+        download: (sourceId: string, libId: string) => Promise<void>;
+        downloadAll: (sourceId?: string) => Promise<{ ok: number; failed: number }>;
+        delete: (sourceId: string, libId: string) => Promise<void>;
+        openLocal: (sourceId: string, libId: string) => Promise<void>;
+        openWeb: (sourceId: string, libId: string) => Promise<void>;
+    };
+    vault: {
+        syncSource: (sourceId: string) => Promise<VaultSyncResult>;
+        syncAll: () => Promise<Array<{ sourceId: string; ok: boolean; error?: string }>>;
+        listSource: (sourceId: string) => Promise<VaultSourceListResult>;
     };
 }

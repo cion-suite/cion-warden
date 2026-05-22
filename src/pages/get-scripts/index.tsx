@@ -2,27 +2,15 @@ import { useState } from 'react';
 
 import { useT } from '@/shared/i18n';
 import { useSetNavbarSlot } from '@/shared/lib/navbar-slot';
+import { toErrorKey } from '@/shared/lib/source-errors';
+import { toast } from '@/shared/lib/toast';
 import { Input } from '@/shared/ui/shadcn/input';
 import { useRemoteScripts } from '@/entities/remote-script';
 import { useVaultSources } from '@/entities/vault-source';
 import { SourcesDialog } from '@/features/sources-manage';
 import { RemoteScriptList } from '@/widgets/remote-list';
 import type { RemoteScriptMeta } from '@shared/types/get-scripts';
-import { toast } from '@/shared/lib/toast';
 
-const KNOWN_ERROR_KEYS = new Set([
-    'sources.tokenInvalid',
-    'sources.tokenNoAccess',
-    'sources.repoNotFound',
-]);
-
-function toErrorKey(err: unknown): string {
-    const msg = err instanceof Error ? err.message : '';
-    for (const key of KNOWN_ERROR_KEYS) {
-        if (msg.includes(key)) return key;
-    }
-    return 'error';
-}
 
 export function GetScriptsPage() {
     const t = useT();
@@ -53,13 +41,11 @@ export function GetScriptsPage() {
         }
         setSyncing(true);
         try {
-            const results = await Promise.allSettled(
-                gitSources.map((s) => window.app!.getScripts.syncSource(s.id)),
-            );
-            const firstFailed = results.find((r) => r.status === 'rejected');
+            const results = (await window.app?.vault.syncAll()) ?? [];
+            const firstFailed = results.find((r) => !r.ok);
             if (firstFailed) {
-                toast.error(t(toErrorKey(firstFailed.reason)));
-            } else {
+                toast.error(t(toErrorKey(new Error(firstFailed.error ?? ''))));
+            } else if (results.length > 0) {
                 toast.success(t('sources.syncDone'));
             }
             await refresh();

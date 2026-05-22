@@ -39,6 +39,20 @@ const bridge: AppBridge = {
         syncSource: (sourceId) => ipcRenderer.invoke('get-scripts:sync-source', sourceId),
         download: (sourceId, fileName) => ipcRenderer.invoke('get-scripts:download', sourceId, fileName),
     },
+    libs: {
+        list: () => ipcRenderer.invoke('libs:list'),
+        listSource: (sourceId) => ipcRenderer.invoke('libs:list-source', sourceId),
+        download: (sourceId, libId) => ipcRenderer.invoke('libs:download', sourceId, libId),
+        downloadAll: (sourceId) => ipcRenderer.invoke('libs:download-all', sourceId),
+        delete: (sourceId, libId) => ipcRenderer.invoke('libs:delete', sourceId, libId),
+        openLocal: (sourceId, libId) => ipcRenderer.invoke('libs:open-local', sourceId, libId),
+        openWeb: (sourceId, libId) => ipcRenderer.invoke('libs:open-web', sourceId, libId),
+    },
+    vault: {
+        syncSource: (sourceId) => ipcRenderer.invoke('vault:sync-source', sourceId),
+        syncAll: () => ipcRenderer.invoke('vault:sync-all'),
+        listSource: (sourceId) => ipcRenderer.invoke('vault:list-source', sourceId),
+    },
 };
 
 contextBridge.exposeInMainWorld('app', bridge);

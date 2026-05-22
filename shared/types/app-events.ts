@@ -11,6 +11,13 @@ declare module '@cion-suite/core/ipc' {
         'app:channel:changed': { isBeta: boolean };
         'scripts:changed': { type: 'add' | 'change' | 'unlink'; filePath: string };
         'script:status-changed': { id: string; status: ScriptStatus; errorMessage?: string };
+        'vault:source-synced': {
+            sourceId: string;
+            lastSyncedAt: number;
+            fromCache: boolean;
+        };
+        'vault:rate-limit': { remaining: number; reset: number };
+        'libs:changed': { sourceId: string; libId: string };
     }
 }
 
