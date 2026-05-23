@@ -60,9 +60,11 @@ async function doSync(
     const token = source.isPrivate ? await tokens.getToken(source.id) : null;
     // Bumping MANIFEST_VERSION must force a re-derive: never reuse the cached
     // etag from a stale-shape manifest, otherwise 304 keeps the old (incomplete)
-    // entries forever.
-    const versionMatch = existing?.version === MANIFEST_VERSION;
-    const etag = versionMatch ? (existing?.etag ?? null) : null;
+    // entries forever. Same logic for branch — the cached etag belongs to the
+    // previous branch's tree URL; sending it to a new branch can serve stale
+    // content if GitHub happens to 304.
+    const reusable = existing?.version === MANIFEST_VERSION && existing.branch === branch;
+    const etag = reusable ? (existing?.etag ?? null) : null;
 
     const result = await fetchTree({
         owner: parsed.owner,
@@ -143,9 +145,11 @@ async function runSync(sourceId: string, deps: SyncDeps): Promise<VaultSyncResul
     if (source.type !== 'git') throw new Error('Only git sources support sync');
 
     const existing = await readManifest(deps.vaultBase, sourceId);
+    const branch = source.branch || 'main';
     const ttlFresh =
         existing &&
         existing.version === MANIFEST_VERSION &&
+        existing.branch === branch &&
         Date.now() - existing.lastCheckedAt < SLIDING_TTL_MS;
     if (ttlFresh) {
         const built = await buildCachedResult(source, existing, deps.vaultBase, true);
@@ -156,13 +160,24 @@ async function runSync(sourceId: string, deps: SyncDeps): Promise<VaultSyncResul
     return doSync(source, deps.vaultBase, deps.tokens, deps.logger);
 }
 
-export function syncSource(sourceId: string, deps: SyncDeps): Promise<VaultSyncResult> {
-    const inflight = inFlight.get(sourceId);
-    if (inflight) return inflight;
+// Dedup is intentional within a single sync; if the source's branch flips
+// mid-flight, the second caller must NOT share the now-stale promise — so the
+// key includes branch. (Token rotation is rare enough to not warrant a key.)
+async function inflightKey(sourceId: string, deps: SyncDeps): Promise<string> {
+    const sources = await listSources(deps.logger);
+    const source = sources.find((s) => s.id === sourceId);
+    const branch = source?.type === 'git' ? source.branch || 'main' : '';
+    return `${sourceId}@${branch}`;
+}
+
+export async function syncSource(sourceId: string, deps: SyncDeps): Promise<VaultSyncResult> {
+    const key = await inflightKey(sourceId, deps);
+    const existing = inFlight.get(key);
+    if (existing) return existing;
     const promise = runSync(sourceId, deps).finally(() => {
-        inFlight.delete(sourceId);
+        inFlight.delete(key);
     });
-    inFlight.set(sourceId, promise);
+    inFlight.set(key, promise);
     return promise;
 }
 

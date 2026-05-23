@@ -7,6 +7,7 @@ import {
     GITHUB_USER_AGENT,
     encodeBranchRef,
     encodeRepoPath,
+    fetchWithTimeout,
     mapGithubError,
     probeRepo,
     readRateLimit,
@@ -58,14 +59,14 @@ async function fetchFileContent(
             Accept: 'application/vnd.github.raw',
         };
         if (token) headers.Authorization = `Bearer ${token}`;
-        const res = await fetch(url, { headers });
+        const res = await fetchWithTimeout(url, { headers });
         const rateLimit = readRateLimit(res);
         if (res.status === 404) return null;
         if (!res.ok) throw mapGithubError(res.status, true, rateLimit);
         return Buffer.from(await res.arrayBuffer());
     }
     const url = `https://raw.githubusercontent.com/${owner}/${repo}/${encodeBranchRef(branch)}/${encodeRepoPath(repoPath)}`;
-    const res = await fetch(url, { headers: { 'User-Agent': GITHUB_USER_AGENT } });
+    const res = await fetchWithTimeout(url, { headers: { 'User-Agent': GITHUB_USER_AGENT } });
     if (res.status === 404) return null;
     if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
     return Buffer.from(await res.arrayBuffer());
@@ -109,6 +110,9 @@ export async function downloadScript(
     await fs.writeFile(dest, content);
 
     const baseName = stripExt(fileName);
+    // fetchFileContent already returns null on real 404; a thrown error here
+    // is auth/network/rate-limit — log it instead of silently producing
+    // a cfg-less script that hides the underlying failure.
     const cfgContent = await fetchFileContent(
         source,
         owner,
@@ -116,7 +120,10 @@ export async function downloadScript(
         branch,
         `${SCRIPTS_DIR}/${SCRIPTS_CFG_DIR}/${baseName}.json`,
         deps.tokens,
-    ).catch(() => null);
+    ).catch((err: unknown) => {
+        deps.logger.warn('downloadScript: cfg fetch failed', { fileName: baseName, error: err });
+        return null;
+    });
     if (cfgContent) {
         const cfgDir = path.join(scriptsDir, SCRIPTS_CFG_DIR);
         const cfgDest = path.join(cfgDir, `${baseName}.json`);

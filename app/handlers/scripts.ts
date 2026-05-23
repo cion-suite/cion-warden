@@ -10,6 +10,7 @@ import type { ScriptCfgFile, ScriptCfgValues, ScriptMeta, ScriptStatus } from '@
 import type { AppServices } from '../types/services.js';
 import { readJsonFile, writeJsonFile } from '../utils/json-file.js';
 import { requireString } from '../utils/ipc-args.js';
+import { isSafeForShell } from '../utils/shell-safety.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -35,8 +36,15 @@ function killProcess(child: ChildProcess): void {
     }
 }
 
+// PowerShell -like treats *, ?, [ as wildcards — unescaped, the filter would
+// widen and Stop-Process could hit unrelated AutoHotkey processes on machines
+// whose install path contains `[`.
+function escapePsLike(s: string): string {
+    return s.replace(/'/g, "''").replace(/[[\]*?]/g, (c) => `\`${c}`);
+}
+
 function killAhkByPath(filePath: string): void {
-    const escaped = filePath.replace(/'/g, "''");
+    const escaped = escapePsLike(filePath);
     spawnSync('powershell', [
         '-NoProfile',
         '-Command',
@@ -203,6 +211,10 @@ export function registerScriptHandlers(_services: AppServices, globalVaultPath: 
             if (runningProcesses.has(id)) return;
             const filePath = scriptPathCache.get(id);
             if (!filePath) return;
+            if (!isSafeForShell(filePath)) {
+                emitStatusChange(id, 'error', 'Script path contains unsafe characters');
+                return;
+            }
             emitStatusChange(id, 'running');
             invalidateRunningPathsCache();
             const child = spawn(filePath, [], { shell: true, windowsHide: false });

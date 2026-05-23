@@ -6,6 +6,9 @@ import type { LibKind, RemoteLibFileEntry, RemoteLibraryMeta } from '@shared/typ
 import type { RemotePresetMeta } from '@shared/types/binds.js';
 import type { VaultSource } from '@shared/types/vault.js';
 import { encodeBranchRef, encodeRepoPath } from '../utils/github-api.js';
+import { parseGithubUrl } from '../utils/github-url.js';
+import { atomicWriteFile } from '../utils/json-file.js';
+import { isSafeManifestFileName } from '../utils/shell-safety.js';
 
 export const SCRIPTS_DIR = 'scripts';
 export const SCRIPTS_CFG_DIR = 'cfg';
@@ -98,9 +101,18 @@ export async function writeManifest(
     sourceId: string,
     manifest: ManifestFile,
 ): Promise<void> {
-    const p = manifestPath(vaultBase, sourceId);
-    await fs.mkdir(path.dirname(p), { recursive: true });
-    await atomicWriteFile(p, JSON.stringify(manifest, null, 2));
+    await atomicWriteFile(manifestPath(vaultBase, sourceId), JSON.stringify(manifest, null, 2));
+}
+
+function normalizeLib(raw: Partial<ManifestLibEntry>): ManifestLibEntry {
+    return {
+        name: raw.name ?? '',
+        kind: raw.kind ?? 'file',
+        path: raw.path ?? '',
+        sha: raw.sha ?? '',
+        webUrl: raw.webUrl,
+        files: Array.isArray(raw.files) ? raw.files : [],
+    };
 }
 
 function normalizeManifest(raw: Partial<ManifestFile> & { scripts?: ManifestScriptEntry[] }): ManifestFile {
@@ -113,7 +125,9 @@ function normalizeManifest(raw: Partial<ManifestFile> & { scripts?: ManifestScri
         lastCheckedAt: raw.lastCheckedAt ?? raw.lastSyncedAt ?? 0,
         scripts: raw.scripts ?? [],
         cfgs: raw.cfgs ?? [],
-        libs: raw.libs ?? [],
+        // Legacy manifests may lack `files` — manifestToMetas iterates it
+        // unconditionally, so normalize per entry to avoid TypeError.
+        libs: Array.isArray(raw.libs) ? raw.libs.map(normalizeLib) : [],
         presets: raw.presets ?? [],
     };
 }
@@ -128,20 +142,12 @@ export async function readLocalCache(vaultBase: string, sourceId: string): Promi
     }
 }
 
-async function atomicWriteFile(p: string, content: string): Promise<void> {
-    const tmp = `${p}.${crypto.randomUUID()}.tmp`;
-    await fs.writeFile(tmp, content, 'utf-8');
-    await fs.rename(tmp, p);
-}
-
 export async function writeLocalCache(
     vaultBase: string,
     sourceId: string,
     cache: LocalCache,
 ): Promise<void> {
-    const p = localCachePath(vaultBase, sourceId);
-    await fs.mkdir(path.dirname(p), { recursive: true });
-    await atomicWriteFile(p, JSON.stringify(cache));
+    await atomicWriteFile(localCachePath(vaultBase, sourceId), JSON.stringify(cache));
 }
 
 export async function resolveLocalSha(
@@ -364,6 +370,7 @@ export function derivePresetsFromTree(
         // the UI doesn't render a bogus card and `deletePresetLocal` doesn't
         // collide with the sibling schema's values path.
         if (lower.endsWith('.values.json')) continue;
+        if (!isSafeManifestFileName(rel)) continue;
         presets.push({
             fileName: rel,
             sha: entry.sha,
@@ -389,6 +396,7 @@ export function deriveScriptsFromTree(
         if (entry.path.startsWith(cfgPrefix)) {
             const fileName = entry.path.slice(cfgPrefix.length);
             if (fileName.includes('/')) continue;
+            if (!isSafeManifestFileName(fileName)) continue;
             cfgs.push({
                 fileName,
                 sha: entry.sha,
@@ -399,6 +407,7 @@ export function deriveScriptsFromTree(
         if (!entry.path.startsWith(scriptsPrefix)) continue;
         const rel = entry.path.slice(scriptsPrefix.length);
         if (rel.includes('/')) continue;
+        if (!isSafeManifestFileName(rel)) continue;
         scripts.push({
             fileName: rel,
             sha: entry.sha,
@@ -412,9 +421,7 @@ export function deriveScriptsFromTree(
 
 function parseRepo(repoUrl: string | undefined): { owner: string; repo: string } | null {
     if (!repoUrl) return null;
-    const m = repoUrl.match(/github\.com\/([^/\s]+)\/([^/\s]+?)(?:\.git)?(?:[/?#]|$)/);
-    if (!m?.[1] || !m[2]) return null;
-    return { owner: m[1], repo: m[2] };
+    return parseGithubUrl(repoUrl);
 }
 
 function rawUrl(repoUrl: string | undefined, branch: string | undefined, repoPath: string): string | null {

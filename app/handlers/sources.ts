@@ -1,10 +1,43 @@
 import { registerHandlers } from '@cion-suite/core/ipc';
 import type { VaultSource } from '@shared/types/vault.js';
+import type { NewSource } from '../types/sources.js';
 import type { AppServices } from '../types/services.js';
 import { listSources, addSource, removeSource, updateSource } from '../services/sources-store.js';
 import { requireString } from '../utils/ipc-args.js';
 import { parseGithubUrl } from '../utils/github-url.js';
 import { probeRepo } from '../utils/github-api.js';
+
+// IPC is a trust boundary. The renderer is allowed to send any JSON; we must
+// reject malformed source shapes here so sources.json never holds garbage.
+function validateNewSource(raw: unknown): NewSource {
+    if (!raw || typeof raw !== 'object') throw new Error('Invalid source payload');
+    const r = raw as Record<string, unknown>;
+    if (r.type === 'git') {
+        if (typeof r.url !== 'string' || r.url.length === 0) throw new Error('Invalid git url');
+        if (typeof r.branch !== 'string') throw new Error('Invalid branch');
+        return {
+            type: 'git',
+            name: typeof r.name === 'string' ? r.name : '',
+            url: r.url,
+            branch: r.branch,
+            isPrivate: r.isPrivate === true,
+        };
+    }
+    if (r.type === 'external') {
+        if (typeof r.name !== 'string') throw new Error('Invalid name');
+        if (typeof r.scriptsUrl !== 'string') throw new Error('Invalid scriptsUrl');
+        if (typeof r.libsUrl !== 'string') throw new Error('Invalid libsUrl');
+        if (typeof r.cfgUrl !== 'string') throw new Error('Invalid cfgUrl');
+        return {
+            type: 'external',
+            name: r.name,
+            scriptsUrl: r.scriptsUrl,
+            libsUrl: r.libsUrl,
+            cfgUrl: r.cfgUrl,
+        };
+    }
+    throw new Error('Unknown source type');
+}
 
 async function enrichWithToken(
     sources: VaultSource[],
@@ -43,31 +76,39 @@ export function registerSourceHandlers(services: AppServices): void {
         'sources:list': async () => enrichWithToken(await listSources(logger), services),
 
         'sources:add': (_event, rawData: unknown) =>
-            addSource(rawData as Omit<VaultSource, 'id'>, logger),
+            addSource(validateNewSource(rawData), logger),
 
         'sources:remove': async (_event, rawId: unknown) => {
             const id = requireString(rawId, 'id');
+            // Token before source — reverse order would orphan the credential
+            // in the keychain if removeSource succeeded and removeToken threw.
+            if (await sourceTokens.hasToken(id)) {
+                await sourceTokens.removeToken(id);
+            }
             await removeSource(id, logger);
-            await sourceTokens.removeToken(id);
         },
 
         'sources:update': async (_event, rawId: unknown, rawPatch: unknown) => {
             const id = requireString(rawId, 'id');
             const patch = (rawPatch ?? {}) as Record<string, unknown>;
             const updated = await updateSource(id, patch, logger);
-            if (patch.isPrivate === false) await sourceTokens.removeToken(id);
+            if (patch.isPrivate === false && (await sourceTokens.hasToken(id))) {
+                await sourceTokens.removeToken(id);
+            }
             return updated;
+        },
+
+        'sources:remove-token': async (_event, rawId: unknown) => {
+            const id = requireString(rawId, 'id');
+            if (await sourceTokens.hasToken(id)) {
+                await sourceTokens.removeToken(id);
+            }
         },
 
         'sources:set-token': async (_event, rawId: unknown, rawToken: unknown) => {
             const id = requireString(rawId, 'id');
             const token = requireString(rawToken, 'token');
             await sourceTokens.setToken(id, token);
-        },
-
-        'sources:remove-token': async (_event, rawId: unknown) => {
-            const id = requireString(rawId, 'id');
-            await sourceTokens.removeToken(id);
         },
 
         'sources:test-token': async (_event, rawId: unknown) =>

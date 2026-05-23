@@ -1,5 +1,19 @@
 export const GITHUB_API = 'https://api.github.com';
 export const GITHUB_USER_AGENT = 'cion-warden/1.0';
+export const GITHUB_FETCH_TIMEOUT_MS = 20_000;
+
+// Wraps fetch with an AbortController timeout. Without it, a stuck connection
+// leaves syncSource's inflight promise unresolved forever and every
+// subsequent call deduplicates onto it.
+export async function fetchWithTimeout(input: string, init: RequestInit = {}, timeoutMs = GITHUB_FETCH_TIMEOUT_MS): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        return await fetch(input, { ...init, signal: controller.signal });
+    } finally {
+        clearTimeout(timer);
+    }
+}
 
 export interface GithubProbeResult {
     ok: boolean;
@@ -60,7 +74,7 @@ export async function probeRepo(
         Accept: 'application/vnd.github+json',
     };
     if (token) headers.Authorization = `Bearer ${token}`;
-    const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}`, { headers });
+    const res = await fetchWithTimeout(`${GITHUB_API}/repos/${owner}/${repo}`, { headers });
     return { ok: res.ok, status: res.status, statusText: res.statusText };
 }
 
@@ -101,7 +115,7 @@ export async function fetchTree(opts: {
     if (etag) headers['If-None-Match'] = etag;
 
     const url = `${GITHUB_API}/repos/${owner}/${repo}/git/trees/${encodeBranchRef(branch)}?recursive=1`;
-    const res = await fetch(url, { headers });
+    const res = await fetchWithTimeout(url, { headers });
     const rateLimit = readRateLimit(res);
 
     if (res.status === 304) return { kind: 'not-modified', rateLimit };

@@ -36,11 +36,15 @@ export function createSourceTokens({ storage, logger }: Deps): SourceTokens {
             }
         },
 
+        // Rethrow so callers (e.g. sources:remove) know the token still lives
+        // in the keychain. Silent failure leaves the user thinking their PAT
+        // was revoked when it wasn't.
         async removeToken(sourceId) {
             try {
                 await storage.delete(keyOf(sourceId));
             } catch (err) {
                 logger.error('source-tokens.remove', err);
+                throw err;
             }
         },
 

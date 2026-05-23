@@ -3,8 +3,12 @@ export interface ParsedGithubRepo {
     repo: string;
 }
 
+// Anchor the host to a real boundary (scheme-separator, ssh user@, or string
+// start) so look-alike domains (notgithub.com, evil-github.com.attacker.tld)
+// don't slip through. Accepts: https://github.com/x/y, git@github.com:x/y,
+// github.com/x/y (bare).
 export function parseGithubUrl(url: string): ParsedGithubRepo | null {
-    const m = url.match(/github\.com\/([^/\s]+)\/([^/\s]+?)(?:\.git)?(?:[/?#]|$)/);
+    const m = url.match(/(?:^|\/\/|@)github\.com[/:]([^/\s:]+)\/([^/\s]+?)(?:\.git)?(?:[/?#]|$)/);
     if (!m?.[1] || !m[2]) return null;
     return { owner: m[1], repo: m[2] };
 }
