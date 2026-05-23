@@ -2,6 +2,7 @@ import type { ScriptMeta, ScriptCfgValues } from './scripts.js';
 import type { VaultSource } from './vault.js';
 import type { RemoteScriptMeta } from './get-scripts.js';
 import type { RemoteLibraryMeta } from './libs.js';
+import type { PresetSchema, PresetValues, RemotePresetMeta } from './binds.js';
 import type { VaultSyncResult, VaultSourceListResult } from './vault-sync.js';
 
 export type UpdaterIpcResult =
@@ -61,6 +62,18 @@ export interface AppBridge {
         delete: (sourceId: string, libId: string) => Promise<void>;
         openLocal: (sourceId: string, libId: string) => Promise<void>;
         openWeb: (sourceId: string, libId: string) => Promise<void>;
+    };
+    binds: {
+        list: () => Promise<RemotePresetMeta[]>;
+        listSource: (sourceId: string) => Promise<{ presets: RemotePresetMeta[]; lastSyncedAt?: number }>;
+        download: (sourceId: string, presetId: string) => Promise<void>;
+        downloadAll: (sourceId?: string) => Promise<{ ok: number; failed: number }>;
+        delete: (sourceId: string, presetId: string) => Promise<void>;
+        openLocal: (sourceId: string, presetId: string) => Promise<void>;
+        getSchema: (sourceId: string, presetId: string) => Promise<PresetSchema | null>;
+        getValues: (sourceId: string, presetId: string) => Promise<PresetValues>;
+        saveValues: (sourceId: string, presetId: string, values: PresetValues) => Promise<void>;
+        reset: (sourceId: string, presetId: string) => Promise<void>;
     };
     vault: {
         syncSource: (sourceId: string) => Promise<VaultSyncResult>;

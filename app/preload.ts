@@ -48,6 +48,19 @@ const bridge: AppBridge = {
         openLocal: (sourceId, libId) => ipcRenderer.invoke('libs:open-local', sourceId, libId),
         openWeb: (sourceId, libId) => ipcRenderer.invoke('libs:open-web', sourceId, libId),
     },
+    binds: {
+        list: () => ipcRenderer.invoke('binds:list'),
+        listSource: (sourceId) => ipcRenderer.invoke('binds:list-source', sourceId),
+        download: (sourceId, presetId) => ipcRenderer.invoke('binds:download', sourceId, presetId),
+        downloadAll: (sourceId) => ipcRenderer.invoke('binds:download-all', sourceId),
+        delete: (sourceId, presetId) => ipcRenderer.invoke('binds:delete', sourceId, presetId),
+        openLocal: (sourceId, presetId) => ipcRenderer.invoke('binds:open-local', sourceId, presetId),
+        getSchema: (sourceId, presetId) => ipcRenderer.invoke('binds:get-schema', sourceId, presetId),
+        getValues: (sourceId, presetId) => ipcRenderer.invoke('binds:get-values', sourceId, presetId),
+        saveValues: (sourceId, presetId, values) =>
+            ipcRenderer.invoke('binds:save-values', sourceId, presetId, values),
+        reset: (sourceId, presetId) => ipcRenderer.invoke('binds:reset', sourceId, presetId),
+    },
     vault: {
         syncSource: (sourceId) => ipcRenderer.invoke('vault:sync-source', sourceId),
         syncAll: () => ipcRenderer.invoke('vault:sync-all'),

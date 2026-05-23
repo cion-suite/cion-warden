@@ -8,7 +8,11 @@ import { LocaleToggle } from '@/shared/ui/locale-toggle';
 import { ThemeToggle } from '@/shared/ui/theme-toggle';
 import { findNavItem } from '@/shared/config/nav';
 import { useT } from '@/shared/i18n';
-import { useNavbarSlotContent } from '@/shared/lib/navbar-slot';
+import {
+    useNavbarSlotContent,
+    useNavbarSubtitleContent,
+    useNavbarTitleAction,
+} from '@/shared/lib/navbar-slot';
 
 function SidebarToggle() {
     const { toggleSidebar, state } = useSidebar();
@@ -28,12 +32,25 @@ export function Navbar() {
     const current = findNavItem(pathname);
     const title = current ? t(current.i18nKey) : t('nav.unknown');
     const slotContent = useNavbarSlotContent();
+    const subtitle = useNavbarSubtitleContent();
+    const titleAction = useNavbarTitleAction();
 
     return (
         <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-sm">
             <SidebarToggle />
             <Separator orientation="vertical" className="h-5 data-vertical:self-center" />
-            <span className="font-semibold">{title}</span>
+            {titleAction ? (
+                <button
+                    type="button"
+                    onClick={titleAction}
+                    className="cursor-pointer font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                >
+                    {title}
+                </button>
+            ) : (
+                <span className="font-semibold">{title}</span>
+            )}
+            {subtitle}
             <div className="ml-auto flex items-center gap-2">
                 {slotContent}
                 <LocaleToggle />

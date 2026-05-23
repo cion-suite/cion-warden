@@ -11,8 +11,8 @@ export function CenteredCard({
     className?: string;
 }) {
     return (
-        <main className="flex min-h-screen items-center justify-center p-2">
+        <div className="flex h-full min-h-0 w-full flex-1 items-center justify-center p-2">
             <Card className={cn('w-full', className)}>{children}</Card>
-        </main>
+        </div>
     );
 }

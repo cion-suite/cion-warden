@@ -14,12 +14,16 @@ import {
 import { parseGithubUrl } from '../utils/github-url.js';
 import {
     LIB_DIR,
+    PRESETS_DIR,
     SCRIPTS_CFG_DIR,
     SCRIPTS_DIR,
     libId as libIdFor,
+    manifestToMetas,
+    presetId as presetIdFor,
     readManifest,
     stripExt,
     type ManifestLibEntry,
+    type ManifestPresetEntry,
 } from './vault-manifest.js';
 
 const PUBLIC_REPO_PROBE_TTL_MS = 60_000;
@@ -212,6 +216,110 @@ export async function deleteLibLocal(
         assertInside(libRoot, target);
         await fs.rm(target, { force: true });
     }
+}
+
+function findPresetInManifest(
+    presets: ManifestPresetEntry[],
+    sourceId: string,
+    presetIdValue: string,
+): ManifestPresetEntry | null {
+    for (const p of presets) {
+        if (presetIdFor(sourceId, p.fileName) === presetIdValue) return p;
+    }
+    return null;
+}
+
+export async function downloadPreset(
+    source: GitVaultSource,
+    presetIdValue: string,
+    deps: DownloadDeps,
+): Promise<void> {
+    const manifest = await readManifest(deps.vaultBase, source.id);
+    if (!manifest) throw new Error('vault.notSynced');
+    const preset = findPresetInManifest(manifest.presets, source.id, presetIdValue);
+    if (!preset) throw new Error(`Preset not found: ${presetIdValue}`);
+
+    const parsed = parseGithubUrl(source.url);
+    if (!parsed) throw new Error('Only GitHub repositories are supported');
+    const { owner, repo } = parsed;
+    const branch = source.branch || 'main';
+    const presetsRoot = path.join(deps.vaultBase, source.id, PRESETS_DIR);
+
+    const content = await fetchFileContent(
+        source,
+        owner,
+        repo,
+        branch,
+        `${PRESETS_DIR}/${preset.fileName}`,
+        deps.tokens,
+    );
+    if (!content) {
+        if (source.isPrivate) throw new Error('sources.tokenNoAccess');
+        throw new Error(`Download failed: ${preset.fileName} not found`);
+    }
+    const dest = path.join(presetsRoot, preset.fileName);
+    assertInside(presetsRoot, dest);
+    await fs.mkdir(presetsRoot, { recursive: true });
+    await fs.writeFile(dest, content);
+}
+
+export async function downloadAllPresets(
+    source: GitVaultSource,
+    deps: DownloadDeps,
+): Promise<{ ok: number; failed: number }> {
+    const manifest = await readManifest(deps.vaultBase, source.id);
+    if (!manifest) return { ok: 0, failed: 0 };
+
+    // Skip presets that are already at the manifest SHA — saves a GET per file
+    // and conserves the GitHub API quota on private sources.
+    const { presets: metas } = await manifestToMetas(source, manifest, deps.vaultBase);
+    const upToDate = new Set(metas.filter((m) => m.isDownloaded && !m.hasUpdate).map((m) => m.id));
+
+    let ok = 0;
+    let failed = 0;
+    for (const preset of manifest.presets) {
+        const id = presetIdFor(source.id, preset.fileName);
+        if (upToDate.has(id)) continue;
+        try {
+            await downloadPreset(source, id, deps);
+            ok++;
+        } catch (err) {
+            deps.logger.warn('downloadAllPresets: failed', { fileName: preset.fileName, error: err });
+            failed++;
+        }
+    }
+    return { ok, failed };
+}
+
+export async function deletePresetLocal(
+    source: GitVaultSource,
+    presetIdValue: string,
+    deps: DownloadDeps,
+): Promise<void> {
+    const manifest = await readManifest(deps.vaultBase, source.id);
+    if (!manifest) return;
+    const preset = findPresetInManifest(manifest.presets, source.id, presetIdValue);
+    if (!preset) return;
+
+    const presetsRoot = path.join(deps.vaultBase, source.id, PRESETS_DIR);
+    const schemaPath = path.join(presetsRoot, preset.fileName);
+    const valuesPath = path.join(presetsRoot, `${stripExt(preset.fileName)}.values.json`);
+    assertInside(presetsRoot, schemaPath);
+    assertInside(presetsRoot, valuesPath);
+    await fs.rm(schemaPath, { force: true });
+    await fs.rm(valuesPath, { force: true });
+}
+
+export async function presetLocalPath(
+    source: GitVaultSource,
+    presetIdValue: string,
+    vaultBase: string,
+): Promise<string | null> {
+    const manifest = await readManifest(vaultBase, source.id);
+    if (!manifest) return null;
+    const preset = findPresetInManifest(manifest.presets, source.id, presetIdValue);
+    if (!preset) return null;
+    return path.join(vaultBase, source.id, PRESETS_DIR, preset.fileName);
 }
 
 export async function libLocalPath(

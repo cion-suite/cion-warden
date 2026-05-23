@@ -11,6 +11,7 @@ import { registerScriptHandlers } from './handlers/scripts.js';
 import { registerSourceHandlers } from './handlers/sources.js';
 import { registerGetScriptHandlers } from './handlers/get-scripts.js';
 import { registerLibHandlers } from './handlers/libs.js';
+import { registerBindHandlers } from './handlers/binds.js';
 import { registerVaultHandlers } from './handlers/vault.js';
 import { getGlobalVaultPath, ensureGlobalVault } from './services/vault-paths.js';
 import { createScriptWatcher, type ScriptWatcher } from './services/script-watcher.js';
@@ -56,6 +57,7 @@ async function bootstrap(): Promise<void> {
         registerSourceHandlers(services);
         registerGetScriptHandlers(services);
         registerLibHandlers(services);
+        registerBindHandlers(services);
         registerVaultHandlers(services);
         scriptWatcher = createScriptWatcher();
         scriptWatcher.start(globalVaultPath);

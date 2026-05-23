@@ -3,14 +3,16 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import type { RemoteScriptMeta } from '@shared/types/get-scripts.js';
 import type { LibKind, RemoteLibFileEntry, RemoteLibraryMeta } from '@shared/types/libs.js';
+import type { RemotePresetMeta } from '@shared/types/binds.js';
 import type { VaultSource } from '@shared/types/vault.js';
 import { encodeBranchRef, encodeRepoPath } from '../utils/github-api.js';
 
 export const SCRIPTS_DIR = 'scripts';
 export const SCRIPTS_CFG_DIR = 'cfg';
 export const LIB_DIR = 'lib';
+export const PRESETS_DIR = 'presets';
 
-export const MANIFEST_VERSION = 2;
+export const MANIFEST_VERSION = 3;
 
 export interface ManifestScriptEntry {
     fileName: string;
@@ -33,6 +35,12 @@ export interface ManifestLibEntry {
     files: RemoteLibFileEntry[];
 }
 
+export interface ManifestPresetEntry {
+    fileName: string;
+    sha: string;
+    downloadUrl: string | null;
+}
+
 export interface ManifestFile {
     version: number;
     etag: string | null;
@@ -43,6 +51,7 @@ export interface ManifestFile {
     scripts: ManifestScriptEntry[];
     cfgs: ManifestCfgEntry[];
     libs: ManifestLibEntry[];
+    presets: ManifestPresetEntry[];
 }
 
 interface LocalCacheEntry {
@@ -105,6 +114,7 @@ function normalizeManifest(raw: Partial<ManifestFile> & { scripts?: ManifestScri
         scripts: raw.scripts ?? [],
         cfgs: raw.cfgs ?? [],
         libs: raw.libs ?? [],
+        presets: raw.presets ?? [],
     };
 }
 
@@ -166,9 +176,14 @@ export function libId(sourceId: string, name: string): string {
     return `${sourceId}:lib:${name}`;
 }
 
+export function presetId(sourceId: string, fileName: string): string {
+    return `${sourceId}:preset:${fileName}`;
+}
+
 export interface ManifestToMetasResult {
     scripts: RemoteScriptMeta[];
     libs: RemoteLibraryMeta[];
+    presets: RemotePresetMeta[];
 }
 
 export async function manifestToMetas(
@@ -231,10 +246,29 @@ export async function manifestToMetas(
         }),
     );
 
+    const presetResults = await Promise.all(
+        manifest.presets.map(async (item) => {
+            const key = `${PRESETS_DIR}/${item.fileName}`;
+            const local = await resolveLocalSha(path.join(sourceRoot, key), cache[key]);
+            if (local) nextCache[key] = local;
+            return {
+                id: presetId(source.id, item.fileName),
+                name: stripExt(item.fileName),
+                fileName: item.fileName,
+                sourceId: source.id,
+                sourceName: source.name,
+                sha: item.sha,
+                isDownloaded: local !== null,
+                hasUpdate: local !== null && local.sha !== item.sha,
+                downloadUrl: item.downloadUrl ?? undefined,
+            } satisfies RemotePresetMeta;
+        }),
+    );
+
     if (!cacheEqual(cache, nextCache)) {
         await writeLocalCache(vaultBase, source.id, nextCache).catch(() => {});
     }
-    return { scripts: scriptResults, libs: libResults };
+    return { scripts: scriptResults, libs: libResults, presets: presetResults };
 }
 
 export function deriveLibsFromTree(
@@ -309,6 +343,35 @@ export function deriveLibsFromTree(
 
     libs.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
     return libs;
+}
+
+export function derivePresetsFromTree(
+    treeEntries: Array<{ path: string; type: string; sha: string }>,
+    repoUrl?: string,
+    branch?: string,
+): ManifestPresetEntry[] {
+    const prefix = `${PRESETS_DIR}/`;
+    const presets: ManifestPresetEntry[] = [];
+    for (const entry of treeEntries) {
+        if (entry.type !== 'blob') continue;
+        if (!entry.path.startsWith(prefix)) continue;
+        const rel = entry.path.slice(prefix.length);
+        if (rel.includes('/')) continue;
+        const lower = rel.toLowerCase();
+        if (!lower.endsWith('.json')) continue;
+        // `<name>.values.json` is the local user-values convention. If such a
+        // file is committed upstream it isn't a preset schema — exclude it so
+        // the UI doesn't render a bogus card and `deletePresetLocal` doesn't
+        // collide with the sibling schema's values path.
+        if (lower.endsWith('.values.json')) continue;
+        presets.push({
+            fileName: rel,
+            sha: entry.sha,
+            downloadUrl: rawUrl(repoUrl, branch, entry.path),
+        });
+    }
+    presets.sort((a, b) => (a.fileName < b.fileName ? -1 : a.fileName > b.fileName ? 1 : 0));
+    return presets;
 }
 
 export function deriveScriptsFromTree(

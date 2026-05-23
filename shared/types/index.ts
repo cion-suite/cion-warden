@@ -9,4 +9,11 @@ export type { ScriptMeta, ScriptCfgFile, HkEntry, ValEntry } from './scripts.js'
 export type { VaultSource, GitVaultSource, ExternalVaultSource, VaultSourceType } from './vault.js';
 export type { RemoteScriptMeta } from './get-scripts.js';
 export type { RemoteLibraryMeta, RemoteLibFileEntry, LibKind } from './libs.js';
+export type {
+    RemotePresetMeta,
+    PresetSchema,
+    PresetField,
+    PresetFieldType,
+    PresetValues,
+} from './binds.js';
 export type { VaultSyncResult, VaultSourceListResult } from './vault-sync.js';

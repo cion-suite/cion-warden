@@ -31,12 +31,12 @@ export function registerVaultHandlers(services: AppServices): void {
             const sourceId = requireString(rawSourceId, 'sourceId');
             const sources = await listSources(logger);
             const source = sources.find((s) => s.id === sourceId);
-            if (!source) return { scripts: [], libs: [] };
+            if (!source) return { scripts: [], libs: [], presets: [] };
             const vaultBase = getGlobalVaultPath();
             const manifest = await readManifest(vaultBase, sourceId);
-            if (!manifest) return { scripts: [], libs: [], lastSyncedAt: undefined };
-            const { scripts, libs } = await manifestToMetas(source, manifest, vaultBase);
-            return { scripts, libs, lastSyncedAt: manifest.lastSyncedAt };
+            if (!manifest) return { scripts: [], libs: [], presets: [], lastSyncedAt: undefined };
+            const { scripts, libs, presets } = await manifestToMetas(source, manifest, vaultBase);
+            return { scripts, libs, presets, lastSyncedAt: manifest.lastSyncedAt };
         },
     });
 }

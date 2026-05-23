@@ -9,6 +9,7 @@ import { parseGithubUrl } from '../utils/github-url.js';
 import {
     MANIFEST_VERSION,
     deriveLibsFromTree,
+    derivePresetsFromTree,
     deriveScriptsFromTree,
     manifestToMetas,
     readManifest,
@@ -35,10 +36,11 @@ async function buildCachedResult(
     vaultBase: string,
     fromCache: boolean,
 ): Promise<VaultSyncResult> {
-    const { scripts, libs } = await manifestToMetas(source, manifest, vaultBase);
+    const { scripts, libs, presets } = await manifestToMetas(source, manifest, vaultBase);
     return {
         scripts,
         libs,
+        presets,
         lastSyncedAt: manifest.lastSyncedAt,
         fromCache,
     };
@@ -56,7 +58,11 @@ async function doSync(
     const branch = source.branch || 'main';
     const existing = await readManifest(vaultBase, source.id);
     const token = source.isPrivate ? await tokens.getToken(source.id) : null;
-    const etag = existing?.etag ?? null;
+    // Bumping MANIFEST_VERSION must force a re-derive: never reuse the cached
+    // etag from a stale-shape manifest, otherwise 304 keeps the old (incomplete)
+    // entries forever.
+    const versionMatch = existing?.version === MANIFEST_VERSION;
+    const etag = versionMatch ? (existing?.etag ?? null) : null;
 
     const result = await fetchTree({
         owner: parsed.owner,
@@ -97,6 +103,7 @@ async function doSync(
 
     const { scripts, cfgs } = deriveScriptsFromTree(tree.tree, source.url, branch);
     const libs = deriveLibsFromTree(tree.tree, source.url, branch);
+    const presets = derivePresetsFromTree(tree.tree, source.url, branch);
 
     const manifest: ManifestFile = {
         version: MANIFEST_VERSION,
@@ -108,6 +115,7 @@ async function doSync(
         scripts,
         cfgs,
         libs,
+        presets,
     };
     await writeManifest(vaultBase, source.id, manifest);
 

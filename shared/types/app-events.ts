@@ -18,6 +18,7 @@ declare module '@cion-suite/core/ipc' {
         };
         'vault:rate-limit': { remaining: number; reset: number };
         'libs:changed': { sourceId: string; libId: string };
+        'binds:changed': { sourceId: string; presetId: string };
     }
 }
 

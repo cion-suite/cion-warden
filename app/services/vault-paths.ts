@@ -13,7 +13,7 @@ export function getVaultPaths(vaultName: string) {
         scripts: path.join(base, 'scripts'),
         cfg: path.join(base, 'scripts', 'cfg'),
         lib: path.join(base, 'lib'),
-        binds: path.join(base, 'binds'),
+        presets: path.join(base, 'presets'),
     };
 }
 
