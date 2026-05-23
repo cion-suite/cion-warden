@@ -66,6 +66,9 @@ const bridge: AppBridge = {
         syncAll: () => ipcRenderer.invoke('vault:sync-all'),
         listSource: (sourceId) => ipcRenderer.invoke('vault:list-source', sourceId),
     },
+    github: {
+        getRateLimit: () => ipcRenderer.invoke('github:rate-limit'),
+    },
 };
 
 contextBridge.exposeInMainWorld('app', bridge);

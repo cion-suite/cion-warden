@@ -17,3 +17,8 @@ export type {
     PresetValues,
 } from './binds.js';
 export type { VaultSyncResult, VaultSourceListResult } from './vault-sync.js';
+export type {
+    GithubRateLimitEntry,
+    GithubRateLimitResource,
+    GithubRateLimitResult,
+} from './github.js';

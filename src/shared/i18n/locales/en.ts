@@ -192,6 +192,7 @@ export const en = {
         settings: {
             groups: {
                 appearance: 'Appearance',
+                github: 'GitHub API',
                 updates: 'Updates',
             },
             theme: {
@@ -201,6 +202,17 @@ export const en = {
             locale: {
                 label: 'Language',
                 description: 'Switch the interface language.',
+            },
+            github: {
+                title: 'Rate limit',
+                description: 'GitHub REST API quota for each saved token. Refreshes automatically after every sync.',
+                refresh: 'Refresh',
+                anonymous: 'Unauthenticated (60/hr)',
+                remainingResets: '{{remaining}} remaining · resets {{resetIn}}',
+                resetNow: 'now',
+                resetInSeconds: 'in {{seconds}}s',
+                resetInMinutes: 'in {{minutes}}m {{seconds}}s',
+                resetInHours: 'in {{hours}}h {{minutes}}m',
             },
             updater: {
                 label: 'Updates',

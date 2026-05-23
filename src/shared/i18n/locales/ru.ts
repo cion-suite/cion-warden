@@ -192,6 +192,7 @@ export const ru = {
         settings: {
             groups: {
                 appearance: 'Внешний вид',
+                github: 'GitHub API',
                 updates: 'Обновления',
             },
             theme: {
@@ -201,6 +202,17 @@ export const ru = {
             locale: {
                 label: 'Язык',
                 description: 'Переключение языка интерфейса.',
+            },
+            github: {
+                title: 'Лимит запросов',
+                description: 'Квота GitHub REST API для каждого сохранённого токена. Обновляется автоматически после каждой синхронизации.',
+                refresh: 'Обновить',
+                anonymous: 'Без авторизации (60/ч)',
+                remainingResets: 'Осталось {{remaining}} · сброс {{resetIn}}',
+                resetNow: 'сейчас',
+                resetInSeconds: 'через {{seconds}} с',
+                resetInMinutes: 'через {{minutes}} м {{seconds}} с',
+                resetInHours: 'через {{hours}} ч {{minutes}} м',
             },
             updater: {
                 label: 'Обновления',

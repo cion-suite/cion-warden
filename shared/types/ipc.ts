@@ -4,6 +4,7 @@ import type { RemoteScriptMeta } from './get-scripts.js';
 import type { RemoteLibraryMeta } from './libs.js';
 import type { PresetSchema, PresetValues, RemotePresetMeta } from './binds.js';
 import type { VaultSyncResult, VaultSourceListResult } from './vault-sync.js';
+import type { GithubRateLimitResult } from './github.js';
 
 export type UpdaterIpcResult =
     | { ok: true }
@@ -79,5 +80,8 @@ export interface AppBridge {
         syncSource: (sourceId: string) => Promise<VaultSyncResult>;
         syncAll: () => Promise<Array<{ sourceId: string; ok: boolean; error?: string }>>;
         listSource: (sourceId: string) => Promise<VaultSourceListResult>;
+    };
+    github: {
+        getRateLimit: () => Promise<GithubRateLimitResult>;
     };
 }
