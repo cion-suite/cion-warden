@@ -12,11 +12,10 @@ tools: Bash, Read, Write, Edit, Glob, Grep
 
 ## Обязательный контекст
 
-- `CLAUDE.md §2` — Critical Rules.
-- `CLAUDE.md §4` — Patterns.
-- `CLAUDE.md §5` — Code Rules.
-- `CLAUDE.md §6` — Pitfalls.
-- `CLAUDE.md §7` — STOP & ASK.
+- `CLAUDE.md` — `## Critical Rules` (особенно §4 IPC, §5 События, §6 Placement типов, §7 Cion Suite пакеты).
+- `CLAUDE.md` — `## Clean Code`.
+- `CLAUDE.md` — `## Pitfalls`.
+- `CLAUDE.md` — `## STOP & ASK`.
 
 ## Методология — 4 фазы
 

@@ -73,6 +73,9 @@ prompt: |
       requestSingleInstance). Plaintext credentials запрещены.
   §8  UI — только через skill /shadcn. src/shared/ui/shadcn/**
       не редактируется руками (только npx shadcn add <comp>).
+  §9  🟡 Tailwind v4 — CSS-first. Theme через @theme inline в
+      src/app/styles/index.css. Запрещено tailwind.config.js / @config.
+  §10 🟡 React 19 + Compiler. Ручные useMemo / useCallback не нужны.
 
   Clean Code:
   CC.DRY  🟡 hand-rolled дублирующее существующее (shared/lib,
@@ -82,14 +85,11 @@ prompt: |
   CC.COM  🟡 комментарии с нарративом («added for X», «fix #123»).
   CC.IPC  🔴 IPC-валидация на falsy вместо `== null || typeof !==`
           (`if (!id)` отвергает 0).
-  §10     🟡 ручные useMemo / useCallback (React 19 + Compiler).
 
   Pitfalls (🟡):
   P.DIR   __dirname в app/ для путей к ресурсам — должно через
           app/utils/paths.ts.
   P.AUG   BaseAppEventMap augmentation не в shared/types/app-events.ts.
-  §9      tailwind.config.js или @config — Tailwind v4 CSS-first
-          (@theme inline в src/app/styles/index.css).
   P.JSX   `: JSX.Element` в React 19 (TS2503) — inference / ReactElement.
 
   Output: `- [🔴|🟡] §<X> <имя> — <file:line> — <цитата>`.

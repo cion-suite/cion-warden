@@ -18,7 +18,7 @@ allowed-tools: Bash, Read, Edit, Write, Glob, Grep, Agent
    ```bash
    mkdir -p .claude/cache
    cp <plan-file> .claude/cache/isplan-plan.md
-   grep -oE '[a-zA-Z0-9_./@-]+\.(ts|tsx|js|jsx|md):[0-9]+' .claude/cache/isplan-plan.md \
+   grep -oE '[a-zA-Z0-9_./@-]+\.(ts|tsx|js|jsx|mjs|cjs|md|css|html|json|yml|yaml):[0-9]+' .claude/cache/isplan-plan.md \
      | sort -u > .claude/cache/isplan-files.txt
    wc -l .claude/cache/isplan-plan.md .claude/cache/isplan-files.txt
    ```

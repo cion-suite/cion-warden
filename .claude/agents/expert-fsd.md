@@ -14,7 +14,7 @@ tools: Bash, Read, Write, Edit, Glob, Grep
 
 - `CLAUDE.md` — FSD direction, feature isolation, Context+Provider split.
 - `docs/architecture.md` — текущая архитектура cion-warden + inlined FSD reference.
-- `packages/config/eslint/fsd.js` — boundaries config.
+- `../cion-suite/packages/config/eslint/fsd.js` — boundaries config (link через `@cion-suite/config`).
 
 ## Direction
 
@@ -125,7 +125,7 @@ export function getAll(): Map<Key, Config> {
 
 ## Acknowledged exceptions
 
-Иногда FSD приходится нарушать осознанно. Документируй в `CLAUDE.md §2` каждое исключение с обоснованием:
+Иногда FSD приходится нарушать осознанно. Документируй в `CLAUDE.md` (секция `## Critical Rules`) каждое исключение с обоснованием:
 
 - Domain hook потребляется generic-компонентом в `shared/ui/` — нельзя в `entities/` потому что shared → entities запрещён.
 - Type literal вместо import (`status: 'online' | 'recent'`) — между соседями на одном слое import запрещён.

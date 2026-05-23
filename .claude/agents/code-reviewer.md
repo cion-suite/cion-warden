@@ -12,10 +12,10 @@ tools: Bash, Read, Glob, Grep
 
 ## Обязательный контекст
 
-- `CLAUDE.md §2` — Critical Rules.
-- `CLAUDE.md §5` — Code Rules.
-- `CLAUDE.md §6` — Pitfalls.
-- `CLAUDE.md §7` — STOP & ASK.
+- `CLAUDE.md` — `## Critical Rules` (§1–§10).
+- `CLAUDE.md` — `## Clean Code`.
+- `CLAUDE.md` — `## Pitfalls`.
+- `CLAUDE.md` — `## STOP & ASK`.
 
 Без указания — `git diff HEAD`.
 

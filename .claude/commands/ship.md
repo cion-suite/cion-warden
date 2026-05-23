@@ -29,26 +29,16 @@ allowed-tools: Bash, Read, Glob, Grep
      && { echo "Direct webContents.send — use appEvents.emit (§5)"; exit 1; } || true
    ```
 4. **Build.** `pnpm build`. Verify clean completion.
-5. **Diff review.** `git diff main...HEAD` (или текущая ветка vs main). Глянь на:
-   - Cross-feature imports (§1).
-   - `app → features/entities` напрямую (§2).
-   - Plaintext credentials мимо `@cion-suite/core/storage` (§7).
-   - Прямой `win.webContents.send` (§5).
-   - Inline types в компонентах (§6).
-   - `any` types.
-   - Оставленные `console.log` (логгер — `@cion-suite/core/log`, §7).
-   - Ручные `useMemo` / `useCallback` (§10 — React 19 + Compiler).
-   - Правки в `src/shared/ui/shadcn/**` руками (§8 — только через `npx shadcn add` или skill `/shadcn`).
 
 ## Summary
 
 Report per-check: PASS / FAIL.
 
 Overall:
-- **READY TO MERGE** — все 5 проверок PASS.
+- **READY TO MERGE** — все 4 проверки PASS.
 - **ISSUES FOUND** — есть FAIL. Список конкретных проблем.
 
 ## Notes
 
-- `/ship` ≠ `/isgood`. `/isgood` — adversarial code review (Critical Rules + Clean Code + scope). `/ship` — механические gates (typecheck / lint / build).
+- `/ship` ≠ `/isgood`. `/isgood` — adversarial code review (Critical Rules + Clean Code + scope). `/ship` — механические gates (typecheck / lint / build / FSD audit).
 - Перед merge запускай оба: сначала `/isgood`, после фиксов — `/ship`.

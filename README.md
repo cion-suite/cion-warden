@@ -53,9 +53,11 @@ pnpm ship         # typecheck + lint + build (pre-flight)
 pnpm check:placeholders  # ensure appId/feed URLs/pkg metadata replaced (auto-run by dist)
 ```
 
-Дополнительно — slash-команды Claude Code: `/ship` (pre-flight),
-`/isgood` (adversarial review diff'а), `/notes` (changelog), `/shadcn`
-(UI-решения). См. `.claude/commands/`.
+Дополнительно — slash-команды Claude Code:
+`/planner` (план фичи), `/isplan` (adversarial review плана),
+`/ship` (pre-flight), `/isgood` (adversarial review diff'а),
+`/notes` (changelog), `/sync-docs` (актуализация документации),
+`/shadcn` (UI-решения). См. `.claude/commands/`.
 
 ## Структура
 

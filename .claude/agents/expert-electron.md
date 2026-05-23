@@ -12,9 +12,9 @@ Main process и инфраструктура: IPC handlers, окна, preload AP
 
 ## Обязательный контекст
 
-- `CLAUDE.md §2` — Critical Rules (IPC, события, credentials, types placement).
-- `CLAUDE.md §5` — Code Rules (IPC-валидация, KISS).
-- `CLAUDE.md §6` — Pitfalls.
+- `CLAUDE.md` — `## Critical Rules` §4 (IPC), §5 (события), §6 (placement типов), §7 (Cion Suite пакеты).
+- `CLAUDE.md` — `## Clean Code` (IPC-валидация, KISS).
+- `CLAUDE.md` — `## Pitfalls`.
 
 ## Карта ключевых файлов
 
@@ -24,6 +24,16 @@ Main process и инфраструктура: IPC handlers, окна, preload AP
 | `app/preload.ts` | `contextBridge.exposeInMainWorld` + `exposeAppEventsBridge` (из `@cion-suite/core/ipc/preload`) |
 | `app/services/boot.ts` | Composition root: Logger / SecureStorage / SettingsStore / CrashReporter через `@cion-suite/core` |
 | `app/services/updater.ts` | electron-updater orchestration (dual-channel latest/beta + IPC + appEvents) |
+| `app/handlers/binds.ts` | IPC handlers: keybindings (CRUD + persist) |
+| `app/handlers/get-scripts.ts` | IPC handlers: remote-script discovery / scan |
+| `app/handlers/libs.ts` | IPC handlers: libraries install / list / remove |
+| `app/handlers/scripts.ts` | IPC handlers: local scripts CRUD / run |
+| `app/handlers/sources.ts` | IPC handlers: remote sources registry |
+| `app/handlers/vault.ts` | IPC handlers: vault sync orchestration |
+| `app/services/vault-sync.ts` / `vault-download.ts` / `vault-manifest.ts` / `vault-paths.ts` | Vault sync pipeline |
+| `app/services/script-watcher.ts` | fs watch + appEvents emit для локальных скриптов |
+| `app/services/sources-store.ts` / `source-tokens.ts` | Persistent sources registry + secure token storage |
+| `app/utils/github-api.ts` / `github-url.ts` / `mask-pat.ts` | GitHub REST helpers + URL parser + PAT masking |
 
 ## Правила
 

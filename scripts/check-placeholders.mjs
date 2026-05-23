@@ -69,6 +69,7 @@ if (bypass) {
 }
 
 console.error(
-    '\nReplace the placeholders per CLAUDE.md "Before first ship" or set ALLOW_PLACEHOLDERS=1 to bypass.\n',
+    '\nReplace the placeholders in electron-builder.json / app/config.ts / package.json, ' +
+        'or set ALLOW_PLACEHOLDERS=1 to bypass.\n',
 );
 process.exit(1);
