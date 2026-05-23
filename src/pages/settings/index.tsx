@@ -5,18 +5,25 @@ import { RefreshCwIcon } from 'lucide-react';
 
 import { Badge } from '@/shared/ui/shadcn/badge';
 import { Button } from '@/shared/ui/shadcn/button';
-import { Card, CardContent } from '@/shared/ui/shadcn/card';
+import {
+    Card,
+    CardAction,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/shared/ui/shadcn/card';
 import {
     Field,
     FieldContent,
     FieldDescription,
     FieldGroup,
-    FieldLegend,
-    FieldSet,
     FieldTitle,
 } from '@/shared/ui/shadcn/field';
 import { Progress } from '@/shared/ui/shadcn/progress';
+import { Separator } from '@/shared/ui/shadcn/separator';
 import { Skeleton } from '@/shared/ui/shadcn/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/shadcn/tabs';
 import {
     ToggleGroup,
     ToggleGroupItem,
@@ -60,23 +67,19 @@ function formatResetIn(t: Translate, resetUnixSec: number): string {
 
 function RateLimitRow({ entry, t }: RateLimitRowProps) {
     const label =
-        entry.sourceId === null
-            ? t('settings.github.anonymous')
-            : entry.sourceName;
+        entry.sourceId === null ? t('settings.github.anonymous') : entry.sourceName;
 
     if (!entry.ok || !entry.core) {
         return (
-            <Field>
+            <div className="flex flex-col gap-1.5">
                 <div className="flex items-baseline justify-between gap-2">
-                    <FieldTitle>{label}</FieldTitle>
+                    <span className="text-sm font-medium">{label}</span>
                     <Badge variant="outline" className="font-mono shrink-0">
                         {t('error')}
                     </Badge>
                 </div>
-                <FieldDescription className="text-destructive">
-                    {entry.error ?? t('error')}
-                </FieldDescription>
-            </Field>
+                <p className="text-xs text-destructive">{entry.error ?? t('error')}</p>
+            </div>
         );
     }
 
@@ -85,9 +88,9 @@ function RateLimitRow({ entry, t }: RateLimitRowProps) {
     const lowRemaining = limit > 0 && remaining / limit < 0.1;
 
     return (
-        <Field>
+        <div className="flex flex-col gap-2">
             <div className="flex items-baseline justify-between gap-2">
-                <FieldTitle>{label}</FieldTitle>
+                <span className="text-sm font-medium">{label}</span>
                 <span className="text-xs font-mono tabular-nums text-muted-foreground shrink-0">
                     {used.toLocaleString()} / {limit.toLocaleString()}
                 </span>
@@ -96,17 +99,16 @@ function RateLimitRow({ entry, t }: RateLimitRowProps) {
                 value={pct}
                 className={cn(
                     'h-2',
-                    lowRemaining &&
-                        '[&>[data-slot=progress-indicator]]:bg-destructive',
+                    lowRemaining && '[&>[data-slot=progress-indicator]]:bg-destructive',
                 )}
             />
-            <FieldDescription>
+            <p className="text-xs text-muted-foreground">
                 {t('settings.github.remainingResets', {
                     remaining: remaining.toLocaleString(),
                     resetIn: formatResetIn(t, reset),
                 })}
-            </FieldDescription>
-        </Field>
+            </p>
+        </div>
     );
 }
 
@@ -120,8 +122,12 @@ export function SettingsPage() {
     const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ type: 'idle' });
 
     useAppEvent('updater:not-available', () => setUpdateStatus({ type: 'up-to-date' }));
-    useAppEvent('updater:available', (d) => setUpdateStatus({ type: 'available', version: d.version }));
-    useAppEvent('updater:downloaded', (d) => setUpdateStatus({ type: 'downloaded', version: d.version }));
+    useAppEvent('updater:available', (d) =>
+        setUpdateStatus({ type: 'available', version: d.version }),
+    );
+    useAppEvent('updater:downloaded', (d) =>
+        setUpdateStatus({ type: 'downloaded', version: d.version }),
+    );
 
     const statusText = checking
         ? t('settings.updater.checking')
@@ -144,13 +150,25 @@ export function SettingsPage() {
         }
     };
 
+    const rateLimitEntries = githubRateLimit.data?.entries ?? [];
+
     return (
         <div className="mx-auto flex h-full w-full max-w-3xl min-h-0 flex-col">
-            <Card className="flex h-full min-h-0 flex-col">
-                <CardContent className="scroll-fade min-h-0 flex-1 overflow-y-auto">
-                    <FieldGroup>
-                        <FieldSet>
-                            <FieldLegend>{t('settings.groups.appearance')}</FieldLegend>
+            <Tabs defaultValue="appearance" className="flex h-full min-h-0 flex-col">
+                <TabsList>
+                    <TabsTrigger value="appearance">
+                        {t('settings.tabs.appearance')}
+                    </TabsTrigger>
+                    <TabsTrigger value="github">{t('settings.tabs.github')}</TabsTrigger>
+                    <TabsTrigger value="updates">{t('settings.tabs.updates')}</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="appearance" className="min-h-0">
+                    <Card className="h-full">
+                        <CardHeader>
+                            <CardTitle>{t('settings.appearance.title')}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="scroll-fade min-h-0 flex-1 overflow-y-auto">
                             <FieldGroup>
                                 <Field orientation="responsive">
                                     <FieldContent>
@@ -198,66 +216,111 @@ export function SettingsPage() {
                                     </ToggleGroup>
                                 </Field>
                             </FieldGroup>
-                        </FieldSet>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
 
-                        <FieldSet>
-                            <FieldLegend>{t('settings.groups.github')}</FieldLegend>
-                            <FieldGroup>
-                                <Field orientation="responsive">
-                                    <FieldContent>
-                                        <FieldTitle>{t('settings.github.title')}</FieldTitle>
-                                        <FieldDescription>
-                                            {t('settings.github.description')}
-                                        </FieldDescription>
-                                    </FieldContent>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        disabled={githubRateLimit.loading || !githubRateLimit.supported}
-                                        onClick={() => void githubRateLimit.refresh()}
-                                    >
-                                        <RefreshCwIcon
-                                            data-icon="inline-start"
-                                            className={cn(githubRateLimit.loading && 'animate-spin')}
-                                        />
-                                        {t('settings.github.refresh')}
-                                    </Button>
-                                </Field>
-
-                                {githubRateLimit.error && (
-                                    <FieldDescription className="text-destructive">
-                                        {githubRateLimit.error}
-                                    </FieldDescription>
-                                )}
-
-                                {!githubRateLimit.data && githubRateLimit.loading && (
-                                    <div className="flex flex-col gap-3">
-                                        <Skeleton className="h-2 w-full" />
-                                        <Skeleton className="h-2 w-full" />
-                                    </div>
-                                )}
-
-                                {githubRateLimit.data?.entries.map((entry) => (
-                                    <RateLimitRow
-                                        key={entry.sourceId ?? 'anonymous'}
-                                        entry={entry}
-                                        t={t}
+                <TabsContent value="github" className="min-h-0">
+                    <Card className="h-full">
+                        <CardHeader>
+                            <CardTitle>{t('settings.groups.github')}</CardTitle>
+                            <CardDescription className="text-xs">
+                                {t('settings.github.description')}
+                            </CardDescription>
+                            <CardAction>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={
+                                        githubRateLimit.loading || !githubRateLimit.supported
+                                    }
+                                    onClick={() => void githubRateLimit.refresh()}
+                                >
+                                    <RefreshCwIcon
+                                        data-icon="inline-start"
+                                        className={cn(
+                                            githubRateLimit.loading && 'animate-spin',
+                                        )}
                                     />
-                                ))}
-                            </FieldGroup>
-                        </FieldSet>
+                                    {t('settings.github.refresh')}
+                                </Button>
+                            </CardAction>
+                        </CardHeader>
+                        <CardContent className="scroll-fade min-h-0 flex-1 overflow-y-auto">
+                            {githubRateLimit.error && (
+                                <p className="text-xs text-destructive">
+                                    {githubRateLimit.error}
+                                </p>
+                            )}
 
-                        <FieldSet>
-                            <FieldLegend>{t('settings.groups.updates')}</FieldLegend>
+                            {!githubRateLimit.data && githubRateLimit.loading && (
+                                <div className="flex flex-col gap-3">
+                                    <Skeleton className="h-2 w-full" />
+                                    <Skeleton className="h-2 w-full" />
+                                </div>
+                            )}
+
+                            {rateLimitEntries.length > 0 && (
+                                <div className="flex flex-col">
+                                    {rateLimitEntries.map((entry, i) => (
+                                        <div key={entry.sourceId ?? 'anonymous'}>
+                                            {i > 0 && <Separator className="my-4" />}
+                                            <RateLimitRow entry={entry} t={t} />
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+
+                <TabsContent value="updates" className="min-h-0">
+                    <Card className="h-full">
+                        <CardHeader>
+                            <CardTitle>{t('settings.updates.title')}</CardTitle>
+                            <CardDescription className="text-xs">
+                                {supported
+                                    ? t('settings.updates.description')
+                                    : t('settings.updater.unavailable')}
+                            </CardDescription>
+                            {supported && (
+                                <CardAction>
+                                    {updateStatus.type === 'downloaded' ? (
+                                        <Button
+                                            variant="default"
+                                            size="sm"
+                                            onClick={() =>
+                                                window.app?.updater.quitAndInstall()
+                                            }
+                                        >
+                                            {t('settings.updater.installNow')}
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            disabled={checking}
+                                            onClick={() => void handleCheckNow()}
+                                        >
+                                            <RefreshCwIcon
+                                                data-icon="inline-start"
+                                                className={cn(checking && 'animate-spin')}
+                                            />
+                                            {checking
+                                                ? t('settings.updater.checking')
+                                                : t('settings.updater.checkNow')}
+                                        </Button>
+                                    )}
+                                </CardAction>
+                            )}
+                        </CardHeader>
+                        <CardContent className="scroll-fade min-h-0 flex-1 overflow-y-auto">
                             <FieldGroup>
                                 <Field orientation="responsive">
                                     <FieldContent>
-                                        <FieldTitle>{t('settings.updater.currentVersion')}</FieldTitle>
-                                        <FieldDescription>
-                                            {supported
-                                                ? t('settings.updater.description')
-                                                : t('settings.updater.unavailable')}
-                                        </FieldDescription>
+                                        <FieldTitle>
+                                            {t('settings.updater.currentVersion')}
+                                        </FieldTitle>
                                     </FieldContent>
                                     <Badge variant="outline" className="font-mono shrink-0">
                                         v{__APP_VERSION__}
@@ -267,36 +330,18 @@ export function SettingsPage() {
                                 {supported && (
                                     <Field orientation="responsive">
                                         <FieldContent>
-                                            <FieldTitle>{t('settings.updater.statusLabel')}</FieldTitle>
+                                            <FieldTitle>
+                                                {t('settings.updater.statusLabel')}
+                                            </FieldTitle>
                                             <FieldDescription>{statusText}</FieldDescription>
                                         </FieldContent>
-                                        {updateStatus.type === 'downloaded' ? (
-                                            <Button
-                                                variant="default"
-                                                size="sm"
-                                                onClick={() => window.app?.updater.quitAndInstall()}
-                                            >
-                                                {t('settings.updater.installNow')}
-                                            </Button>
-                                        ) : (
-                                            <Button
-                                                variant="outline"
-                                                size="sm"
-                                                disabled={checking}
-                                                onClick={() => void handleCheckNow()}
-                                            >
-                                                {checking
-                                                    ? t('settings.updater.checking')
-                                                    : t('settings.updater.checkNow')}
-                                            </Button>
-                                        )}
                                     </Field>
                                 )}
                             </FieldGroup>
-                        </FieldSet>
-                    </FieldGroup>
-                </CardContent>
-            </Card>
+                        </CardContent>
+                    </Card>
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }

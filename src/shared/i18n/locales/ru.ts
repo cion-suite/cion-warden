@@ -195,13 +195,26 @@ export const ru = {
                 github: 'GitHub API',
                 updates: 'Обновления',
             },
+            tabs: {
+                appearance: 'Внешний вид',
+                github: 'GitHub',
+                updates: 'Обновления',
+            },
+            appearance: {
+                title: 'Внешний вид',
+                description: 'Тема и язык интерфейса.',
+            },
+            updates: {
+                title: 'Обновления',
+                description: 'Автопроверка раз в час и при запуске.',
+            },
             theme: {
                 label: 'Тема',
-                description: 'Как отрисовывается интерфейс. Системная следит за ОС.',
+                description: 'Как отрисовывается интерфейс.',
             },
             locale: {
                 label: 'Язык',
-                description: 'Переключение языка интерфейса.',
+                description: 'Язык интерфейса.',
             },
             github: {
                 title: 'Лимит запросов',

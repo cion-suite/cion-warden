@@ -195,13 +195,26 @@ export const en = {
                 github: 'GitHub API',
                 updates: 'Updates',
             },
+            tabs: {
+                appearance: 'Appearance',
+                github: 'GitHub',
+                updates: 'Updates',
+            },
+            appearance: {
+                title: 'Appearance',
+                description: 'Theme and interface language.',
+            },
+            updates: {
+                title: 'Updates',
+                description: 'Auto-check runs hourly and at startup.',
+            },
             theme: {
                 label: 'Theme',
-                description: 'Choose how the UI renders. System follows the OS preference.',
+                description: 'How the UI renders.',
             },
             locale: {
                 label: 'Language',
-                description: 'Switch the interface language.',
+                description: 'Interface language.',
             },
             github: {
                 title: 'Rate limit',
