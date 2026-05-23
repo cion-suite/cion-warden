@@ -1,8 +1,7 @@
 import { useRef, useState } from 'react';
-import { Download, FolderOpen, KeyRound, MoreHorizontal, Trash2 } from 'lucide-react';
+import { Download, FolderOpen, KeyRound, MoreHorizontal, RefreshCw, Trash2 } from 'lucide-react';
 
 import { useT } from '@/shared/i18n';
-import { Badge } from '@/shared/ui/shadcn/badge';
 import { Button } from '@/shared/ui/shadcn/button';
 import { Card, CardContent } from '@/shared/ui/shadcn/card';
 import {
@@ -52,7 +51,7 @@ export function BindsCard({
         <>
             <Card
                 className={
-                    'group relative flex flex-col gap-2 p-4 transition-colors ' +
+                    'group relative flex flex-col gap-1 p-3 transition-colors ' +
                     (isInteractive ? 'cursor-pointer hover:bg-accent/40' : '')
                 }
                 onClick={() => {
@@ -63,13 +62,13 @@ export function BindsCard({
                     if (isInteractive) onOpen(preset);
                 }}
             >
-                <CardContent className="flex flex-col gap-2 p-0">
+                <CardContent className="flex flex-col gap-1 p-0">
                     <div className="flex items-start justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-2">
                             <KeyRound className="size-4 shrink-0 text-muted-foreground" />
                             <p className="truncate text-sm font-semibold">{preset.name}</p>
                         </div>
-                        {preset.isDownloaded && (
+                        {preset.isDownloaded ? (
                             <DropdownMenu
                                 onOpenChange={(open) => {
                                     if (!open) suppressClickRef.current = true;
@@ -80,14 +79,30 @@ export function BindsCard({
                                         variant="ghost"
                                         size="icon-sm"
                                         onClick={(e) => e.stopPropagation()}
+                                        title={
+                                            preset.hasUpdate ? t('binds.update') : undefined
+                                        }
+                                        className="relative"
                                     >
                                         <MoreHorizontal />
+                                        {preset.hasUpdate && (
+                                            <span className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-destructive" />
+                                        )}
                                     </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
                                     align="end"
                                     onClick={(e) => e.stopPropagation()}
                                 >
+                                    {preset.hasUpdate && (
+                                        <DropdownMenuItem
+                                            onClick={() => onDownload(preset)}
+                                            disabled={busy}
+                                        >
+                                            <RefreshCw data-icon="inline-start" />
+                                            {t('binds.update')}
+                                        </DropdownMenuItem>
+                                    )}
                                     <DropdownMenuItem onClick={() => onOpenLocal(preset)}>
                                         <FolderOpen data-icon="inline-start" />
                                         {t('binds.openLocal')}
@@ -101,45 +116,23 @@ export function BindsCard({
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>
                             </DropdownMenu>
+                        ) : (
+                            <Button
+                                variant="default"
+                                size="icon-sm"
+                                disabled={busy}
+                                title={t('binds.download')}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onDownload(preset);
+                                }}
+                            >
+                                <Download />
+                            </Button>
                         )}
                     </div>
 
                     <p className="truncate text-xs text-muted-foreground">{preset.sourceName}</p>
-
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                        {preset.hasUpdate && (
-                            <Badge variant="destructive" className="text-xs">
-                                {t('getScripts.updateAvailable')}
-                            </Badge>
-                        )}
-                        <div className="flex-1" />
-                        {!preset.isDownloaded ? (
-                            <Button
-                                size="sm"
-                                disabled={busy}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDownload(preset);
-                                }}
-                            >
-                                <Download data-icon="inline-start" />
-                                {t('binds.download')}
-                            </Button>
-                        ) : preset.hasUpdate ? (
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                disabled={busy}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    onDownload(preset);
-                                }}
-                            >
-                                <Download data-icon="inline-start" />
-                                {t('binds.update')}
-                            </Button>
-                        ) : null}
-                    </div>
                 </CardContent>
             </Card>
 

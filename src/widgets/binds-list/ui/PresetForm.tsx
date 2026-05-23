@@ -42,7 +42,7 @@ function NumberInput({
     return (
         <Input
             type="number"
-            className="h-8 w-24 text-right"
+            className="h-8 w-27 text-right"
             value={draft}
             onChange={(e) => {
                 const raw = e.target.value;
@@ -166,7 +166,7 @@ export function PresetForm({
                 {hasAnyField && (
                     <>
                         <Separator />
-                        <CardFooter className="px-5 py-3">
+                        <CardFooter className="px-5 py-2.5">
                             <Button
                                 variant="ghost"
                                 size="sm"

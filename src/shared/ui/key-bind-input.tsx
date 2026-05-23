@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Eraser, Keyboard } from 'lucide-react';
 
 import { cn } from '@/shared/lib/utils';
@@ -120,7 +120,7 @@ export function KeyBindInput({ value, onChange, className }: KeyBindInputProps) 
                     onPointerDown={handlePointerDown}
                     onBlur={handleBlur}
                     className={cn(
-                        'h-8 w-24 cursor-pointer text-center font-mono text-sm',
+                        'h-8 w-27 cursor-pointer text-center font-mono text-sm',
                         listening && 'border-red-500 text-red-500 focus-visible:ring-red-500/30',
                         className,
                     )}
