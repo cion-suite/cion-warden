@@ -20,20 +20,29 @@ Main process и инфраструктура: IPC handlers, окна, preload AP
 
 | Файл | Назначение |
 |------|-----------|
-| `app/main.ts` | Entry, `requestSingleInstance`, `bootServices`, `registerHandlers`, `createWindow`, `setupAutoUpdater` |
+| `app/main.ts` | Entry, `requestSingleInstance`, `bootServices`, `register<Domain>Handlers`, `openSplashWindow`/`openMainWindow`, `createAutoUpdater` |
+| `app/config.ts` | Константы приложения (`APP_ID`, `PRODUCT_NAME`) |
 | `app/preload.ts` | `contextBridge.exposeInMainWorld` + `exposeAppEventsBridge` (из `@cion-suite/core/ipc/preload`) |
-| `app/services/boot.ts` | Composition root: Logger / SecureStorage / SettingsStore / CrashReporter через `@cion-suite/core` |
-| `app/services/updater.ts` | electron-updater orchestration (dual-channel latest/beta + IPC + appEvents) |
+| `app/services/boot.ts` | Composition root: Logger / SecureStorage / SettingsStore / CrashReporter / SourceTokens через `@cion-suite/core` |
+| `app/services/settings-schema.ts` | Zod-схема настроек приложения |
+| `app/services/updater.ts` | electron-updater orchestration: `createAutoUpdater({ logger })` + IPC + appEvents |
+| `app/services/github-rate-limit.ts` | Rate-limit state для GitHub API запросов |
+| `app/windows/main-window.ts` | `openMainWindow` / `focusMainWindow` через `@cion-suite/core/window` |
+| `app/windows/splash-window.ts` | `openSplashWindow` / `updateSplash` / `closeSplashWindow` |
+| `app/handlers/system.ts` | IPC handlers: `system:renderer-ready`, `errors:report` |
 | `app/handlers/binds.ts` | IPC handlers: keybindings (CRUD + persist) |
 | `app/handlers/get-scripts.ts` | IPC handlers: remote-script discovery / scan |
 | `app/handlers/libs.ts` | IPC handlers: libraries install / list / remove |
 | `app/handlers/scripts.ts` | IPC handlers: local scripts CRUD / run |
 | `app/handlers/sources.ts` | IPC handlers: remote sources registry |
 | `app/handlers/vault.ts` | IPC handlers: vault sync orchestration |
+| `app/handlers/github.ts` | IPC handlers: GitHub API через `app/utils/github-api.ts` |
 | `app/services/vault-sync.ts` / `vault-download.ts` / `vault-manifest.ts` / `vault-paths.ts` | Vault sync pipeline |
 | `app/services/script-watcher.ts` | fs watch + appEvents emit для локальных скриптов |
 | `app/services/sources-store.ts` / `source-tokens.ts` | Persistent sources registry + secure token storage |
+| `app/utils/paths.ts` | Resolve путей к ресурсам (`getIconPath`, …) после electron-vite build |
 | `app/utils/github-api.ts` / `github-url.ts` / `mask-pat.ts` | GitHub REST helpers + URL parser + PAT masking |
+| `app/utils/shell-safety.ts` / `ipc-args.ts` / `json-file.ts` | shell quoting, IPC arg-валидация, JSON file IO |
 
 ## Правила
 
@@ -82,26 +91,35 @@ declare module '@cion-suite/core/ipc' {
 
 **Никогда** `win.webContents.send()` руками.
 
-### 3. Окна — через `@cion-suite/core/window`
+### 3. Окна — через `@cion-suite/core/window`, инкапсуляция в `app/windows/`
+
+Каждое окно живёт в отдельном модуле под `app/windows/<name>-window.ts` и экспортирует `open<Name>Window()` (плюс helpers вроде `focus<Name>Window` / `update<Name>` / `close<Name>Window`). `app/main.ts` дёргает только эти exports — не вызывает `createWindow` напрямую.
 
 ```ts
-import { createWindow, requestSingleInstance } from '@cion-suite/core/window';
+// app/windows/main-window.ts
+import { createWindow } from '@cion-suite/core/window';
+import { getIconPath } from '../utils/paths.js';
+import { closeSplashWindow } from './splash-window.js';
 
-const { isPrimary } = requestSingleInstance({ onSecondInstance: () => {} });
-if (!isPrimary) return;
+let mainWindow: BrowserWindow | null = null;
 
-await createWindow({
-  width: 1100,
-  height: 520,
-  preload: join(__dirname, '../preload/index.js'),
-  url: process.env.ELECTRON_RENDERER_URL,
-  filePath: !process.env.ELECTRON_RENDERER_URL
-    ? join(__dirname, '../renderer/index.html')
-    : undefined,
-});
+export async function openMainWindow(): Promise<BrowserWindow> {
+  mainWindow = await createWindow({
+    width: 900,
+    height: 450,
+    icon: getIconPath(),
+    preload: join(__dirname, '../preload/index.js'),
+    url: process.env.ELECTRON_RENDERER_URL,
+    filePath: process.env.ELECTRON_RENDERER_URL
+      ? undefined
+      : join(__dirname, '../renderer/index.html'),
+    onReady: () => closeSplashWindow(),
+  });
+  return mainWindow;
+}
 ```
 
-Дефолты `createWindow`: `show: false` + `ready-to-show` + `backgroundColor`. Не дублируй вручную.
+`requestSingleInstance({ onSecondInstance: focusMainWindow })` вызывается в `app/main.ts`. Дефолты `createWindow`: `show: false` + `ready-to-show` + `backgroundColor`. Не дублируй вручную. Пути к ресурсам — через `app/utils/paths.ts`.
 
 ### 4. Credentials — `@cion-suite/core/storage`
 
@@ -141,7 +159,7 @@ const settings = createSettingsStore({
 
 ### 6. Updater
 
-`app/services/updater.ts` уже даёт `setupAutoUpdater({ feed, logger?, checkInterval?, initialDelay? })`. Dual-channel switch через `electron-store`. IPC handlers + appEvents уже зарегистрированы — не дублируй.
+`app/services/updater.ts` экспортирует `createAutoUpdater({ logger })`. Feed берётся из `electron-builder.json` (`publish`). Контроллер регистрирует IPC handlers (`updater:check-for-updates`, `updater:quit-and-install`) и appEvents (`updater:available`, `updater:downloaded`, `updater:progress`, `updater:error`, `updater:not-available`). Возвращает `AutoUpdaterController` с `dispose()` + `installPendingUpdate()` для `before-quit`. Не дублируй регистрацию.
 
 ### 7. KISS
 
@@ -153,17 +171,19 @@ const settings = createSettingsStore({
 
 ### Добавить IPC-канал
 
-1. Handler в `registerHandlers({ ... })` (в `app/main.ts` или отдельный модуль).
-2. Валидация `== null` / `typeof !== 'X'`. `throw` на ошибки.
-3. Preload — `window.<api> = { method: () => ipcRenderer.invoke('channel', ...) }`. Имя совпадает.
-4. Write-op → `appEvents.emit(...)` после успеха.
-5. Новое событие → augmentation `BaseAppEventMap` в `shared/types/app-events.ts` (cross-process).
+1. Handler в отдельном модуле `app/handlers/<domain>.ts`, экспорт `register<Domain>Handlers(services)` оборачивает `registerHandlers({ ... })`.
+2. Вызов `register<Domain>Handlers(services)` в `app/main.ts` после `bootServices`.
+3. Валидация `== null` / `typeof !== 'X'`. `throw` на ошибки.
+4. Preload — `window.<api> = { method: () => ipcRenderer.invoke('channel', ...) }`. Имя совпадает.
+5. Write-op → `appEvents.emit(...)` после успеха.
+6. Новое событие → augmentation `BaseAppEventMap` в `shared/types/app-events.ts` (cross-process).
 
 ### Добавить окно
 
-1. `createWindow(opts)` из `@cion-suite/core/window`.
-2. Если secondary — отдельный preload или общий с фильтром.
-3. Cleanup listeners / `appEvents`-отписки на `closed`.
+1. Новый модуль `app/windows/<name>-window.ts`, экспорт `open<Name>Window()` (+ helpers).
+2. Внутри — `createWindow(opts)` из `@cion-suite/core/window`. Пути к ресурсам — `app/utils/paths.ts`.
+3. Если secondary — отдельный preload или общий с фильтром.
+4. Cleanup listeners / `appEvents`-отписки на `closed`.
 
 ## Запреты
 
