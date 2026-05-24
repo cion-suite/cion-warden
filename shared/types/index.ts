@@ -22,3 +22,9 @@ export type {
     GithubRateLimitResource,
     GithubRateLimitResult,
 } from './github.js';
+export type {
+    FontsSidecar,
+    FontsSidecarEntry,
+    InstalledFont,
+    FontInstallSummary,
+} from './assets.js';

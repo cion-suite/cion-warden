@@ -3,6 +3,7 @@ import type { VaultSource } from '@shared/types/vault.js';
 import type { NewSource } from '../types/sources.js';
 import type { AppServices } from '../types/services.js';
 import { listSources, addSource, removeSource, updateSource } from '../services/sources-store.js';
+import { uninstallSourceFonts } from '../services/font-install.js';
 import { requireString } from '../utils/ipc-args.js';
 import { parseGithubUrl } from '@shared/utils/github-url.js';
 import { probeRepo } from '../utils/github-api.js';
@@ -67,6 +68,14 @@ export function registerSourceHandlers(services: AppServices): void {
             // in the keychain if removeSource succeeded and removeToken threw.
             if (await sourceTokens.hasToken(id)) {
                 await sourceTokens.removeToken(id);
+            }
+            // Font uninstall is best-effort: a disk error mid-uninstall must
+            // not prevent the source from being removed, otherwise the row
+            // stays with its token already wiped (split-brain on retry).
+            try {
+                await uninstallSourceFonts(id, { logger });
+            } catch (err) {
+                logger.warn('uninstallSourceFonts failed during source remove', { id, err });
             }
             await removeSource(id, logger);
         },

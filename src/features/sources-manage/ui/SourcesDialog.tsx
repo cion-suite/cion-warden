@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Lock, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Lock, Pencil, Plus, Trash2, Type } from 'lucide-react';
 
 import { useT } from '@/shared/i18n';
 import { toast } from '@/shared/lib/toast';
@@ -208,6 +208,7 @@ function GitSettings({
     const [tokenLocked, setTokenLocked] = useState(source.hasToken ?? false);
     const [mask, setMask] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
+    const [reinstallingFonts, setReinstallingFonts] = useState(false);
 
     useEffect(() => {
         if (source.hasToken) {
@@ -239,6 +240,23 @@ function GitSettings({
         }
     };
 
+    const handleReinstallFonts = async () => {
+        setReinstallingFonts(true);
+        try {
+            const r = await window.app?.fonts.installSource(source.id);
+            if (!r) return;
+            if (r.failed > 0) {
+                toast.error(t('sources.reinstallFontsWithFails', { ok: r.ok, failed: r.failed }));
+            } else {
+                toast.success(t('sources.reinstallFontsDone', { ok: r.ok, skipped: r.skipped }));
+            }
+        } catch {
+            toast.error(t('sources.reinstallFontsError'));
+        } finally {
+            setReinstallingFonts(false);
+        }
+    };
+
     return (
         <div className="flex h-full flex-col">
             <div className="border-b px-3 py-2.5">
@@ -264,7 +282,16 @@ function GitSettings({
                 />
             </div>
 
-            <div className="border-t px-3 py-2">
+            <div className="flex items-center justify-between gap-2 border-t px-3 py-2">
+                <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={reinstallingFonts}
+                    onClick={() => void handleReinstallFonts()}
+                >
+                    <Type data-icon="inline-start" />
+                    {t('sources.reinstallFonts')}
+                </Button>
                 <Button
                     size="sm"
                     disabled={saving || !url.trim()}

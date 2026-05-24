@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import type { RemoteScriptMeta } from '@shared/types/get-scripts.js';
 import type { LibKind, RemoteLibFileEntry, RemoteLibraryMeta } from '@shared/types/libs.js';
 import type { RemotePresetMeta } from '@shared/types/binds.js';
+import type { FontsSidecar, FontsSidecarEntry } from '@shared/types/assets.js';
 import type { VaultSource } from '@shared/types/vault.js';
 import { encodeBranchRef, encodeRepoPath } from '../utils/github-api.js';
 import { parseGithubUrl } from '@shared/utils/github-url.js';
@@ -14,8 +15,14 @@ export const SCRIPTS_DIR = 'scripts';
 export const SCRIPTS_CFG_DIR = 'cfg';
 export const LIB_DIR = 'lib';
 export const PRESETS_DIR = 'presets';
+export const ASSETS_DIR = 'assets';
+export const ASSETS_FONTS_DIR = 'assets/fonts';
+export const FONTS_SIDECAR_NAME = '_fonts.json';
+export const FONTS_SIDECAR_PATH = `${ASSETS_FONTS_DIR}/${FONTS_SIDECAR_NAME}`;
 
-export const MANIFEST_VERSION = 3;
+export const MANIFEST_VERSION = 4;
+
+const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc', '.fon']);
 
 export interface ManifestScriptEntry {
     fileName: string;
@@ -44,6 +51,14 @@ export interface ManifestPresetEntry {
     downloadUrl: string | null;
 }
 
+export interface ManifestFontEntry {
+    fileName: string;
+    face: string;
+    sha: string;
+    downloadUrl: string | null;
+    skip?: boolean;
+}
+
 export interface ManifestFile {
     version: number;
     etag: string | null;
@@ -55,6 +70,7 @@ export interface ManifestFile {
     cfgs: ManifestCfgEntry[];
     libs: ManifestLibEntry[];
     presets: ManifestPresetEntry[];
+    fonts: ManifestFontEntry[];
 }
 
 interface LocalCacheEntry {
@@ -129,6 +145,7 @@ function normalizeManifest(raw: Partial<ManifestFile> & { scripts?: ManifestScri
         // unconditionally, so normalize per entry to avoid TypeError.
         libs: Array.isArray(raw.libs) ? raw.libs.map(normalizeLib) : [],
         presets: raw.presets ?? [],
+        fonts: Array.isArray(raw.fonts) ? raw.fonts : [],
     };
 }
 
@@ -184,6 +201,90 @@ export function libId(sourceId: string, name: string): string {
 
 export function presetId(sourceId: string, fileName: string): string {
     return `${sourceId}:preset:${fileName}`;
+}
+
+export function fontId(sourceId: string, fileName: string): string {
+    return `${sourceId}:font:${fileName}`;
+}
+
+function deriveFallbackFace(fileName: string): string {
+    return stripExt(fileName).replace(/[-_]+/g, ' ').trim();
+}
+
+export function deriveFontsFromTree(
+    treeEntries: Array<{ path: string; type: string; sha: string }>,
+    sidecar: FontsSidecar | null,
+    repoUrl?: string,
+    branch?: string,
+): ManifestFontEntry[] {
+    const prefix = `${ASSETS_FONTS_DIR}/`;
+    const sidecarMap = new Map<string, FontsSidecarEntry>();
+    if (sidecar?.fonts) {
+        for (const entry of sidecar.fonts) {
+            if (!entry || typeof entry.file !== 'string') continue;
+            sidecarMap.set(entry.file.toLowerCase(), entry);
+        }
+    }
+    const fonts: ManifestFontEntry[] = [];
+    for (const entry of treeEntries) {
+        if (entry.type !== 'blob') continue;
+        if (!entry.path.startsWith(prefix)) continue;
+        const rel = entry.path.slice(prefix.length);
+        if (!rel || rel.includes('/')) continue;
+        if (rel === FONTS_SIDECAR_NAME) continue;
+        if (!isSafeManifestFileName(rel)) continue;
+        const ext = path.extname(rel).toLowerCase();
+        if (!FONT_EXTENSIONS.has(ext)) continue;
+        const sidecarEntry = sidecarMap.get(rel.toLowerCase());
+        const face = sidecarEntry?.face ?? deriveFallbackFace(rel);
+        fonts.push({
+            fileName: rel,
+            face,
+            sha: entry.sha,
+            downloadUrl: rawUrl(repoUrl, branch, entry.path),
+            // .fon (bitmap) cannot be installed via per-user font dir; flag so
+            // install service ignores it without losing the manifest entry.
+            skip: sidecarEntry?.skip === true || ext === '.fon' ? true : undefined,
+        });
+    }
+    fonts.sort((a, b) => (a.fileName < b.fileName ? -1 : a.fileName > b.fileName ? 1 : 0));
+    return fonts;
+}
+
+// Sidecar JSON is checked into the upstream repo and reaches `reg.exe` argv via
+// the install pipeline. Treat it as untrusted: drop entries with unsafe file
+// names (would break out of LOCALAPPDATA\...\Fonts) or face names containing
+// chars reg.exe / PowerShell heredoc cannot quote safely.
+const UNSAFE_FACE_CHARS = /[\\/:*?"<>|\r\n\t\0]/;
+
+function sanitizeSidecarEntry(raw: unknown): FontsSidecarEntry | null {
+    if (!raw || typeof raw !== 'object') return null;
+    const r = raw as Record<string, unknown>;
+    if (typeof r.file !== 'string' || !isSafeManifestFileName(r.file)) return null;
+    let face: string | undefined;
+    if (r.face != null) {
+        if (typeof r.face !== 'string') return null;
+        if (UNSAFE_FACE_CHARS.test(r.face)) return null;
+        face = r.face.trim() || undefined;
+    }
+    const skip = r.skip === true ? true : undefined;
+    return { file: r.file, face, skip };
+}
+
+export function parseFontsSidecar(buf: Buffer | null): FontsSidecar | null {
+    if (!buf) return null;
+    try {
+        const parsed = JSON.parse(buf.toString('utf-8')) as Partial<FontsSidecar>;
+        if (!parsed || !Array.isArray(parsed.fonts)) return null;
+        const fonts: FontsSidecarEntry[] = [];
+        for (const raw of parsed.fonts) {
+            const entry = sanitizeSidecarEntry(raw);
+            if (entry) fonts.push(entry);
+        }
+        return { fonts };
+    } catch {
+        return null;
+    }
 }
 
 export interface ManifestToMetasResult {

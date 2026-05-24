@@ -70,6 +70,11 @@ const bridge: AppBridge = {
     github: {
         getRateLimit: () => ipcRenderer.invoke('github:rate-limit'),
     },
+    fonts: {
+        installSource: (sourceId) => ipcRenderer.invoke('fonts:install-source', sourceId),
+        uninstallSource: (sourceId) => ipcRenderer.invoke('fonts:uninstall-source', sourceId),
+        listInstalled: () => ipcRenderer.invoke('fonts:list-installed'),
+    },
 };
 
 contextBridge.exposeInMainWorld('app', bridge);

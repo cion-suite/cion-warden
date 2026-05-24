@@ -198,6 +198,10 @@ export const ru = {
             tokenNoAccess: 'Токен не даёт доступ к этому репозиторию',
             tokenSaved: 'Токен сохранён',
             tokenSaveError: 'Не удалось сохранить токен',
+            reinstallFonts: 'Переустановить шрифты',
+            reinstallFontsDone: 'Установлено: {{ok}}, пропущено: {{skipped}}',
+            reinstallFontsWithFails: 'Установлено: {{ok}}, ошибок: {{failed}}',
+            reinstallFontsError: 'Не удалось установить шрифты',
         },
         settings: {
             groups: {

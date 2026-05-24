@@ -6,6 +6,7 @@ import type { RemoteLibraryMeta } from './libs.js';
 import type { PresetSchema, PresetValues, RemotePresetMeta } from './binds.js';
 import type { VaultSyncResult, VaultSourceListResult } from './vault-sync.js';
 import type { GithubRateLimitResult } from './github.js';
+import type { FontInstallSummary, InstalledFont } from './assets.js';
 
 export type UpdaterIpcResult =
     | { ok: true }
@@ -85,5 +86,10 @@ export interface AppBridge {
     };
     github: {
         getRateLimit: () => Promise<GithubRateLimitResult>;
+    };
+    fonts: {
+        installSource: (sourceId: string) => Promise<FontInstallSummary>;
+        uninstallSource: (sourceId: string) => Promise<void>;
+        listInstalled: () => Promise<InstalledFont[]>;
     };
 }

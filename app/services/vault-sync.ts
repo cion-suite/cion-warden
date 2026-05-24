@@ -7,15 +7,20 @@ import { listSources } from './sources-store.js';
 import { fetchTree, mapGithubError, type RateLimitInfo } from '../utils/github-api.js';
 import { parseGithubUrl } from '@shared/utils/github-url.js';
 import {
+    FONTS_SIDECAR_PATH,
     MANIFEST_VERSION,
+    deriveFontsFromTree,
     deriveLibsFromTree,
     derivePresetsFromTree,
     deriveScriptsFromTree,
     manifestToMetas,
+    parseFontsSidecar,
     readManifest,
     writeManifest,
     type ManifestFile,
 } from './vault-manifest.js';
+import { fetchFileContent } from './vault-download.js';
+import { installSourceFonts } from './font-install.js';
 
 const SLIDING_TTL_MS = 30_000;
 
@@ -92,6 +97,12 @@ async function doSync(
         }
         const updated: ManifestFile = { ...existing, lastCheckedAt: now };
         await writeManifest(vaultBase, source.id, updated);
+        // Self-heal even on 304: a font may have been deleted from the user's
+        // font dir between syncs, and waiting for the next non-304 sync to
+        // reinstall would surprise the user.
+        void installSourceFonts(source, { vaultBase, tokens, logger }).catch((err) =>
+            logger.warn('post-sync font install failed (304)', { sourceId: source.id, err }),
+        );
         const built = await buildCachedResult(source, updated, vaultBase, true);
         emitSynced(source.id, updated.lastSyncedAt, true);
         return built;
@@ -107,6 +118,37 @@ async function doSync(
     const libs = deriveLibsFromTree(tree.tree, source.url, branch);
     const presets = derivePresetsFromTree(tree.tree, source.url, branch);
 
+    // Sidecar drives face-name resolution. Only fetch when a blob exists in
+    // the tree; otherwise the install service falls back to a normalized
+    // filename for the face.
+    const hasSidecar = tree.tree.some(
+        (e) => e.type === 'blob' && e.path === FONTS_SIDECAR_PATH,
+    );
+    let sidecarBuf: Buffer | null = null;
+    if (hasSidecar) {
+        try {
+            sidecarBuf = await fetchFileContent(
+                source,
+                parsed.owner,
+                parsed.repo,
+                branch,
+                FONTS_SIDECAR_PATH,
+                tokens,
+            );
+        } catch (err) {
+            logger.warn('vault-sync: fonts sidecar fetch failed', {
+                sourceId: source.id,
+                err,
+            });
+        }
+    }
+    const fonts = deriveFontsFromTree(
+        tree.tree,
+        parseFontsSidecar(sidecarBuf),
+        source.url,
+        branch,
+    );
+
     const manifest: ManifestFile = {
         version: MANIFEST_VERSION,
         etag: result.etag,
@@ -118,8 +160,16 @@ async function doSync(
         cfgs,
         libs,
         presets,
+        fonts,
     };
     await writeManifest(vaultBase, source.id, manifest);
+
+    // Fire-and-forget — sync should not block on font install. Install is
+    // idempotent (sha+file-existence check), so calling it on every sync is
+    // cheap when nothing changed.
+    void installSourceFonts(source, { vaultBase, tokens, logger }).catch((err) =>
+        logger.warn('post-sync font install failed', { sourceId: source.id, err }),
+    );
 
     const built: VaultSyncResult = {
         ...(await buildCachedResult(source, manifest, vaultBase, false)),

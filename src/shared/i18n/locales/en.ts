@@ -198,6 +198,10 @@ export const en = {
             tokenNoAccess: 'Token does not grant access to this repository',
             tokenSaved: 'Token saved',
             tokenSaveError: 'Failed to save token',
+            reinstallFonts: 'Reinstall fonts',
+            reinstallFontsDone: '{{ok}} installed, {{skipped}} skipped',
+            reinstallFontsWithFails: '{{ok}} installed, {{failed}} failed',
+            reinstallFontsError: 'Failed to install fonts',
         },
         settings: {
             groups: {

@@ -14,9 +14,11 @@ import { registerLibHandlers } from './handlers/libs.js';
 import { registerBindHandlers } from './handlers/binds.js';
 import { registerVaultHandlers } from './handlers/vault.js';
 import { registerGithubHandlers } from './handlers/github.js';
+import { registerFontHandlers } from './handlers/fonts.js';
 import { getGlobalVaultPath, ensureGlobalVault } from './services/vault-paths.js';
 import { ensureDefaultSourceSeeded } from './services/sources-store.js';
 import { createScriptWatcher, type ScriptWatcher } from './services/script-watcher.js';
+import { installAllSourcesFonts } from './services/font-install.js';
 import type { AppServices } from './types/services.js';
 import type { AutoUpdaterController } from './types/updater.js';
 
@@ -63,8 +65,17 @@ async function bootstrap(): Promise<void> {
         registerBindHandlers(services);
         registerVaultHandlers(services);
         registerGithubHandlers(services);
+        registerFontHandlers(services, globalVaultPath);
         scriptWatcher = createScriptWatcher();
         scriptWatcher.start(globalVaultPath);
+
+        // Startup: verify installed fonts against persisted manifests, install
+        // any missing ones. Backgrounded so it doesn't block window opening.
+        void installAllSourcesFonts({
+            vaultBase: globalVaultPath,
+            tokens: services.sourceTokens,
+            logger: services.logger,
+        }).catch((err) => services.logger.warn('startup font install failed', { err }));
 
         updateSplash(70, 'Configuring updater');
         updater = createAutoUpdater({
