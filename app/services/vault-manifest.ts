@@ -6,7 +6,7 @@ import type { LibKind, RemoteLibFileEntry, RemoteLibraryMeta } from '@shared/typ
 import type { RemotePresetMeta } from '@shared/types/binds.js';
 import type { VaultSource } from '@shared/types/vault.js';
 import { encodeBranchRef, encodeRepoPath } from '../utils/github-api.js';
-import { parseGithubUrl } from '../utils/github-url.js';
+import { parseGithubUrl } from '@shared/utils/github-url.js';
 import { atomicWriteFile } from '../utils/json-file.js';
 import { isSafeManifestFileName } from '../utils/shell-safety.js';
 

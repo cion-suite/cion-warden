@@ -1,5 +1,4 @@
 import type { Logger } from '@cion-suite/core/log';
-import type { GitVaultSource } from '@shared/types/vault.js';
 import type {
     GithubRateLimitEntry,
     GithubRateLimitResource,
@@ -66,12 +65,11 @@ export interface RateLimitDeps {
 
 export async function getGithubRateLimits(deps: RateLimitDeps): Promise<GithubRateLimitResult> {
     const sources = await listSources(deps.logger);
-    const gitSources = sources.filter((s): s is GitVaultSource => s.type === 'git');
 
     // /rate_limit itself does not consume quota (per GitHub docs), so probe
     // every saved token in parallel + one anonymous request.
     const probes = await Promise.all(
-        gitSources.map(async (src) => {
+        sources.map(async (src) => {
             const token = await deps.tokens.getToken(src.id);
             if (!token) return null;
             return fetchOne(src.id, src.name || src.url, token);

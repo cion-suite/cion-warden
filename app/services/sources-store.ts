@@ -3,8 +3,8 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { app } from 'electron';
 import type { Logger } from '@cion-suite/core/log';
-import type { GitVaultSource, VaultSource } from '@shared/types/vault.js';
-import { deriveGitName } from '../utils/github-url.js';
+import type { VaultSource } from '@shared/types/vault.js';
+import { deriveGitName } from '@shared/utils/github-url.js';
 import { atomicWriteFile } from '../utils/json-file.js';
 
 function getPath(): string {
@@ -24,12 +24,18 @@ async function read(logger?: Logger): Promise<VaultSource[]> {
         logger?.error('sources-store.read', err);
         throw err;
     }
+    let parsed: unknown;
     try {
-        return JSON.parse(raw) as VaultSource[];
+        parsed = JSON.parse(raw);
     } catch (err) {
         logger?.error('sources-store.parse', err);
         throw new Error('sources.json is corrupted');
     }
+    if (!Array.isArray(parsed)) return [];
+    // Legacy migration: external sources existed before — drop on read.
+    return parsed.filter(
+        (s): s is VaultSource => !!s && typeof s === 'object' && (s as { type?: unknown }).type === 'git',
+    );
 }
 
 async function write(sources: VaultSource[]): Promise<void> {
@@ -42,11 +48,11 @@ export async function listSources(logger?: Logger): Promise<VaultSource[]> {
 
 export async function addSource(data: Omit<VaultSource, 'id'>, logger?: Logger): Promise<VaultSource> {
     const sources = await read(logger);
-    const withName =
-        data.type === 'git'
-            ? { ...(data as Omit<GitVaultSource, 'id'>), name: deriveGitName((data as Omit<GitVaultSource, 'id'>).url) }
-            : data;
-    const source = { ...withName, id: crypto.randomUUID() } as VaultSource;
+    const source: VaultSource = {
+        ...data,
+        name: deriveGitName(data.url),
+        id: crypto.randomUUID(),
+    };
     sources.push(source);
     await write(sources);
     return source;
@@ -57,17 +63,14 @@ export async function removeSource(id: string, logger?: Logger): Promise<void> {
     await write(sources.filter((s) => s.id !== id));
 }
 
-// Strict field allowlist per source type — prevents an incoming patch from
-// flipping `type` (git→external) or injecting foreign fields that would
-// corrupt the discriminated union at consumer sites.
+// Strict field allowlist — prevents an incoming patch from flipping `type`
+// or injecting foreign fields that would corrupt the discriminated union.
 const GIT_PATCH_FIELDS = new Set(['name', 'url', 'branch', 'isPrivate']);
-const EXTERNAL_PATCH_FIELDS = new Set(['name', 'scriptsUrl', 'libsUrl', 'cfgUrl']);
 
-function sanitizePatch(type: VaultSource['type'], patch: Record<string, unknown>): Record<string, unknown> {
-    const allowed = type === 'git' ? GIT_PATCH_FIELDS : EXTERNAL_PATCH_FIELDS;
+function sanitizePatch(patch: Record<string, unknown>): Record<string, unknown> {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(patch)) {
-        if (allowed.has(k)) out[k] = v;
+        if (GIT_PATCH_FIELDS.has(k)) out[k] = v;
     }
     return out;
 }
@@ -77,13 +80,10 @@ export async function updateSource(id: string, patch: Record<string, unknown>, l
     const idx = sources.findIndex((s) => s.id === id);
     if (idx === -1) throw new Error(`Source not found: ${id}`);
     const current = sources[idx]!;
-    const safe = sanitizePatch(current.type, patch);
-    // Re-derive name when a git source URL changes
+    const safe = sanitizePatch(patch);
     const finalPatch =
-        current.type === 'git' && typeof safe.url === 'string'
-            ? { ...safe, name: deriveGitName(safe.url) }
-            : safe;
-    const updated = { ...current, ...finalPatch } as VaultSource;
+        typeof safe.url === 'string' ? { ...safe, name: deriveGitName(safe.url) } : safe;
+    const updated: VaultSource = { ...current, ...finalPatch };
     sources[idx] = updated;
     await write(sources);
     return updated;

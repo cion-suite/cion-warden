@@ -1,11 +1,11 @@
 import { appEvents } from '@cion-suite/core/ipc';
 import type { Logger } from '@cion-suite/core/log';
-import type { VaultSource, GitVaultSource } from '@shared/types/vault.js';
+import type { GitVaultSource } from '@shared/types/vault.js';
 import type { VaultSyncResult } from '@shared/types/vault-sync.js';
 import type { SourceTokens } from './source-tokens.js';
 import { listSources } from './sources-store.js';
 import { fetchTree, mapGithubError, type RateLimitInfo } from '../utils/github-api.js';
-import { parseGithubUrl } from '../utils/github-url.js';
+import { parseGithubUrl } from '@shared/utils/github-url.js';
 import {
     MANIFEST_VERSION,
     deriveLibsFromTree,
@@ -31,7 +31,7 @@ function emitSynced(sourceId: string, lastSyncedAt: number, fromCache: boolean):
 }
 
 async function buildCachedResult(
-    source: VaultSource,
+    source: GitVaultSource,
     manifest: ManifestFile,
     vaultBase: string,
     fromCache: boolean,
@@ -142,7 +142,6 @@ async function runSync(sourceId: string, deps: SyncDeps): Promise<VaultSyncResul
     const sources = await listSources(deps.logger);
     const source = sources.find((s) => s.id === sourceId);
     if (!source) throw new Error(`Source not found: ${sourceId}`);
-    if (source.type !== 'git') throw new Error('Only git sources support sync');
 
     const existing = await readManifest(deps.vaultBase, sourceId);
     const branch = source.branch || 'main';
@@ -166,7 +165,7 @@ async function runSync(sourceId: string, deps: SyncDeps): Promise<VaultSyncResul
 async function inflightKey(sourceId: string, deps: SyncDeps): Promise<string> {
     const sources = await listSources(deps.logger);
     const source = sources.find((s) => s.id === sourceId);
-    const branch = source?.type === 'git' ? source.branch || 'main' : '';
+    const branch = source?.branch || 'main';
     return `${sourceId}@${branch}`;
 }
 
@@ -185,12 +184,11 @@ export async function syncAllSources(
     deps: SyncDeps,
 ): Promise<Array<{ sourceId: string; ok: boolean; error?: string }>> {
     const sources = await listSources(deps.logger);
-    const gitSources = sources.filter((s): s is GitVaultSource => s.type === 'git');
     const results = await Promise.allSettled(
-        gitSources.map((s) => syncSource(s.id, deps).then(() => ({ sourceId: s.id, ok: true }))),
+        sources.map((s) => syncSource(s.id, deps).then(() => ({ sourceId: s.id, ok: true }))),
     );
     return results.map((r, i) => {
-        const sourceId = gitSources[i]!.id;
+        const sourceId = sources[i]!.id;
         if (r.status === 'fulfilled') return r.value;
         const message = r.reason instanceof Error ? r.reason.message : String(r.reason);
         return { sourceId, ok: false, error: message };

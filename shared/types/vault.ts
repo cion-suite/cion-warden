@@ -1,4 +1,4 @@
-export type VaultSourceType = 'git' | 'external';
+export type VaultSourceType = 'git';
 
 export interface GitVaultSource {
     id: string;
@@ -11,13 +11,4 @@ export interface GitVaultSource {
     hasToken?: boolean;
 }
 
-export interface ExternalVaultSource {
-    id: string;
-    type: 'external';
-    name: string;
-    scriptsUrl: string;
-    libsUrl: string;
-    cfgUrl: string;
-}
-
-export type VaultSource = GitVaultSource | ExternalVaultSource;
+export type VaultSource = GitVaultSource;

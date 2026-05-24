@@ -12,7 +12,7 @@ import {
     probeRepo,
     readRateLimit,
 } from '../utils/github-api.js';
-import { parseGithubUrl } from '../utils/github-url.js';
+import { parseGithubUrl } from '@shared/utils/github-url.js';
 import {
     LIB_DIR,
     PRESETS_DIR,

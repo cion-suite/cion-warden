@@ -35,9 +35,8 @@ Footer
 
 **Не вкладка** — общий `SourcesDialog` (modal), вызывается через `[🔌 Sources]` в тулбарах Get Scripts / Libraries. Источники — глобальный стейт, агрегируются обеими вкладками.
 
-### Source Types
+### Source Schema (Git Repository)
 
-**Git Repository:**
 - `url` (e.g. `https://github.com/user/repo`)
 - `branch` (default: `main`)
 - `isPrivate` toggle → Personal Access Token хранится через `@cion-suite/core/storage` (`createSecureStorage`) по `sourceId`. Никогда не персистится в JSON.
@@ -48,10 +47,6 @@ Footer
   scripts/cfg/    ← JSON-конфиги (имя совпадает со скриптом)
   lib/            ← библиотеки
   ```
-
-**External (Google Drive и т.п.):**
-- `name`
-- `scriptsUrl`, `libsUrl`, `cfgUrl` — три прямые ссылки на папки/файлы
 
 ### Dialog Layout (`SourcesDialog`)
 
@@ -67,8 +62,6 @@ Split-panel modal (`sm:max-w-2xl`, fixed `h-[min(520px,calc(100dvh-2rem))]`):
 │    GIT · 🔒  │  branch  [_____________________]     │
 │  • repo-b    │  private [○————]                     │
 │    GIT       │  token   [••••••••••••][✎]           │  (если private)
-│  • drive-c   │                                      │
-│    EXTERNAL  │                                      │
 │  ┌──────────┐│                                      │
 │  │ NEW      ││                                      │
 │  └──────────┘│                                      │
@@ -202,7 +195,7 @@ Page (`src/pages/get-scripts/index.tsx`) монтирует `<RemoteScriptList>`
 - `sources:list` — текущие источники.
 - `get-scripts:list` — последний агрегат всех источников из persisted cache.
 - `get-scripts:list-source(sourceId)` — кэш одного источника.
-- `get-scripts:sync-source(sourceId)` — pull свежего листинга (GitHub API для git, fetch URL для external) + сравнение `sha` ↔ `localSha`.
+- `get-scripts:sync-source(sourceId)` — pull свежего листинга (GitHub API) + сравнение `sha` ↔ `localSha`.
 
 ### Slices
 
@@ -440,7 +433,7 @@ export interface RemoteScriptMeta {
 
 ```ts
 // shared/types/vault.ts
-export type VaultSourceType = 'git' | 'external';
+export type VaultSourceType = 'git';
 
 export interface GitVaultSource {
     id: string;
@@ -452,16 +445,7 @@ export interface GitVaultSource {
     hasToken?: boolean; // computed at listSources, never persisted
 }
 
-export interface ExternalVaultSource {
-    id: string;
-    type: 'external';
-    name: string;
-    scriptsUrl: string;
-    libsUrl: string;
-    cfgUrl: string;
-}
-
-export type VaultSource = GitVaultSource | ExternalVaultSource;
+export type VaultSource = GitVaultSource;
 ```
 
 ```ts
@@ -589,7 +573,7 @@ src/
 ├── features/
 │   ├── script-runner/    ← useScriptRunner (run/stop/stopAll)
 │   ├── script-config/    ← ScriptConfigDialog
-│   └── sources-manage/   ← SourcesDialog (git+external, token UX)
+│   └── sources-manage/   ← SourcesDialog (git, token UX)
 │
 ├── entities/
 │   ├── script/           ← useScripts

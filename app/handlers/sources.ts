@@ -4,7 +4,7 @@ import type { NewSource } from '../types/sources.js';
 import type { AppServices } from '../types/services.js';
 import { listSources, addSource, removeSource, updateSource } from '../services/sources-store.js';
 import { requireString } from '../utils/ipc-args.js';
-import { parseGithubUrl } from '../utils/github-url.js';
+import { parseGithubUrl } from '@shared/utils/github-url.js';
 import { probeRepo } from '../utils/github-api.js';
 
 // IPC is a trust boundary. The renderer is allowed to send any JSON; we must
@@ -12,31 +12,16 @@ import { probeRepo } from '../utils/github-api.js';
 function validateNewSource(raw: unknown): NewSource {
     if (!raw || typeof raw !== 'object') throw new Error('Invalid source payload');
     const r = raw as Record<string, unknown>;
-    if (r.type === 'git') {
-        if (typeof r.url !== 'string' || r.url.length === 0) throw new Error('Invalid git url');
-        if (typeof r.branch !== 'string') throw new Error('Invalid branch');
-        return {
-            type: 'git',
-            name: typeof r.name === 'string' ? r.name : '',
-            url: r.url,
-            branch: r.branch,
-            isPrivate: r.isPrivate === true,
-        };
-    }
-    if (r.type === 'external') {
-        if (typeof r.name !== 'string') throw new Error('Invalid name');
-        if (typeof r.scriptsUrl !== 'string') throw new Error('Invalid scriptsUrl');
-        if (typeof r.libsUrl !== 'string') throw new Error('Invalid libsUrl');
-        if (typeof r.cfgUrl !== 'string') throw new Error('Invalid cfgUrl');
-        return {
-            type: 'external',
-            name: r.name,
-            scriptsUrl: r.scriptsUrl,
-            libsUrl: r.libsUrl,
-            cfgUrl: r.cfgUrl,
-        };
-    }
-    throw new Error('Unknown source type');
+    if (r.type !== 'git') throw new Error("Source type must be 'git'");
+    if (typeof r.url !== 'string' || r.url.length === 0) throw new Error('Invalid git url');
+    if (typeof r.branch !== 'string') throw new Error('Invalid branch');
+    return {
+        type: 'git',
+        name: typeof r.name === 'string' ? r.name : '',
+        url: r.url,
+        branch: r.branch,
+        isPrivate: r.isPrivate === true,
+    };
 }
 
 async function enrichWithToken(
@@ -44,11 +29,10 @@ async function enrichWithToken(
     services: AppServices,
 ): Promise<VaultSource[]> {
     return Promise.all(
-        sources.map(async (s) =>
-            s.type === 'git'
-                ? { ...s, hasToken: await services.sourceTokens.hasToken(s.id) }
-                : s,
-        ),
+        sources.map(async (s) => ({
+            ...s,
+            hasToken: await services.sourceTokens.hasToken(s.id),
+        })),
     );
 }
 
@@ -59,7 +43,6 @@ async function testToken(
     const sources = await listSources(services.logger);
     const source = sources.find((s) => s.id === id);
     if (!source) return { ok: false, status: 0, message: 'Source not found' };
-    if (source.type !== 'git') return { ok: false, status: 0, message: 'Not a git source' };
     const token = await services.sourceTokens.getToken(id);
     if (!token) return { ok: false, status: 0, message: 'No token' };
     const parsed = parseGithubUrl(source.url);

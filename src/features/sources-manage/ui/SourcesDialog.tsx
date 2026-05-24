@@ -4,7 +4,6 @@ import { Lock, Pencil, Plus, Trash2 } from 'lucide-react';
 import { useT } from '@/shared/i18n';
 import { toast } from '@/shared/lib/toast';
 import { cn } from '@/shared/lib/utils';
-import { Badge } from '@/shared/ui/shadcn/badge';
 import { Button } from '@/shared/ui/shadcn/button';
 import {
     Dialog,
@@ -18,8 +17,8 @@ import {
     InputGroupInput,
 } from '@/shared/ui/shadcn/input-group';
 import { Switch } from '@/shared/ui/shadcn/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/shared/ui/shadcn/tabs';
 import type { VaultSource } from '@shared/types/vault';
+import { deriveGitName } from '@shared/utils/github-url';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -46,8 +45,7 @@ function SourceItem({
     onDelete: () => void;
 }) {
     const t = useT();
-    const title =
-        source.type === 'git' ? (source.name.split('/').pop() ?? source.name) : source.name;
+    const title = source.name.split('/').pop() ?? source.name;
 
     return (
         <div
@@ -62,17 +60,11 @@ function SourceItem({
             <div className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-sm font-medium">{title}</span>
                 <span className="flex items-center gap-1 truncate text-xs text-muted-foreground">
-                    {source.type === 'git' ? (
-                        <>
-                            {source.isPrivate && <Lock className="size-3" />}
-                            <span>
-                                GIT
-                                {source.isPrivate ? ` · ${t('sources.private').toLowerCase()}` : ''}
-                            </span>
-                        </>
-                    ) : (
-                        <span>{t('sources.external')}</span>
-                    )}
+                    {source.isPrivate && <Lock className="size-3" />}
+                    <span>
+                        GIT
+                        {source.isPrivate ? ` · ${t('sources.private').toLowerCase()}` : ''}
+                    </span>
                 </span>
             </div>
             <Button
@@ -93,11 +85,13 @@ function SourceItem({
 function NewSourceItem({ onCancel }: { onCancel: () => void }) {
     const t = useT();
     return (
-        <div className="flex items-center gap-2 rounded-md bg-accent px-2 py-2 text-accent-foreground">
-            <Badge variant="outline" className="shrink-0 text-xs">NEW</Badge>
-            <span className="min-w-0 flex-1 truncate text-sm italic text-muted-foreground">
-                {t('sources.newSource')}
-            </span>
+        <div className="group flex items-center gap-2 rounded-md bg-accent px-2 py-1.5 text-accent-foreground">
+            <div className="flex min-w-0 flex-1 flex-col">
+                <span className="truncate text-sm font-medium italic text-muted-foreground">
+                    {t('sources.newShort')}
+                </span>
+                <span className="truncate text-xs text-muted-foreground">GIT</span>
+            </div>
             <Button
                 variant="ghost"
                 size="icon-sm"
@@ -110,7 +104,7 @@ function NewSourceItem({ onCancel }: { onCancel: () => void }) {
     );
 }
 
-// ─── Form-field blocks (shared between settings + new-source) ────────────────
+// ─── Form-field block ────────────────────────────────────────────────────────
 
 interface GitFormFieldsProps {
     url: string;
@@ -197,72 +191,13 @@ function GitFormFields({
     );
 }
 
-interface ExternalFormFieldsProps {
-    name: string;
-    onNameChange: (v: string) => void;
-    scriptsUrl: string;
-    onScriptsUrlChange: (v: string) => void;
-    libsUrl: string;
-    onLibsUrlChange: (v: string) => void;
-    cfgUrl: string;
-    onCfgUrlChange: (v: string) => void;
-    namePlaceholder?: string;
-}
-
-function ExternalFormFields({
-    name,
-    onNameChange,
-    scriptsUrl,
-    onScriptsUrlChange,
-    libsUrl,
-    onLibsUrlChange,
-    cfgUrl,
-    onCfgUrlChange,
-    namePlaceholder,
-}: ExternalFormFieldsProps) {
-    const t = useT();
-    return (
-        <>
-            <FieldRow label={t('sources.name')}>
-                <Input
-                    className="h-8"
-                    value={name}
-                    onChange={(e) => onNameChange(e.target.value)}
-                    placeholder={namePlaceholder}
-                />
-            </FieldRow>
-            <FieldRow label={t('sources.scriptsUrl')}>
-                <Input
-                    className="h-8"
-                    value={scriptsUrl}
-                    onChange={(e) => onScriptsUrlChange(e.target.value)}
-                />
-            </FieldRow>
-            <FieldRow label={t('sources.libsUrl')}>
-                <Input
-                    className="h-8"
-                    value={libsUrl}
-                    onChange={(e) => onLibsUrlChange(e.target.value)}
-                />
-            </FieldRow>
-            <FieldRow label={t('sources.cfgUrl')}>
-                <Input
-                    className="h-8"
-                    value={cfgUrl}
-                    onChange={(e) => onCfgUrlChange(e.target.value)}
-                />
-            </FieldRow>
-        </>
-    );
-}
-
 // ─── Right panel: settings for existing source ───────────────────────────────
 
 function GitSettings({
     source,
     onSaved,
 }: {
-    source: Extract<VaultSource, { type: 'git' }>;
+    source: VaultSource;
     onSaved: () => void;
 }) {
     const t = useT();
@@ -342,112 +277,39 @@ function GitSettings({
     );
 }
 
-function ExternalSettings({
-    source,
-    onSaved,
-}: {
-    source: Extract<VaultSource, { type: 'external' }>;
-    onSaved: () => void;
-}) {
-    const t = useT();
-    const [name, setName] = useState(source.name);
-    const [scriptsUrl, setScriptsUrl] = useState(source.scriptsUrl);
-    const [libsUrl, setLibsUrl] = useState(source.libsUrl);
-    const [cfgUrl, setCfgUrl] = useState(source.cfgUrl);
-    const [saving, setSaving] = useState(false);
-
-    const handleSave = async () => {
-        setSaving(true);
-        try {
-            await window.app?.sources.update(source.id, { name, scriptsUrl, libsUrl, cfgUrl });
-            onSaved();
-        } catch {
-            toast.error(t('error'));
-        } finally {
-            setSaving(false);
-        }
-    };
-
-    return (
-        <div className="flex h-full flex-col">
-            <div className="border-b px-3 py-2.5">
-                <p className="truncate text-sm font-semibold">{source.name}</p>
-            </div>
-
-            <div className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto">
-                <ExternalFormFields
-                    name={name}
-                    onNameChange={setName}
-                    scriptsUrl={scriptsUrl}
-                    onScriptsUrlChange={setScriptsUrl}
-                    libsUrl={libsUrl}
-                    onLibsUrlChange={setLibsUrl}
-                    cfgUrl={cfgUrl}
-                    onCfgUrlChange={setCfgUrl}
-                />
-            </div>
-
-            <div className="border-t px-3 py-2">
-                <Button
-                    size="sm"
-                    disabled={saving || !name.trim()}
-                    onClick={() => void handleSave()}
-                >
-                    {t('sources.save')}
-                </Button>
-            </div>
-        </div>
-    );
-}
-
 // ─── Right panel: new source form ────────────────────────────────────────────
 
 function NewSourcePanel({
+    url,
+    onUrlChange,
     onSaved,
     onCancel,
 }: {
+    url: string;
+    onUrlChange: (v: string) => void;
     onSaved: () => void;
     onCancel: () => void;
 }) {
     const t = useT();
-    const [type, setType] = useState<'git' | 'external'>('git');
-    const [url, setUrl] = useState('');
     const [branch, setBranch] = useState('main');
     const [isPrivate, setIsPrivate] = useState(false);
     const [token, setToken] = useState('');
-    const [extName, setExtName] = useState('');
-    const [scriptsUrl, setScriptsUrl] = useState('');
-    const [libsUrl, setLibsUrl] = useState('');
-    const [cfgUrl, setCfgUrl] = useState('');
     const [saving, setSaving] = useState(false);
-
-    const canSave = type === 'git' ? url.trim().length > 0 : extName.trim().length > 0;
 
     const handleSave = async () => {
         setSaving(true);
         try {
-            if (type === 'git') {
-                const data = { type: 'git' as const, name: '', url, branch, isPrivate } as const;
-                const created = await window.app?.sources.add(data);
-                const trimmed = token.trim();
-                if (created && isPrivate && trimmed.length > 0) {
-                    try {
-                        await window.app?.sources.setToken(created.id, trimmed);
-                        toast.success(t('sources.tokenSaved'));
-                    } catch {
-                        toast.error(t('sources.tokenSaveError'));
-                        return;
-                    }
+            const data = { type: 'git' as const, name: '', url, branch, isPrivate } as const;
+            const created = await window.app?.sources.add(data);
+            const trimmed = token.trim();
+            if (created && isPrivate && trimmed.length > 0) {
+                try {
+                    await window.app?.sources.setToken(created.id, trimmed);
+                    toast.success(t('sources.tokenSaved'));
+                } catch {
+                    toast.error(t('sources.tokenSaveError'));
+                    return;
                 }
-            } else {
-                const data = {
-                    type: 'external' as const,
-                    name: extName,
-                    scriptsUrl,
-                    libsUrl,
-                    cfgUrl,
-                } as const;
-                await window.app?.sources.add(data);
             }
             onSaved();
         } catch {
@@ -457,67 +319,43 @@ function NewSourcePanel({
         }
     };
 
-    const gitFields = (
-        <div className="flex flex-col divide-y divide-border">
-            <GitFormFields
-                url={url}
-                onUrlChange={setUrl}
-                branch={branch}
-                onBranchChange={setBranch}
-                isPrivate={isPrivate}
-                onIsPrivateChange={setIsPrivate}
-                autoFocusUrl
-                token={token}
-                onTokenChange={setToken}
-                tokenLocked={false}
-                onUnlock={() => undefined}
-                mask={null}
-            />
-        </div>
-    );
-
-    const externalFields = (
-        <div className="flex flex-col divide-y divide-border">
-            <ExternalFormFields
-                name={extName}
-                onNameChange={setExtName}
-                scriptsUrl={scriptsUrl}
-                onScriptsUrlChange={setScriptsUrl}
-                libsUrl={libsUrl}
-                onLibsUrlChange={setLibsUrl}
-                cfgUrl={cfgUrl}
-                onCfgUrlChange={setCfgUrl}
-                namePlaceholder={t('sources.namePlaceholder')}
-            />
-        </div>
-    );
+    const trimmedUrl = url.trim();
+    const derivedName = trimmedUrl.length > 0 ? deriveGitName(trimmedUrl) : '';
 
     return (
         <div className="flex h-full flex-col">
             <div className="border-b px-3 py-2.5">
-                <p className="text-sm font-semibold">{t('sources.newSource')}</p>
+                <p className="truncate text-sm font-semibold">
+                    {derivedName || (
+                        <span className="italic text-muted-foreground">
+                            {t('sources.newSource')}
+                        </span>
+                    )}
+                </p>
             </div>
 
-            <Tabs
-                value={type}
-                onValueChange={(v) => setType(v as 'git' | 'external')}
-                className="flex min-h-0 flex-1 flex-col"
-            >
-                <TabsList className="w-full shrink-0 rounded-none border-b">
-                    <TabsTrigger value="git" className="flex-1">Git</TabsTrigger>
-                    <TabsTrigger value="external" className="flex-1">{t('sources.external')}</TabsTrigger>
-                </TabsList>
-                <div className="min-h-0 flex-1 overflow-y-auto">
-                    <TabsContent value="git" className="mt-0">{gitFields}</TabsContent>
-                    <TabsContent value="external" className="mt-0">{externalFields}</TabsContent>
-                </div>
-            </Tabs>
+            <div className="flex min-h-0 flex-1 flex-col divide-y divide-border overflow-y-auto">
+                <GitFormFields
+                    url={url}
+                    onUrlChange={onUrlChange}
+                    branch={branch}
+                    onBranchChange={setBranch}
+                    isPrivate={isPrivate}
+                    onIsPrivateChange={setIsPrivate}
+                    autoFocusUrl
+                    token={token}
+                    onTokenChange={setToken}
+                    tokenLocked={false}
+                    onUnlock={() => undefined}
+                    mask={null}
+                />
+            </div>
 
             <div className="flex gap-2 border-t px-3 py-2">
                 <Button variant="ghost" size="sm" onClick={onCancel}>
                     {t('cancel')}
                 </Button>
-                <Button size="sm" disabled={saving || !canSave} onClick={() => void handleSave()}>
+                <Button size="sm" disabled={saving || !url.trim()} onClick={() => void handleSave()}>
                     {t('sources.save')}
                 </Button>
             </div>
@@ -543,6 +381,7 @@ export function SourcesDialog({
     const t = useT();
     const [selectedId, setSelectedId] = useState<string | null>(null);
     const [addingNew, setAddingNew] = useState(false);
+    const [newUrl, setNewUrl] = useState('');
     const sourcesRef = useRef(sources);
     sourcesRef.current = sources;
 
@@ -550,6 +389,7 @@ export function SourcesDialog({
         if (open) {
             setSelectedId(sourcesRef.current[0]?.id ?? null);
             setAddingNew(false);
+            setNewUrl('');
         }
     }, [open]);
 
@@ -574,10 +414,17 @@ export function SourcesDialog({
     const handleAddSource = () => {
         setSelectedId(null);
         setAddingNew(true);
+        setNewUrl('');
+    };
+
+    const handleNewCancel = () => {
+        setAddingNew(false);
+        setNewUrl('');
     };
 
     const handleNewSaved = () => {
         setAddingNew(false);
+        setNewUrl('');
         onSourcesChange();
     };
 
@@ -587,12 +434,12 @@ export function SourcesDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-2xl gap-0 overflow-hidden p-0">
+            <DialogContent className="sm:max-w-3xl gap-0 overflow-hidden p-0">
                 <DialogTitle className="sr-only">{t('sources.title')}</DialogTitle>
 
                 <div className="flex h-[min(520px,calc(100dvh-2rem))]">
                     {/* ── Left panel ───────────────────────────────── */}
-                    <div className="flex w-[180px] shrink-0 flex-col border-r">
+                    <div className="flex w-[220px] shrink-0 flex-col border-r">
                         <div className="border-b px-3 py-2.5 text-sm font-semibold">
                             {t('sources.title')}
                         </div>
@@ -611,7 +458,7 @@ export function SourcesDialog({
                                 />
                             ))}
                             {addingNew && (
-                                <NewSourceItem onCancel={() => setAddingNew(false)} />
+                                <NewSourceItem onCancel={handleNewCancel} />
                             )}
                         </div>
 
@@ -632,23 +479,17 @@ export function SourcesDialog({
                     <div className="flex min-w-0 flex-1 flex-col">
                         {addingNew ? (
                             <NewSourcePanel
+                                url={newUrl}
+                                onUrlChange={setNewUrl}
                                 onSaved={handleNewSaved}
-                                onCancel={() => setAddingNew(false)}
+                                onCancel={handleNewCancel}
                             />
                         ) : selectedSource ? (
-                            selectedSource.type === 'git' ? (
-                                <GitSettings
-                                    key={selectedSource.id}
-                                    source={selectedSource}
-                                    onSaved={handleSaved}
-                                />
-                            ) : (
-                                <ExternalSettings
-                                    key={selectedSource.id}
-                                    source={selectedSource}
-                                    onSaved={handleSaved}
-                                />
-                            )
+                            <GitSettings
+                                key={selectedSource.id}
+                                source={selectedSource}
+                                onSaved={handleSaved}
+                            />
                         ) : (
                             <div className="flex flex-1 items-center justify-center">
                                 <p className="text-sm text-muted-foreground">
