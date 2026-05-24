@@ -7,10 +7,13 @@ import { spawn, execFile, spawnSync, type ChildProcess } from 'node:child_proces
 import { registerHandlers, appEvents } from '@cion-suite/core/ipc';
 import type { Dirent } from 'node:fs';
 import type { ScriptCfgFile, ScriptCfgValues, ScriptMeta, ScriptStatus } from '@shared/types/scripts.js';
+import type { DepsCheckResult } from '@shared/types/script-deps.js';
 import type { AppServices } from '../types/services.js';
 import { readJsonFile, writeJsonFile } from '../utils/json-file.js';
 import { requireString } from '../utils/ipc-args.js';
 import { isSafeForShell } from '../utils/shell-safety.js';
+import { listSources } from '../services/sources-store.js';
+import { checkScriptDeps } from '../services/script-deps.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -205,6 +208,23 @@ export function registerScriptHandlers(_services: AppServices, globalVaultPath: 
         'scripts:list': () => listScripts(globalVaultPath),
 
         'scripts:probe-external': () => probeExternalAhk(),
+
+        'scripts:check-deps': async (_event, rawId: unknown): Promise<DepsCheckResult> => {
+            const id = requireString(rawId, 'id');
+            const filePath = scriptPathCache.get(id);
+            if (!filePath) return { missing: [], unknown: [] };
+            const rel = path.relative(globalVaultPath, filePath);
+            const sourceId = rel.split(path.sep)[0];
+            if (!sourceId || sourceId.startsWith('..')) return { missing: [], unknown: [] };
+            const sources = await listSources(_services.logger);
+            const source = sources.find((s) => s.id === sourceId);
+            if (!source) return { missing: [], unknown: [] };
+            return checkScriptDeps(filePath, source, {
+                tokens: _services.sourceTokens,
+                logger: _services.logger,
+                vaultBase: globalVaultPath,
+            });
+        },
 
         'scripts:run': async (_event, rawId: unknown) => {
             const id = requireString(rawId, 'id');

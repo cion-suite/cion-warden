@@ -15,6 +15,7 @@ interface ScriptListProps {
     onStop: (id: string) => Promise<void>;
     onStopAll: () => Promise<void>;
     onRefresh: () => void;
+    checkingId?: string | null;
 }
 
 export function ScriptList({
@@ -25,6 +26,7 @@ export function ScriptList({
     onStop,
     onStopAll,
     onRefresh,
+    checkingId,
 }: ScriptListProps) {
     const t = useT();
 
@@ -70,6 +72,7 @@ export function ScriptList({
                             onRun={onRun}
                             onStop={onStop}
                             onDeleted={onRefresh}
+                            isChecking={checkingId === script.id}
                         />
                     ))
                 )}

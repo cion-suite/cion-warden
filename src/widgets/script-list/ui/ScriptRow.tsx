@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FolderOpen, MoreHorizontal, Play, Settings2, Square, Trash2 } from 'lucide-react';
+import { FolderOpen, Loader2, MoreHorizontal, Play, Settings2, Square, Trash2 } from 'lucide-react';
 
 import { useT } from '@/shared/i18n';
 import { toast } from '@/shared/lib/toast';
@@ -27,6 +27,7 @@ interface ScriptRowProps {
     onRun: (id: string) => Promise<void>;
     onStop: (id: string) => Promise<void>;
     onDeleted: () => void;
+    isChecking?: boolean;
 }
 
 function formatModifiedAt(modifiedAt: number): string {
@@ -36,7 +37,7 @@ function formatModifiedAt(modifiedAt: number): string {
     return `${date} ${time}`;
 }
 
-export function ScriptRow({ script, onRun, onStop, onDeleted }: ScriptRowProps) {
+export function ScriptRow({ script, onRun, onStop, onDeleted, isChecking = false }: ScriptRowProps) {
     const t = useT();
     const [configOpen, setConfigOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
@@ -45,6 +46,7 @@ export function ScriptRow({ script, onRun, onStop, onDeleted }: ScriptRowProps) 
     const hasConfig = Boolean(script.configPath);
 
     const handleRunStop = async () => {
+        if (isChecking) return;
         try {
             if (isRunning) await onStop(script.id);
             else await onRun(script.id);
@@ -120,14 +122,21 @@ export function ScriptRow({ script, onRun, onStop, onDeleted }: ScriptRowProps) 
                     <Button
                         variant={isRunning ? 'secondary' : 'default'}
                         size="sm"
+                        disabled={isChecking}
                         onClick={() => void handleRunStop()}
                     >
-                        {isRunning ? (
+                        {isChecking ? (
+                            <Loader2 data-icon="inline-start" className="animate-spin" />
+                        ) : isRunning ? (
                             <Square data-icon="inline-start" />
                         ) : (
                             <Play data-icon="inline-start" />
                         )}
-                        {isRunning ? t('scripts.stop') : t('scripts.run')}
+                        {isChecking
+                            ? t('scripts.deps.checking')
+                            : isRunning
+                              ? t('scripts.stop')
+                              : t('scripts.run')}
                     </Button>
                 </div>
             </div>

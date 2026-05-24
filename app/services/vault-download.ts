@@ -43,7 +43,7 @@ async function probePublicRepoExists(owner: string, repo: string): Promise<boole
     }
 }
 
-async function fetchFileContent(
+export async function fetchFileContent(
     source: GitVaultSource,
     owner: string,
     repo: string,

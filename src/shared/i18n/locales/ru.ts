@@ -108,6 +108,19 @@ export const ru = {
                 save: 'Сохранить',
                 pressKey: 'нажмите клавишу…',
             },
+            deps: {
+                title: 'Отсутствуют зависимости',
+                description:
+                    'Скрипту требуются файлы, которые ещё не скачаны. Скачать сейчас и запустить?',
+                downloadAndRun: 'Скачать и запустить',
+                downloading: 'Скачивание {{done}}/{{total}}…',
+                downloadingNamed: 'Скачивание {{done}}/{{total}}: {{name}}',
+                downloadFailed: 'Не удалось скачать: {{count}}',
+                unknownHeader: 'Нет в манифесте источников:',
+                kindLib: 'библиотека',
+                kindPreset: 'пресет',
+                checking: 'Проверка',
+            },
         },
         getScripts: {
             title: 'Получить скрипты',

@@ -1,4 +1,5 @@
 import type { ScriptMeta, ScriptCfgValues } from './scripts.js';
+import type { DepsCheckResult } from './script-deps.js';
 import type { VaultSource } from './vault.js';
 import type { RemoteScriptMeta } from './get-scripts.js';
 import type { RemoteLibraryMeta } from './libs.js';
@@ -38,6 +39,7 @@ export interface AppBridge {
         openInExplorer: (filePath: string) => Promise<void>;
         getConfigValues: (configPath: string) => Promise<Partial<ScriptCfgValues>>;
         saveConfigValues: (configPath: string, values: ScriptCfgValues) => Promise<void>;
+        checkDeps: (id: string) => Promise<DepsCheckResult>;
     };
     sources: {
         list: () => Promise<VaultSource[]>;

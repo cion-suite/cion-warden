@@ -108,6 +108,19 @@ export const en = {
                 save: 'Save',
                 pressKey: 'press key…',
             },
+            deps: {
+                title: 'Missing dependencies',
+                description:
+                    'This script needs files that are not downloaded yet. Download them now and run?',
+                downloadAndRun: 'Download & Run',
+                downloading: 'Downloading {{done}}/{{total}}…',
+                downloadingNamed: 'Downloading {{done}}/{{total}}: {{name}}',
+                downloadFailed: '{{count}} items failed to download',
+                unknownHeader: 'Not in any source manifest:',
+                kindLib: 'library',
+                kindPreset: 'preset',
+                checking: 'Checking',
+            },
         },
         getScripts: {
             title: 'Get Scripts',

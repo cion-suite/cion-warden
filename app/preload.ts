@@ -22,6 +22,7 @@ const bridge: AppBridge = {
         getConfigValues: (configPath) => ipcRenderer.invoke('scripts:config-get-values', configPath),
         saveConfigValues: (configPath, values) =>
             ipcRenderer.invoke('scripts:config-save-values', configPath, values),
+        checkDeps: (id) => ipcRenderer.invoke('scripts:check-deps', id),
     },
     sources: {
         list: () => ipcRenderer.invoke('sources:list'),

@@ -15,6 +15,7 @@ import { registerBindHandlers } from './handlers/binds.js';
 import { registerVaultHandlers } from './handlers/vault.js';
 import { registerGithubHandlers } from './handlers/github.js';
 import { getGlobalVaultPath, ensureGlobalVault } from './services/vault-paths.js';
+import { ensureDefaultSourceSeeded } from './services/sources-store.js';
 import { createScriptWatcher, type ScriptWatcher } from './services/script-watcher.js';
 import type { AppServices } from './types/services.js';
 import type { AutoUpdaterController } from './types/updater.js';
@@ -54,6 +55,7 @@ async function bootstrap(): Promise<void> {
         registerSystemHandlers(services);
         const globalVaultPath = getGlobalVaultPath();
         await ensureGlobalVault();
+        await ensureDefaultSourceSeeded(services.logger);
         registerScriptHandlers(services, globalVaultPath);
         registerSourceHandlers(services);
         registerGetScriptHandlers(services);

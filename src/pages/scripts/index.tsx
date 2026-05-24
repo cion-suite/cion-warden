@@ -5,6 +5,7 @@ import { useSetNavbarSlot } from '@/shared/lib/navbar-slot';
 import { Input } from '@/shared/ui/shadcn/input';
 import { useScripts } from '@/entities/script';
 import { useScriptRunner } from '@/features/script-runner';
+import { MissingLibsDialog, useRunWithDeps } from '@/features/script-deps-resolve';
 import { ScriptList } from '@/widgets/script-list';
 
 export function ScriptsPage() {
@@ -12,7 +13,8 @@ export function ScriptsPage() {
     const [search, setSearch] = useState('');
 
     const { scripts, loading, refresh, hasAnyRunning, probeExternal } = useScripts();
-    const { run, stop, stopAll } = useScriptRunner();
+    const { stop, stopAll } = useScriptRunner();
+    const { run, state: depsState, checkingId, onConfirm, onCancel } = useRunWithDeps();
 
     const q = search.trim().toLowerCase();
     const filtered = q ? scripts.filter((s) => s.name.toLowerCase().includes(q)) : scripts;
@@ -32,6 +34,7 @@ export function ScriptsPage() {
                 scripts={filtered}
                 loading={loading}
                 hasAnyRunning={hasAnyRunning}
+                checkingId={checkingId}
                 onRun={run}
                 onStop={stop}
                 onStopAll={async () => {
@@ -46,6 +49,7 @@ export function ScriptsPage() {
                     void probeExternal();
                 }}
             />
+            <MissingLibsDialog state={depsState} onConfirm={onConfirm} onCancel={onCancel} />
         </div>
     );
 }

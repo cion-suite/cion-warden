@@ -46,6 +46,36 @@ export async function listSources(logger?: Logger): Promise<VaultSource[]> {
     return read(logger);
 }
 
+const DEFAULT_SOURCE_URL = 'https://github.com/Lazy-World/wf-macro';
+const DEFAULT_SOURCE_BRANCH = 'main';
+
+// Seeds a built-in source on first launch only. Sentinel is the *absence* of
+// sources.json — if the user removes the default later the file becomes `[]`,
+// not missing, so we never re-seed and the default behaves like any user-added
+// source.
+export async function ensureDefaultSourceSeeded(logger?: Logger): Promise<void> {
+    try {
+        await fs.access(getPath());
+        return;
+    } catch (err) {
+        const code = (err as NodeJS.ErrnoException)?.code;
+        if (code !== 'ENOENT') {
+            logger?.error('sources-store.seed.access', err);
+            throw err;
+        }
+    }
+    const source: VaultSource = {
+        id: crypto.randomUUID(),
+        type: 'git',
+        name: deriveGitName(DEFAULT_SOURCE_URL),
+        url: DEFAULT_SOURCE_URL,
+        branch: DEFAULT_SOURCE_BRANCH,
+        isPrivate: false,
+    };
+    await write([source]);
+    logger?.info('sources-store.seed.default', source.url);
+}
+
 export async function addSource(data: Omit<VaultSource, 'id'>, logger?: Logger): Promise<VaultSource> {
     const sources = await read(logger);
     const source: VaultSource = {
