@@ -1,7 +1,8 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { shell } from 'electron';
-import { registerHandlers, appEvents } from '@cion-suite/core/ipc';
+import { registerHandlers } from '@cion-suite/core/ipc';
+import { events } from '@cion-suite/core/events';
 import type { PresetSchema, PresetValues, RemotePresetMeta } from '@shared/types/binds.js';
 import type { AppServices } from '../types/services.js';
 import { getGlobalVaultPath } from '../services/vault-paths.js';
@@ -153,7 +154,7 @@ export function registerBindHandlers(services: AppServices): void {
                 tokens: sourceTokens,
                 logger,
             });
-            appEvents.emit('binds:changed', { sourceId, presetId: presetIdValue });
+            events.emit('binds:changed', { sourceId, presetId: presetIdValue });
         },
 
         'binds:download-all': async (
@@ -180,7 +181,7 @@ export function registerBindHandlers(services: AppServices): void {
                         tokens: sourceTokens,
                         logger,
                     }).then((res) => {
-                        appEvents.emit('binds:changed', { sourceId: source.id, presetId: '*' });
+                        events.emit('binds:changed', { sourceId: source.id, presetId: '*' });
                         return res;
                     }),
                 ),
@@ -211,7 +212,7 @@ export function registerBindHandlers(services: AppServices): void {
                 tokens: sourceTokens,
                 logger,
             });
-            appEvents.emit('binds:changed', { sourceId, presetId: presetIdValue });
+            events.emit('binds:changed', { sourceId, presetId: presetIdValue });
         },
 
         'binds:open-local': async (_event, rawSourceId: unknown, rawPresetId: unknown) => {

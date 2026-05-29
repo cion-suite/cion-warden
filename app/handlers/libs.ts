@@ -1,5 +1,6 @@
 import { shell } from 'electron';
-import { registerHandlers, appEvents } from '@cion-suite/core/ipc';
+import { registerHandlers } from '@cion-suite/core/ipc';
+import { events } from '@cion-suite/core/events';
 import type { RemoteLibraryMeta } from '@shared/types/libs.js';
 import type { AppServices } from '../types/services.js';
 import { getGlobalVaultPath } from '../services/vault-paths.js';
@@ -67,7 +68,7 @@ export function registerLibHandlers(services: AppServices): void {
                 tokens: sourceTokens,
                 logger,
             });
-            appEvents.emit('libs:changed', { sourceId, libId: libIdValue });
+            events.emit('libs:changed', { sourceId, libId: libIdValue });
         },
 
         'libs:download-all': async (
@@ -89,7 +90,7 @@ export function registerLibHandlers(services: AppServices): void {
                         tokens: sourceTokens,
                         logger,
                     }).then((res) => {
-                        appEvents.emit('libs:changed', { sourceId: source.id, libId: '*' });
+                        events.emit('libs:changed', { sourceId: source.id, libId: '*' });
                         return res;
                     }),
                 ),
@@ -120,7 +121,7 @@ export function registerLibHandlers(services: AppServices): void {
                 tokens: sourceTokens,
                 logger,
             });
-            appEvents.emit('libs:changed', { sourceId, libId: libIdValue });
+            events.emit('libs:changed', { sourceId, libId: libIdValue });
         },
 
         'libs:open-local': async (_event, rawSourceId: unknown, rawLibId: unknown) => {

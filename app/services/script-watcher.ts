@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
-import { appEvents } from '@cion-suite/core/ipc';
+import { events } from '@cion-suite/core/events';
 
 export interface ScriptWatcher {
     start(globalVaultPath: string): void;
@@ -36,7 +36,7 @@ export function createScriptWatcher(): ScriptWatcher {
         const handle = setTimeout(() => {
             pending.delete(filePath);
             void resolveType(filePath).then((type) => {
-                appEvents.emit('scripts:changed', { type, filePath });
+                events.emit('scripts:changed', { type, filePath });
             });
         }, DEBOUNCE_MS);
         pending.set(filePath, handle);

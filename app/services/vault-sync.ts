@@ -1,4 +1,4 @@
-import { appEvents } from '@cion-suite/core/ipc';
+import { events } from '@cion-suite/core/events';
 import type { Logger } from '@cion-suite/core/log';
 import type { GitVaultSource } from '@shared/types/vault.js';
 import type { VaultSyncResult } from '@shared/types/vault-sync.js';
@@ -28,11 +28,11 @@ const inFlight = new Map<string, Promise<VaultSyncResult>>();
 
 function emitRateLimit(info: RateLimitInfo | null): void {
     if (!info) return;
-    appEvents.emit('vault:rate-limit', info);
+    events.emit('vault:rate-limit', info);
 }
 
 function emitSynced(sourceId: string, lastSyncedAt: number, fromCache: boolean): void {
-    appEvents.emit('vault:source-synced', { sourceId, lastSyncedAt, fromCache });
+    events.emit('vault:source-synced', { sourceId, lastSyncedAt, fromCache });
 }
 
 async function buildCachedResult(

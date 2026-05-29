@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron';
 import { z } from 'zod';
-import { appEvents, registerHandlers } from '@cion-suite/core/ipc';
+import { registerHandlers } from '@cion-suite/core/ipc';
+import { events } from '@cion-suite/core/events';
 import type { AppServices } from '../types/services.js';
 
 const errorReportSchema = z.object({
@@ -15,7 +16,7 @@ export function registerSystemHandlers(services: AppServices): void {
             const win = BrowserWindow.fromWebContents(event.sender);
             if (win) {
                 services.logger.info('renderer ready');
-                appEvents.emitTo(win, 'app:ready', { startedAt: Date.now() });
+                events.emit('app:ready', { startedAt: Date.now() }, { target: win });
             }
         },
         'errors:report': (_event, payload: unknown) => {

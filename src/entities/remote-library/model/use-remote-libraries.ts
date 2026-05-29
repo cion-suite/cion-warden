@@ -1,4 +1,4 @@
-import { useAppEvent } from '@cion-suite/core/ipc/renderer';
+import { useEvent } from '@cion-suite/core/events/renderer';
 import { useAsyncList } from '@/shared/lib/hooks';
 import type { RemoteLibraryMeta } from '@shared/types/libs';
 
@@ -7,11 +7,11 @@ export function useRemoteLibraries() {
         () => window.app?.libs.list(),
     );
 
-    useAppEvent('vault:source-synced', () => {
+    useEvent('vault:source-synced', () => {
         void refresh();
     });
 
-    useAppEvent('libs:changed', () => {
+    useEvent('libs:changed', () => {
         void refresh();
     });
 

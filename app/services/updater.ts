@@ -1,7 +1,8 @@
 import { app } from 'electron';
 import pkg from 'electron-updater';
 import type { ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater';
-import { appEvents, registerHandlers } from '@cion-suite/core/ipc';
+import { registerHandlers } from '@cion-suite/core/ipc';
+import { events } from '@cion-suite/core/events';
 
 import type { UpdaterIpcResult } from '@shared/types';
 
@@ -32,7 +33,7 @@ export function createAutoUpdater(opts: CreateAutoUpdaterOptions): AutoUpdaterCo
     const onChecking = (): void => log?.info('updater: checking');
     const onAvailable = (info: UpdateInfo): void => {
         log?.info('updater: available', info.version);
-        appEvents.emit('updater:available', {
+        events.emit('updater:available', {
             version: info.version,
             releaseNotes: notesToString(info.releaseNotes),
             releaseName: info.releaseName ?? undefined,
@@ -41,14 +42,14 @@ export function createAutoUpdater(opts: CreateAutoUpdaterOptions): AutoUpdaterCo
     };
     const onNotAvailable = (): void => {
         log?.info('updater: not available');
-        appEvents.emit('updater:not-available');
+        events.emit('updater:not-available');
     };
     const onError = (err: Error): void => {
         log?.error('updater error', err);
-        appEvents.emit('updater:error', { message: err.message });
+        events.emit('updater:error', { message: err.message });
     };
     const onProgress = (p: ProgressInfo): void => {
-        appEvents.emit('updater:progress', p);
+        events.emit('updater:progress', p);
     };
     const onDownloaded = (event: UpdateDownloadedEvent): void => {
         log?.info('updater: downloaded', event.version);
@@ -57,7 +58,7 @@ export function createAutoUpdater(opts: CreateAutoUpdaterOptions): AutoUpdaterCo
             clearInterval(checkIntervalId);
             checkIntervalId = null;
         }
-        appEvents.emit('updater:downloaded', {
+        events.emit('updater:downloaded', {
             version: event.version,
             releaseNotes: notesToString(event.releaseNotes),
             releaseName: event.releaseName ?? undefined,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useAppEvent } from '@cion-suite/core/ipc/renderer';
+import { useEvent } from '@cion-suite/core/events/renderer';
 import type { GithubRateLimitResult } from '@shared/types';
 
 export interface UseGithubRateLimit {
@@ -38,7 +38,7 @@ export function useGithubRateLimit(): UseGithubRateLimit {
     // Vault sync already emits remaining/reset; opportunistic refresh keeps
     // the bars in sync after any sync without an extra click. /rate_limit
     // doesn't consume quota.
-    useAppEvent('vault:rate-limit', () => {
+    useEvent('vault:rate-limit', () => {
         void refresh();
     });
 

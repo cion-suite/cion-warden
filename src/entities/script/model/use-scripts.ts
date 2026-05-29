@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useAppEvent } from '@cion-suite/core/ipc/renderer';
+import { useEvent } from '@cion-suite/core/events/renderer';
 import { useAsyncList } from '@/shared/lib/hooks';
 import type { ScriptMeta } from '@shared/types/scripts';
 
@@ -18,12 +18,12 @@ export function useScripts() {
         void probeExternal();
     }, [probeExternal]);
 
-    useAppEvent('scripts:changed', () => {
+    useEvent('scripts:changed', () => {
         void refresh();
         void probeExternal();
     });
 
-    useAppEvent('script:status-changed', ({ id, status, errorMessage }) => {
+    useEvent('script:status-changed', ({ id, status, errorMessage }) => {
         setItems((prev) =>
             prev.map((s) => (s.id === id ? { ...s, status, errorMessage } : s)),
         );

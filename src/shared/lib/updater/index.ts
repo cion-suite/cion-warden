@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { useAppEvent } from '@cion-suite/core/ipc/renderer';
+import { useEvent } from '@cion-suite/core/events/renderer';
 
 import { toast } from '@/shared/lib/toast';
 import { useT } from '@/shared/i18n';
@@ -32,19 +32,19 @@ export function useUpdaterNotifications(): void {
     const t = useT();
     const downloadedVersionRef = useRef<string | null>(null);
 
-    useAppEvent('updater:error', (data) => {
+    useEvent('updater:error', (data) => {
         toast.error(data.message);
     });
 
-    useAppEvent('updater:not-available', () => {
+    useEvent('updater:not-available', () => {
         toast.success(t('settings.updater.notAvailable'));
     });
 
-    useAppEvent('updater:available', (data) => {
+    useEvent('updater:available', (data) => {
         toast.info(t('settings.updater.available', { version: data.version }));
     });
 
-    useAppEvent('updater:downloaded', (data) => {
+    useEvent('updater:downloaded', (data) => {
         if (downloadedVersionRef.current === data.version) return;
         downloadedVersionRef.current = data.version;
         toast(t('settings.updater.downloaded', { version: data.version }), {

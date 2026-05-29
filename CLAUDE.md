@@ -24,7 +24,7 @@ pnpm lint         # ESLint + FSD boundaries
 
 4. **IPC.** Только `ipcMain.handle()` + `ipcRenderer.invoke()` через `contextBridge`. Никакого Node API в renderer. Регистрация — `registerHandlers(map)` из `@cion-suite/core/ipc`.
 
-5. **События.** Единый канал `app:event`. Main: `appEvents.emit()` / `emitTo(win, ...)`. Renderer: `useAppEvent(name, handler)`. **Никогда** `win.webContents.send()`. Расширение типов — augmentation `BaseAppEventMap` в `shared/types/app-events.ts`.
+5. **События.** Единый канал `app:event`. Main: `events.emit(name, payload)` / `events.emit(name, payload, { target: win })` из `@cion-suite/core/events`. Renderer: `useEvent(name, handler)` из `@cion-suite/core/events/renderer`. **Никогда** `win.webContents.send()`. Расширение типов — augmentation `EventMap` в `shared/types/app-events.ts`.
 
 6. **Placement типов** (от шире к уже):
    - main + renderer (IPC contracts, event payloads) → `shared/types/` (`@shared/types`).
@@ -75,7 +75,7 @@ DRY • KISS — закон. Нарушение → вернуть PR.
 ## Pitfalls
 
 - **electron-vite output:** main → `index.js`, preload → `index.js`. После build `__dirname` = `build/out/main/`. Для ресурсов — через `app/utils/paths.ts`.
-- **Module augmentation `BaseAppEventMap`** живёт в `shared/types/app-events.ts` — оба процесса видят через tsconfig include `shared/**/*`.
+- **Module augmentation `EventMap`** живёт в `shared/types/app-events.ts` — оба процесса видят через tsconfig include `shared/**/*`.
 - **React 19 JSX namespace.** `function App(): JSX.Element` теперь `TS2503`. Inference или `ReactElement`.
 - **Boundaries plugin** смотрит `tsconfig.front.json`. Переименовал — обнови `@cion-suite/config/eslint/fsd`.
 - **CSP `style-src 'unsafe-inline'`** в `index.html` — осознанный релакс. Tailwind v4 + Vite HMR инжектят inline `<style>` в dev; `onHeadersReceived` не применяется к `file://` (prod `loadFile`), поэтому split prod/dev CSP через headers не работает. Строгая CSP в prod потребует custom protocol (`app://`) — out of scope для template.

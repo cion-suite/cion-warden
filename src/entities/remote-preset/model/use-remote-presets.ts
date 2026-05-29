@@ -1,4 +1,4 @@
-import { useAppEvent } from '@cion-suite/core/ipc/renderer';
+import { useEvent } from '@cion-suite/core/events/renderer';
 import { useAsyncList } from '@/shared/lib/hooks';
 import type { RemotePresetMeta } from '@shared/types/binds';
 
@@ -7,11 +7,11 @@ export function useRemotePresets() {
         () => window.app?.binds.list(),
     );
 
-    useAppEvent('vault:source-synced', () => {
+    useEvent('vault:source-synced', () => {
         void refresh();
     });
 
-    useAppEvent('binds:changed', () => {
+    useEvent('binds:changed', () => {
         void refresh();
     });
 

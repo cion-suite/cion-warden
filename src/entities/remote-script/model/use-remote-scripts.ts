@@ -1,4 +1,4 @@
-import { useAppEvent } from '@cion-suite/core/ipc/renderer';
+import { useEvent } from '@cion-suite/core/events/renderer';
 import { useAsyncList } from '@/shared/lib/hooks';
 import type { RemoteScriptMeta } from '@shared/types/get-scripts';
 
@@ -7,7 +7,7 @@ export function useRemoteScripts() {
         () => window.app?.getScripts.list(),
     );
 
-    useAppEvent('vault:source-synced', () => {
+    useEvent('vault:source-synced', () => {
         void refresh();
     });
 

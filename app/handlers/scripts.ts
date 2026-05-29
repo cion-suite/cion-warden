@@ -4,7 +4,8 @@ import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { shell } from 'electron';
 import { spawn, execFile, spawnSync, type ChildProcess } from 'node:child_process';
-import { registerHandlers, appEvents } from '@cion-suite/core/ipc';
+import { registerHandlers } from '@cion-suite/core/ipc';
+import { events } from '@cion-suite/core/events';
 import type { Dirent } from 'node:fs';
 import type { ScriptCfgFile, ScriptCfgValues, ScriptMeta, ScriptStatus } from '@shared/types/scripts.js';
 import type { DepsCheckResult } from '@shared/types/script-deps.js';
@@ -61,7 +62,7 @@ function makeScriptId(filePath: string): string {
 
 function emitStatusChange(id: string, status: ScriptStatus, errorMessage?: string): void {
     scriptStatuses.set(id, { status, errorMessage });
-    appEvents.emit('script:status-changed', { id, status, errorMessage });
+    events.emit('script:status-changed', { id, status, errorMessage });
 }
 
 // Matches both quoted ("C:\\dir with space\\foo.ahk") and unquoted (C:\\foo.ahk) forms.

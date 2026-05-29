@@ -1,8 +1,8 @@
 import type { UpdaterInfo, UpdaterProgress } from './updater.js';
 import type { ScriptStatus } from './scripts.js';
 
-declare module '@cion-suite/core/ipc' {
-    interface BaseAppEventMap {
+declare module '@cion-suite/core/events' {
+    interface EventMap {
         'updater:available': UpdaterInfo;
         'updater:not-available': void;
         'updater:downloaded': UpdaterInfo;
