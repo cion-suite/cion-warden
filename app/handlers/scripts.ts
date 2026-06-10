@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { promisify } from 'node:util';
 import { shell } from 'electron';
 import { spawn, execFile, spawnSync, type ChildProcess } from 'node:child_process';
-import { registerHandlers } from '@cion-suite/core/ipc';
+import { ipc } from '@cion-suite/core/ipc';
 import { events } from '@cion-suite/core/events';
 import type { Dirent } from 'node:fs';
 import type { ScriptCfgFile, ScriptCfgValues, ScriptMeta, ScriptStatus } from '@shared/types/scripts.js';
@@ -205,7 +205,7 @@ function coerceCfgValues(raw: unknown): ScriptCfgValues {
 }
 
 export function registerScriptHandlers(_services: AppServices, globalVaultPath: string): void {
-    registerHandlers({
+    ipc.register({
         'scripts:list': () => listScripts(globalVaultPath),
 
         'scripts:probe-external': () => probeExternalAhk(),

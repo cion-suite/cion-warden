@@ -1,11 +1,11 @@
 import { app } from 'electron';
-import { createSplashWindow, type SplashWindowController } from '@cion-suite/core/window';
+import { createSplash, type Splash } from '@cion-suite/core/window';
 import { getIconFileUrl, getIconPath, getSplashPath } from '../utils/paths.js';
 
-let splash: SplashWindowController | null = null;
+let splash: Splash | null = null;
 
-export async function openSplashWindow(): Promise<SplashWindowController> {
-    splash = await createSplashWindow({
+export async function openSplashWindow(): Promise<Splash> {
+    splash = await createSplash({
         width: 300,
         height: 350,
         icon: getIconPath(),

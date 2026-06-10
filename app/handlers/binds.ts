@@ -1,7 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { shell } from 'electron';
-import { registerHandlers } from '@cion-suite/core/ipc';
+import { ipc } from '@cion-suite/core/ipc';
 import { events } from '@cion-suite/core/events';
 import type { PresetSchema, PresetValues, RemotePresetMeta } from '@shared/types/binds.js';
 import type { AppServices } from '../types/services.js';
@@ -109,7 +109,7 @@ function flatToNested(flat: unknown): Record<string, Record<string, PrimitiveVal
 export function registerBindHandlers(services: AppServices): void {
     const { logger, sourceTokens } = services;
 
-    registerHandlers({
+    ipc.register({
         'binds:list': async (): Promise<RemotePresetMeta[]> => {
             const sources = await listSources(logger);
             const vaultBase = getGlobalVaultPath();

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-// Bumping `currentVersion` in `boot.ts:createSettingsStore` requires a matching
+// Bumping `currentVersion` in `boot.ts:createSettings` requires a matching
 // `migrations` entry — otherwise stored data from older shapes is silently dropped.
 export const settingsSchema = z.object({
     theme: z.enum(['light', 'dark', 'system']).default('system'),

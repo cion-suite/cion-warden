@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import pkg from 'electron-updater';
 import type { ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater';
-import { registerHandlers } from '@cion-suite/core/ipc';
+import { ipc } from '@cion-suite/core/ipc';
 import { events } from '@cion-suite/core/events';
 
 import type { UpdaterIpcResult } from '@shared/types';
@@ -126,7 +126,7 @@ export function createAutoUpdater(opts: CreateAutoUpdaterOptions): AutoUpdaterCo
         }
     }
 
-    registerHandlers({
+    ipc.register({
         'updater:check-for-updates': runCheck,
         'updater:quit-and-install': () => {
             installPendingUpdate();

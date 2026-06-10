@@ -1,5 +1,5 @@
 import { shell } from 'electron';
-import { registerHandlers } from '@cion-suite/core/ipc';
+import { ipc } from '@cion-suite/core/ipc';
 import { events } from '@cion-suite/core/events';
 import type { RemoteLibraryMeta } from '@shared/types/libs.js';
 import type { AppServices } from '../types/services.js';
@@ -23,7 +23,7 @@ export interface SourceLibsResult {
 export function registerLibHandlers(services: AppServices): void {
     const { logger, sourceTokens } = services;
 
-    registerHandlers({
+    ipc.register({
         'libs:list': async (): Promise<RemoteLibraryMeta[]> => {
             const sources = await listSources(logger);
             const vaultBase = getGlobalVaultPath();

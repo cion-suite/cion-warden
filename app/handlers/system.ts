@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron';
 import { z } from 'zod';
-import { registerHandlers } from '@cion-suite/core/ipc';
+import { ipc } from '@cion-suite/core/ipc';
 import { events } from '@cion-suite/core/events';
 import type { AppServices } from '../types/services.js';
 
@@ -11,7 +11,7 @@ const errorReportSchema = z.object({
 });
 
 export function registerSystemHandlers(services: AppServices): void {
-    registerHandlers({
+    ipc.register({
         'system:renderer-ready': (event) => {
             const win = BrowserWindow.fromWebContents(event.sender);
             if (win) {

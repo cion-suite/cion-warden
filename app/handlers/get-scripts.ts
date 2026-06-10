@@ -1,4 +1,4 @@
-import { registerHandlers } from '@cion-suite/core/ipc';
+import { ipc } from '@cion-suite/core/ipc';
 import type { RemoteScriptMeta } from '@shared/types/get-scripts.js';
 import type { AppServices } from '../types/services.js';
 import { getGlobalVaultPath } from '../services/vault-paths.js';
@@ -16,7 +16,7 @@ export interface SourceScriptsResult {
 export function registerGetScriptHandlers(services: AppServices): void {
     const { logger, sourceTokens } = services;
 
-    registerHandlers({
+    ipc.register({
         'get-scripts:list-source': async (_event, rawSourceId: unknown): Promise<SourceScriptsResult> => {
             const sourceId = requireString(rawSourceId, 'sourceId');
             const sources = await listSources(logger);

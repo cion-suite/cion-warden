@@ -1,7 +1,7 @@
 import { app } from 'electron';
-import { createLogger } from '@cion-suite/core/log';
+import { log } from '@cion-suite/core/log';
 import { createSecureStorage } from '@cion-suite/core/storage';
-import { createSettingsStore } from '@cion-suite/core/settings';
+import { createSettings } from '@cion-suite/core/settings';
 import { installCrashReporter } from '@cion-suite/core/crash';
 
 import { APP_ID, PRODUCT_NAME } from '../config.js';
@@ -17,7 +17,8 @@ export function bootServices(): AppServices {
         appId: APP_ID,
     });
 
-    const logger = createLogger({ appId: APP_ID });
+    log.configure();
+    const logger = log;
     logger.info('boot started');
 
     const storage = createSecureStorage({
@@ -29,7 +30,7 @@ export function bootServices(): AppServices {
         },
     });
 
-    const settings = createSettingsStore<AppSettings>({
+    const settings = createSettings<AppSettings>({
         appId: APP_ID,
         schema: settingsSchema,
         defaults: settingsSchema.parse({}),

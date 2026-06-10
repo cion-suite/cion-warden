@@ -1,4 +1,4 @@
-import { registerHandlers } from '@cion-suite/core/ipc';
+import { ipc } from '@cion-suite/core/ipc';
 import type { VaultSource } from '@shared/types/vault.js';
 import type { NewSource } from '../types/sources.js';
 import type { AppServices } from '../types/services.js';
@@ -56,7 +56,7 @@ async function testToken(
 export function registerSourceHandlers(services: AppServices): void {
     const { logger, sourceTokens } = services;
 
-    registerHandlers({
+    ipc.register({
         'sources:list': async () => enrichWithToken(await listSources(logger), services),
 
         'sources:add': (_event, rawData: unknown) =>

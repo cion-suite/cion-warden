@@ -1,4 +1,4 @@
-import { registerHandlers } from '@cion-suite/core/ipc';
+import { ipc } from '@cion-suite/core/ipc';
 import type { VaultSourceListResult, VaultSyncResult } from '@shared/types/vault-sync.js';
 import type { AppServices } from '../types/services.js';
 import { getGlobalVaultPath } from '../services/vault-paths.js';
@@ -10,7 +10,7 @@ import { requireString } from '../utils/ipc-args.js';
 export function registerVaultHandlers(services: AppServices): void {
     const { logger, sourceTokens } = services;
 
-    registerHandlers({
+    ipc.register({
         'vault:sync-source': async (_event, rawSourceId: unknown): Promise<VaultSyncResult> => {
             const sourceId = requireString(rawSourceId, 'sourceId');
             return syncSource(sourceId, {

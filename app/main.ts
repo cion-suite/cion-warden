@@ -1,5 +1,5 @@
 import { app, dialog } from 'electron';
-import { installIpcLogger } from '@cion-suite/core/ipc';
+import { ipc } from '@cion-suite/core/ipc';
 import { requestSingleInstance } from '@cion-suite/core/window';
 import { APP_ID } from './config.js';
 import { bootServices } from './services/boot.js';
@@ -38,7 +38,7 @@ process.on('uncaughtException', (error) => {
 process.on('unhandledRejection', (reason) => processLogger.error('unhandledRejection', reason));
 
 async function bootstrap(): Promise<void> {
-    const { isPrimary } = requestSingleInstance({
+    const isPrimary = requestSingleInstance({
         onSecondInstance: () => focusMainWindow(),
     });
     if (!isPrimary) return;
@@ -51,7 +51,7 @@ async function bootstrap(): Promise<void> {
 
         await openSplashWindow();
 
-        installIpcLogger({ logger: services.logger });
+        ipc.installLogger({ logger: services.logger });
 
         updateSplash(50, 'Registering handlers');
         registerSystemHandlers(services);

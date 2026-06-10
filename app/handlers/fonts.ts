@@ -1,4 +1,4 @@
-import { registerHandlers } from '@cion-suite/core/ipc';
+import { ipc } from '@cion-suite/core/ipc';
 import type { FontInstallSummary, InstalledFont } from '@shared/types/assets.js';
 import type { AppServices } from '../types/services.js';
 import { listSources } from '../services/sources-store.js';
@@ -12,7 +12,7 @@ import { requireString } from '../utils/ipc-args.js';
 export function registerFontHandlers(services: AppServices, vaultBase: string): void {
     const { logger, sourceTokens } = services;
 
-    registerHandlers({
+    ipc.register({
         'fonts:install-source': async (
             _event,
             rawSourceId: unknown,
