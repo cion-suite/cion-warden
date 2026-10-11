@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fsx } from '@app/utils/fsx';
 
 let dir: string;
@@ -58,6 +58,20 @@ describe('fsx.write', () => {
 
         await expect(fsx.write(path.join(blocker, 'f.txt'), 'x')).rejects.toMatchObject({ code: 'failed' });
         expect(await fs.readdir(dir)).toEqual(['file']);
+    });
+
+    it('сбой уборки tmp не подменяет причину', async () => {
+        const blocker = path.join(dir, 'file');
+        await fs.writeFile(blocker, '');
+        // На Linux путь внутри файла даёт ENOTDIR, а не ENOENT
+        const rm = vi.spyOn(fs, 'rm').mockRejectedValueOnce(Object.assign(new Error('ENOTDIR'), { code: 'ENOTDIR' }));
+
+        try {
+            await expect(fsx.write(path.join(blocker, 'f.txt'), 'x')).rejects.toMatchObject({ code: 'failed' });
+            expect(rm).toHaveBeenCalledTimes(1);
+        } finally {
+            rm.mockRestore();
+        }
     });
 });
 

@@ -20,7 +20,8 @@ async function write(file: string, content: string | Uint8Array): Promise<void> 
         await fs.writeFile(tmp, content);
         await fs.rename(tmp, file);
     } catch (e) {
-        await fs.rm(tmp, { force: true });
+        // Сбой уборки не должен подменить причину
+        await fs.rm(tmp, { force: true }).catch(() => undefined);
         throw errors.fail('failed', `Cannot write ${path.basename(file)}`, { cause: e });
     }
 }

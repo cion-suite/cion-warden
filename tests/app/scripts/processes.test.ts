@@ -35,6 +35,10 @@ const HKLM = 'HKLM\\SOFTWARE\\AutoHotkey';
 const WOW = 'HKLM\\SOFTWARE\\WOW6432Node\\AutoHotkey';
 const HKCU = 'HKCU\\SOFTWARE\\AutoHotkey';
 const AHK_DIR = 'C:\\Program Files\\AutoHotkey';
+// ProgramFiles-каталоги собирает path.join, а на
+// не-Windows у него другой разделитель
+const PF_AHK = path.join('C:\\PF', 'AutoHotkey');
+const PF86_AHK = path.join('C:\\PF86', 'AutoHotkey');
 const exe = (dir: string, name: string): string => path.join(dir, name);
 const regOut = (dir: string, version: string): string =>
     `\r\nHKEY_LOCAL_MACHINE\\SOFTWARE\\AutoHotkey\r\n    InstallDir    REG_SZ    ${dir}\r\n    Version    REG_SZ    ${version}\r\n\r\n`;
@@ -190,23 +194,23 @@ describe('processes.run: поиск AutoHotkey v1', () => {
     });
 
     it('без реестра - ProgramFiles', async () => {
-        disk.files.add(exe('C:\\PF\\AutoHotkey', 'AutoHotkeyU32.exe'));
+        disk.files.add(exe(PF_AHK, 'AutoHotkeyU32.exe'));
 
         await processes.run('ok');
 
-        expect(cp.spawn.mock.calls[0]?.[0]).toBe(exe('C:\\PF\\AutoHotkey', 'AutoHotkeyU32.exe'));
+        expect(cp.spawn.mock.calls[0]?.[0]).toBe(exe(PF_AHK, 'AutoHotkeyU32.exe'));
     });
 
     it('без реестра - ProgramFiles(x86)', async () => {
-        disk.files.add(exe('C:\\PF86\\AutoHotkey', 'AutoHotkeyU64.exe'));
+        disk.files.add(exe(PF86_AHK, 'AutoHotkeyU64.exe'));
 
         await processes.run('ok');
 
-        expect(cp.spawn.mock.calls[0]?.[0]).toBe(exe('C:\\PF86\\AutoHotkey', 'AutoHotkeyU64.exe'));
+        expect(cp.spawn.mock.calls[0]?.[0]).toBe(exe(PF86_AHK, 'AutoHotkeyU64.exe'));
     });
 
     it('в ProgramFiles AutoHotkey.exe без подтверждения не берётся', async () => {
-        disk.files.add(exe('C:\\PF\\AutoHotkey', 'AutoHotkey.exe'));
+        disk.files.add(exe(PF_AHK, 'AutoHotkey.exe'));
 
         await processes.run('ok');
 
@@ -223,7 +227,7 @@ describe('processes.run: поиск AutoHotkey v1', () => {
 
     it('неудача не кешируется: после установки AHK запуск проходит', async () => {
         await processes.run('ok');
-        disk.files.add(exe('C:\\PF\\AutoHotkey', 'AutoHotkeyU64.exe'));
+        disk.files.add(exe(PF_AHK, 'AutoHotkeyU64.exe'));
 
         await processes.run('ok');
 
@@ -245,14 +249,14 @@ describe('processes.run: поиск AutoHotkey v1', () => {
 
     it('кеш с удалённым exe сбрасывается и ищется заново', async () => {
         registry.files.set('two', 'C:\\v\\two.ahk');
-        disk.files.add(exe('C:\\PF\\AutoHotkey', 'AutoHotkeyU64.exe'));
+        disk.files.add(exe(PF_AHK, 'AutoHotkeyU64.exe'));
         await processes.run('ok');
         disk.files.clear();
-        disk.files.add(exe('C:\\PF86\\AutoHotkey', 'AutoHotkeyU64.exe'));
+        disk.files.add(exe(PF86_AHK, 'AutoHotkeyU64.exe'));
 
         await processes.run('two');
 
-        expect(cp.spawn.mock.calls[1]?.[0]).toBe(exe('C:\\PF86\\AutoHotkey', 'AutoHotkeyU64.exe'));
+        expect(cp.spawn.mock.calls[1]?.[0]).toBe(exe(PF86_AHK, 'AutoHotkeyU64.exe'));
     });
 });
 
