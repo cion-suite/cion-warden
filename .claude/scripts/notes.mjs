@@ -3,8 +3,9 @@
 //   node .claude/scripts/notes.mjs write [--replace]     - записать [USERS] из .claude/cache/notes/entry.txt
 //   node .claude/scripts/notes.mjs --selftest            - самопроверка механики файла
 // collect пишет .claude/cache/notes/{digest.md,meta.json,diff.patch[,top.patch]}; что читать модели - READ=diff|top|digest в stdout.
-// Файл канала пишет только write: старые буллеты не удаляются и не переписываются,
-// перезапись раздела - только range-режим с --replace.
+// Файл канала пишет только write. Раздел версии - итог относительно прошлой версии, не история
+// правок: [USERS] записи - ВЕСЬ раздел целиком (collect кладёт текущие буллеты в section.txt),
+// write заменяет им раздел и называет убранное. Раздел range-режима - только с --replace.
 import fs from 'node:fs';
 import path from 'node:path';
 import { ROOT, die, git, repo, cache } from './lib.mjs';
@@ -209,7 +210,11 @@ function collect() {
     ].join('\n');
 
     const file = channelFile(version);
-    const section = findSection(splitLines(repo.read(file)), version) ? 'exists' : 'new';
+    const lines = splitLines(repo.read(file));
+    const found = findSection(lines, version);
+    const section = found ? 'exists' : 'new';
+    // Буллеты раздела: модель сводит их с новыми в один итоговый список
+    const current = found ? bulletsOf(lines.slice(found.start + 1, found.end)) : [];
 
     out.write('digest.md', digest);
     // write сверяет запись с тем, что увидел collect: режим и версию
@@ -217,7 +222,8 @@ function collect() {
     out.write('meta.json', JSON.stringify({ mode: diff.mode, version }));
     if (patch) out.write('diff.patch', patch);
     if (read === 'top') out.write('top.patch', top);
-    console.log(`MODE=${diff.mode} VERSION=${version} FILE=${file} SECTION=${section} FILES=${files.length} THEME=${theme} READ=${read} `
+    if (current.length && diff.mode === 'uncommitted') out.write('section.txt', `${current.join('\n')}\n`);
+    console.log(`MODE=${diff.mode} VERSION=${version} FILE=${file} SECTION=${section} BULLETS=${current.length} FILES=${files.length} THEME=${theme} READ=${read} `
         + `DIGEST=${kb(digest)} DIFF=${kb(patch)}${read === 'top' ? ` TOP=${kb(top)}` : ''} -> ${out.rel}/`);
 }
 
@@ -248,6 +254,9 @@ const findSection = (lines, version) => {
     return { start, end, last };
 };
 
+const BULLET = /^- \S.*$/;
+const bulletsOf = lines => lines.map(l => l.trim()).filter(l => BULLET.test(l));
+
 class Refusal extends Error {}
 const refuse = msg => { throw new Refusal(msg); };
 
@@ -257,28 +266,33 @@ function applyEntry({ text, version, bullets, mode, replace = false }) {
     const eol = text.includes('\r\n') ? '\r\n' : '\n';
     const lines = splitLines(text);
     const section = findSection(lines, version);
-    if (replace && mode !== 'range') refuse('--replace только для range-режима: в uncommitted старые буллеты не переписываются');
+    if (replace && mode !== 'range') refuse('--replace только для range-режима: в uncommitted раздел и так заменяется записью целиком');
 
     if (!section) {
         const first = lines.findIndex(l => l.trim());
         const head = [`### Версия v${version}`, '', ...bullets];
         const body = first < 0 ? [...head, ''] : [...head, '', SEPARATOR, '', ...lines.slice(first)];
-        return { text: body.join(eol), action: 'created', added: bullets.length, skipped: 0 };
+        return { text: body.join(eol), action: 'created', added: bullets.length, kept: 0, removed: [] };
     }
 
-    if (mode === 'range') {
-        if (!replace) {
-            refuse(`раздел "### Версия v${version}" уже есть - range-режим не дописывает в него. `
-                + 'Перезаписать раздел целиком: `write --replace` (старый текст раздела будет потерян)');
-        }
-        lines.splice(section.start + 1, section.last - section.start - 1, '', ...bullets);
-        return { text: lines.join(eol), action: 'replaced', added: bullets.length, skipped: 0 };
+    if (mode === 'range' && !replace) {
+        refuse(`раздел "### Версия v${version}" уже есть - range-режим не дописывает в него. `
+            + 'Перезаписать раздел целиком: `write --replace` (старый текст раздела будет потерян)');
     }
 
-    const have = new Set(lines.slice(section.start + 1, section.end).map(l => l.trim()));
-    const fresh = [...new Set(bullets)].filter(b => !have.has(b));
-    if (fresh.length) lines.splice(section.last, 0, ...(section.last === section.start + 1 ? [''] : []), ...fresh);
-    return { text: lines.join(eol), action: 'appended', added: fresh.length, skipped: bullets.length - fresh.length };
+    // Раздел - итоговое состояние: запись заменяет его целиком.
+    // Строки вне раздела не трогаем; убранное возвращаем - его видно в выводе
+    const old = bulletsOf(lines.slice(section.start + 1, section.end));
+    const next = [...new Set(bullets)];
+    lines.splice(section.start + 1, section.last - section.start - 1, '', ...next);
+    const kept = next.filter(b => old.includes(b)).length;
+    return {
+        text: lines.join(eol),
+        action: mode === 'range' ? 'replaced' : 'rewritten',
+        added: next.length - kept,
+        kept,
+        removed: old.filter(b => !next.includes(b)),
+    };
 }
 
 // Клавиатурные символы: Unicode-пробелы и пунктуация (тире, ёлочки, многоточие),
@@ -286,8 +300,6 @@ function applyEntry({ text, version, bullets, mode, replace = false }) {
 const NON_KEYBOARD = /[\u00A0\u00AB\u00BB\u2000-\u206F\u2190-\u2BFF\uFE0F\u{1F000}-\u{1FAFF}]/gu;
 
 const nonKeyboard = text => [...new Set(text.match(NON_KEYBOARD))];
-
-const BULLET = /^- \S.*$/;
 
 // entry.txt: `<версия> - <тема>`, `[USERS]` буллеты, `[GIT]` буллеты. [GIT] в файл
 // не идёт, только проверяется: это текст commit-сообщения
@@ -352,8 +364,9 @@ function write() {
         fs.mkdirSync(path.dirname(abs), { recursive: true });
         fs.writeFileSync(abs, result.text, 'utf8');
     }
-    const note = result.skipped ? `, дублей пропущено ${result.skipped}` : '';
-    console.log(`OK - ${file}: раздел v${meta.version} ${result.action}, буллетов добавлено ${result.added}${note}`);
+    console.log(`OK - ${file}: раздел v${meta.version} ${result.action}, добавлено ${result.added}, оставлено ${result.kept}, убрано ${result.removed.length}`);
+    // Убранное - прямо в выводе: потерянный по ошибке буллет виден сразу
+    for (const bullet of result.removed) console.log(`  убрано: ${bullet}`);
 }
 
 // -- самопроверка
@@ -380,17 +393,21 @@ function selftest() {
     check('создание сверху', created.action === 'created'
         && created.text === `### Версия v1.0.0-beta.2\n\n${C}\n\n---\n\n${existing}`);
 
-    // дописывание: после последнего буллета, остальные строки целы
-    const appended = apply({ text: existing, version: '1.0.0-beta.1', bullets: [C] });
-    check('дописывание', appended.action === 'appended' && appended.added === 1
-        && appended.text === existing.replace(`${B}\n`, `${B}\n${C}\n`));
-    check('старые строки целы', splitLines(existing).every(l => splitLines(appended.text).includes(l)));
+    // раздел - итог: запись заменяет его, убранное названо, чужие разделы целы
+    const appended = apply({ text: existing, version: '1.0.0-beta.1', bullets: [A, C] });
+    check('переписывание', appended.action === 'rewritten' && appended.added === 1 && appended.kept === 1
+        && appended.removed.length === 1 && appended.removed[0] === B
+        && appended.text === existing.replace(`${B}\n`, `${C}\n`));
+    check('чужой раздел цел', splitLines(appended.text).slice(-4, -1).join('\n') === '### Версия v1.0.0-beta.0\n\n- Старое.');
+    // противоречие: функция добавлена и убрана в одной версии - уходит из раздела
+    const gone = apply({ text: existing, version: '1.0.0-beta.1', bullets: [A] });
+    check('убранное из раздела', gone.removed.length === 1 && !gone.text.includes(B) && gone.text.includes(A));
 
-    // дубль: точная строка не добавляется, файл не меняется
+    // тот же список: файл не меняется
     const dup = apply({ text: existing, version: '1.0.0-beta.1', bullets: [A, B] });
-    check('дубль', dup.added === 0 && dup.skipped === 2 && dup.text === existing);
+    check('тот же список', dup.added === 0 && dup.kept === 2 && dup.removed.length === 0 && dup.text === existing);
     const mixed = apply({ text: existing, version: '1.0.0-beta.1', bullets: [A, C, C] });
-    check('дубль среди новых', mixed.added === 1 && mixed.skipped === 2);
+    check('дубль внутри записи', mixed.added === 1 && mixed.kept === 1 && mixed.text.split(C).length === 2);
     // тот же буллет в другом разделе дублем не считается
     check('дубль между версиями допустим', apply({ text: existing, version: '1.0.0-beta.0', bullets: [A] }).added === 1);
 
@@ -401,7 +418,8 @@ function selftest() {
 
     const crlf = apply({ text: existing.replaceAll('\n', '\r\n'), version: '1.0.0-beta.1', bullets: [C] });
     const bom = apply({ text: `\uFEFF${existing}`, version: '1.0.0-beta.1', bullets: [C] });
-    check('BOM', bom.action === 'appended' && bom.text === appended.text);
+    const rewritten = apply({ text: existing, version: '1.0.0-beta.1', bullets: [C] });
+    check('BOM', bom.action === 'rewritten' && bom.text === rewritten.text);
 
     check('CRLF', crlf.text.includes(`${C}\r\n`) && !/[^\r]\n/.test(crlf.text));
 

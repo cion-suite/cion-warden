@@ -19,13 +19,13 @@ app/                      # main process -> build/out/main/
   shell/                  # нижний слой: index.ts (namespace `shell`: splash.open / update / close, main.open / focus / shown, theme.set), module.ts
   sources/                # store.ts (sources.json, seed, CRUD), tokens.ts (PAT в vault, маска), handlers.ts, module.ts
   github/                 # index.ts (namespace `github`: клиенты api / raw, tree с etag, файл, probe, rate-limit, перевод статуса в код ошибки), types.ts, handlers.ts, module.ts
-  catalog/                # manifest.ts, derive.ts, metas.ts, sync.ts, install.ts, fanout.ts, index.ts (namespace `catalog` для libs и binds), start.ts, types.ts, handlers.ts, module.ts
+  catalog/                # manifest.ts, derive.ts, metas.ts, sync.ts, install.ts, versions.ts (`.versions.json`), config.ts (значения в .ahk), fanout.ts, index.ts (namespace `catalog` для libs, binds и scripts), start.ts, types.ts, handlers.ts, module.ts
   fonts/                  # installer.ts (установка и снятие, win32), ledger.ts (индекс installed-fonts.json, mutex), registry.ts (HKCU, оповещение системы), start.ts, handlers.ts, module.ts
   libs/                   # files.ts (скачать / удалить lib), handlers.ts, module.ts
-  binds/                  # files.ts (пресеты на диске), preset.ts (схема и значения пресета), handlers.ts, module.ts
-  scripts/                # index.ts (namespace `scripts`: список, статусы, пути), processes.ts (запуск, остановка, сверка с ОС), watcher.ts (fs.watch), deps.ts (чего не хватает скрипту), ahk.ts (#Include), handlers.ts, module.ts
+  binds/                  # files.ts (пресеты на диске, схема и значения через `catalog.config`), handlers.ts, module.ts
+  scripts/                # index.ts (namespace `scripts`: список, статусы, пути), processes.ts (запуск, остановка, сверка с ОС), watcher.ts (fs.watch), deps.ts (чего не хватает скрипту), handlers.ts, module.ts
   updater/                # module.ts (`updaterModule`), updater.ts - electron-updater через ядро; канал latest / beta - в settings; лог версий - `updater:changelog:get`
-  utils/                  # paths.ts (namespace `paths`, единственный дом путей), environment.ts (`env`), fsx.ts (namespace `fsx`: confine, атомарная запись, json, sha как у git)
+  utils/                  # paths.ts (namespace `paths`, единственный дом путей), environment.ts (`env`), fsx.ts (namespace `fsx`: confine, атомарная запись, очередь `queue`, json, sha как у git), ahk.ts (namespace `ahk`: `includes`, `parse`, `patch`, `merge` для AutoHotkey v1)
 ```
 
 Вне `app/`: `scripts/` - `check-placeholders.mjs` (гейт `dist`) и `release-notes.mjs` (текст GitHub Release для CI, без зависимостей); `docs/versions/` - лог версий; `.github/workflows/` - `ci.yml` и `release.yml`.
@@ -44,7 +44,7 @@ app/                      # main process -> build/out/main/
 | `catalog` | `sources`, `github` | `catalog:sync`, `catalog:scripts:{list,install}` | `source:synced` | start: `mkdir global_vault`, splash 50 |
 | `fonts` | `sources`, `catalog` | `fonts:{list,install,remove}` | - | start (win32): подписки на `source:synced` (установка) и `source:changed remove` (снятие), reconcile индекса по списку источников; stop: снять подписки |
 | `libs` | `catalog` | `libs:{list,install,sync,delete}`, `libs:folder:open`, `libs:web:open` | `lib:changed` | - |
-| `binds` | `catalog` | `binds:{list,install,sync,delete}`, `binds:folder:open`, `binds:schema:get`, `binds:values:{get,save,reset}` | `bind:changed` | - |
+| `binds` | `catalog` | `binds:{list,install,sync,delete}`, `binds:folder:open`, `binds:schema:get`, `binds:values:save` | `bind:changed` | - |
 | `scripts` | `catalog` | `scripts:{list,run,delete}`, `scripts:processes:{get,remove,clear}`, `scripts:folder:open`, `scripts:config:{get,save}`, `scripts:deps:get` | `script:changed`, `script:status:changed` | start: watcher (сбой - `warn`, модуль остаётся `running`); stop: закрыть watcher |
 | `updater` | - | `updater:{refresh,install}`, `updater:changelog:get` | `updater:{checked,available,progress,downloaded,failed}` | start: подписки electron-updater, плановые проверки после показа окна, splash 70; stop: `quitAndInstall`, если обновление скачано |
 
@@ -52,8 +52,8 @@ app/                      # main process -> build/out/main/
 - **GitHub.** Два клиента `http.create` (`api.github.com`, `raw.githubusercontent.com`), ретраев нет, таймаут 20 с (120 с на скачивание файла), токен - заголовком на вызов. Условный запрос tree (etag, 304) и `x-ratelimit-*` - через `http.send`. Одна точка перевода HTTP-статуса в код ошибки: 401 / 403 -> `unauthorized`, 404 у private -> `forbidden`, 404 у public -> `not_found`, лимит -> `rate_limited`; `status` остаётся в ошибке, renderer разбирает по `errors.explain(e)`.
 - **Каталог.** `catalog:sync` обновляет manifest источника (`global_vault/<sourceId>/.manifest.json`, TTL 30 с, `inFlight`, etag) и эмитит `source:synced`; `libs:sync` и `binds:sync` довозят локальные копии до manifest - другая операция. Без аргумента `sourceId` каналы `*:list` и `*:sync` работают по всем источникам.
 - **Шрифты.** Только win32: реестр HKCU и `%LOCALAPPDATA%\Microsoft\Windows\Fonts`, индекс установленных шрифтов под mutex. Установка идёт после каждого `source:synced`; reconcile при старте убирает записи источников, которых нет в списке источников, и только по успешно прочитанному списку.
-- **Скрипты.** `scripts:run` запускает `.ahk` через cmd после `cmd.allows(path)`; небезопасный путь - статус `error` через событие. `scripts:processes:get` сверяет свои процессы с ОС (PowerShell), `processes:clear` убивает все процессы `AutoHotkey*`. Запущенные скрипты при выходе не гасятся.
-- **Границы.** Каждый аргумент канала, уходящий в FS, процесс или сеть, - схема `schema.*` (`source.id`, `file.name`, `config.path`, `script.id`, ...); путь внутри `global_vault` - `fsx.confine`. Тексты ошибок main английские.
+- **Скрипты.** `scripts:run` запускает `.ahk` найденным AutoHotkey v1 (`spawn(exe, ['/CP65001', путь])`, без оболочки; поиск - реестр `SOFTWARE\AutoHotkey` с `Version` 1.x, каталоги `v1.*`, `Program Files\AutoHotkey`; `AutoHotkey.exe` - только при подтверждённой в реестре v1, у v2 то же имя); нет exe - статус `error` через событие. Скрипт, вышедший с кодом 0 (`Reload`), остаётся `running`, если его процесс есть в ОС. `scripts:processes:get` сверяет свои процессы с ОС (PowerShell), `processes:clear` убивает все процессы `AutoHotkey*`. Запущенные скрипты при выходе не гасятся.
+- **Границы.** Каждый аргумент канала, уходящий в FS, процесс или сеть, - схема `schema.*` (`source.id`, `file.name`, `script.id`, `config.values`, ...); путь внутри `global_vault` - `fsx.confine`. Тексты ошибок main английские.
 
 ### События
 
@@ -75,14 +75,14 @@ app/                      # main process -> build/out/main/
 shared/                   # @shared/
   config.ts               # `CONFIG`: appId, productName, feeds { latestUrl, betaUrl } - единственный редактируемый конфиг
   settings.ts             # zod-схема settings: источник типа и дефолтов (у каждого ключа .default()): theme, locale, telemetryOptIn, updaterBeta
-  schema.ts               # namespace `schema`: общие zod-схемы аргументов каналов (nonEmpty, token, addSource, updateSource, `source.id`, `script.id`, `script.values`, `preset.values`, `file.name`, `config.path`)
-  cmd.ts                  # namespace `cmd`: единственный набор метасимволов cmd (`allows`); от него `schema.file.name` и проверка пути запуска
+  schema.ts               # namespace `schema`: общие zod-схемы аргументов каналов (nonEmpty, token, addSource, updateSource, `source.id`, `script.id`, `file.name`, `config.values`)
+  cmd.ts                  # namespace `cmd`: единственный набор метасимволов cmd (`allows`); от него `schema.file.name`: имя из репозитория без метасимволов
   repo.ts                 # namespace `repo`: `parse` / `name` для ссылок на репозитории GitHub (нужен обоим процессам)
   types/
     ipc-channels.ts       # declare module '@cion-suite/core' { IpcChannelMap, IpcValueMap }
     app-events.ts         # declare module '@cion-suite/core' { EventMap }
     updater.ts            # типы обновления
-    sources.ts scripts.ts script-deps.ts catalog.ts libs.ts binds.ts github.ts fonts.ts  # доменные типы каналов и событий
+    sources.ts scripts.ts script-deps.ts catalog.ts libs.ts binds.ts config.ts github.ts fonts.ts  # доменные типы каналов и событий (config.ts - ConfigSchema: общая форма cfg и пресета)
     index.ts              # публичные типы shared
 ```
 
@@ -137,8 +137,8 @@ shared/                   # @shared/
 <userData>/
   sources.json                      источники, без токенов
   global_vault/<sourceId>/          локальная копия источника
-    scripts/ scripts/cfg/ lib/ presets/
-    .manifest.json .local-cache.json
+    scripts/ scripts/cfg/ scripts/<папка>/ lib/ presets/
+    .manifest.json .versions.json
   installed-fonts.json              индекс шрифтов (плюс реестр HKCU и %LOCALAPPDATA%\Microsoft\Windows\Fonts)
   io.cion.warden-settings.json      settings ядра
   io.cion.warden-secure.json        vault ядра: PAT источников, ключ source:token:<sourceId>
@@ -162,9 +162,9 @@ shared/                   # @shared/
 | Сущность | Части | Экран / что делает |
 |---|---|---|
 | `source` | `manage`, `sync` | `manage`: `SourcesButton` и диалог источников (список, форма, токен, переустановка шрифтов); `sync`: `useSourcesSync` (синхронизация всех источников) |
-| `script` | `list`, `catalog`, `values`, `deps` | `list`: `ScriptsPage` (раздел Scripts, запуск и остановка); `catalog`: `GetScriptsPage` (удалённые скрипты, установка и обновление); `values`: диалог хоткеев и значений скрипта; `deps`: проверка и установка недостающих lib и пресетов перед запуском |
+| `script` | `list`, `catalog`, `values`, `deps` | `list`: `ScriptsPage` (раздел Scripts, запуск и остановка); `catalog`: `GetScriptsPage` (удалённые скрипты, установка и обновление); `values`: диалог конфига скрипта (`cfg_<файл>.ahk`); `deps`: проверка и установка недостающих lib и пресетов перед запуском |
 | `library` | `list` | `LibrariesPage` (lib из всех источников) |
-| `bind` | `grid`, `form` | `grid`: `BindsPage` (карточки пресетов); `form`: форма значений пресета |
+| `bind` | `grid`, `form` | `grid`: `BindsPage` (карточки пресетов); `form`: форма значений пресета (`.ahk`) |
 
 Наружу из сущностей выходят только `source/manage` (`SourcesButton`) и `source/sync` (`useSourcesSync`): их импортируют `script/catalog`, `library/list`, `bind/grid`. Остальные части зовут каналы напрямую (`script/deps` ставит lib и пресеты через `window.libs.install` и `window.binds.install`, не импортируя `library` и `bind`).
 
@@ -172,24 +172,40 @@ shared/                   # @shared/
 
 - `src/shell/`: `layout` (каркас, `useQuerySync`, `windows.ready()`), `navbar` (крошки, слот страницы, провайдер), `sidebar` (таблица разделов `sections.ts`: Scripts, Get Scripts, Libraries, Binds, Changelog, Settings), `command` (палитра), `settings` (карточки Appearance, Language, GitHub API, Updates), `update` (updater из шаблона, экран `changelog`).
 - `src/kit/catalog-actions` - действия над элементами каталога (install, remove, openFolder, sync с тостами и инвалидацией); `library` и `bind` отличаются только конфигом (каналы, префикс i18n, список инвалидаций).
+- `src/kit/config-form` - форма полей `ConfigSchema` (`ConfigForm`, `ConfigFieldRow`, `useConfigForm`, `configValues`): диалог конфига скрипта (`script/values`) и форма пресета (`bind/form`); схема, значения и сохранение приходят пропсами и хуком вызывающего, kit каналов не знает.
 - `src/ui/`: списки (`ListPanel`, `ListRow`), `ConfirmDialog`, `InfoTip`, `KeyBindInput`, `useNavbarSearch`, `useGithubToast`, `toast` и прочие generic-компоненты.
 - `src/lib/`: `state.ts` (след интерфейса и миграция localStorage), `github-error.ts` (`githubFailure`), `hooks/` (`useQuerySync`, `useInvalidate`, `useBusy`), `navbar/` (контекст слота и крошек для страниц), `i18n/`.
 
 ### Данные и инвалидация
 
-Запросы - react-query, ключ `[путь канала, ...аргументы]`; `staleTime` 30 с (`AppProvider`). Отступления: `scripts:processes:get`, `scripts:config:get` и `github:limit:get` читаются на каждый mount (`staleTime: 0`) - внешние процессы AutoHotkey и правки файла событий не дают. События main сбрасывают кэш в одном месте, `useQuerySync` (вызывается в `Layout`):
+Запросы - react-query, ключ `[путь канала, ...аргументы]`; `staleTime` 30 с (`AppProvider`). Отступления: `scripts:processes:get` и `github:limit:get` читаются на каждый mount (`staleTime: 0`) - внешние процессы AutoHotkey событий не дают; `scripts:config:get` не кешируется (`gcTime: 0`) - cfg правят снаружи, открытие диалога читает файл заново. События main сбрасывают кэш в одном месте, `useQuerySync` (вызывается в `Layout`):
 
 | Событие | Что сбрасывается |
 |---|---|
 | `source:synced` | `libs:list`, `binds:list`, `catalog:scripts:list` |
-| `source:changed` | `sources:list`, три списка выше, `binds:schema:get`, `binds:values:get` |
+| `source:changed` | `sources:list`, три списка выше, `binds:schema:get` |
 | `lib:changed` | `libs:list` |
-| `bind:changed` | `binds:list`, `binds:schema:get`, `binds:values:get` |
+| `bind:changed` | `binds:list`, `binds:schema:get` |
 | `script:changed` | `scripts:list`, `scripts:processes:get`, `catalog:scripts:list` |
 | `script:status:changed` | статус в кэше `scripts:list`, `scripts:processes:get` |
 | `github:limit:changed` | `github:limit:get` |
 
 После мутации хук сам зовёт `useInvalidate`, не дожидаясь события (main не каждое изменение эмитит). Исход операции - `toast.result`; для GitHub-операций - `useGithubToast`: `unauthorized` -> `sources.tokenInvalid`, `forbidden` -> `sources.tokenNoAccess`, `not_found` со `status` 404 -> `sources.repoNotFound`, прочее - общая фраза и текст main.
+
+## Скачанные файлы: версии и значения
+
+Скрипты, cfg, lib и пресеты источника - исходники AutoHotkey v1 в `global_vault/<sourceId>/`; значения пользователя лежат прямо в скачанных `.ahk`, оригинала и значений по умолчанию отдельно от файла нет. Формат полей - `docs/app.md`, раздел "Формат cfg и пресета".
+
+- **Версия скачанного** - sha файла в репозитории на момент установки (`fsx.sha` скачанных байт, не результат переноса значений). Все версии источника - в одном файле `global_vault/<sourceId>/.versions.json`: `{ "<путь от корня источника>": "<sha>" }` для скриптов, общих файлов `scripts/<папка>`, lib и пресетов. Сами файлы версию не несут. Namespace `catalog.versions`: `read` (нет файла или битый - `{}`, warn), `record` (слияние с перезаписью ключей), `adopt` (только отсутствующие ключи).
+- **`hasUpdate`** считает `catalog.metas`: запись из файла версий против sha в manifest. Содержимое локальных файлов не хешируется, поэтому правка пользователя обновление не вызывает. cfg скрипта не версионируется и на `hasUpdate` не влияет (кроме случая "в manifest есть, рабочего файла нет"); пресет версионируется отдельно; общие файлы `support` (`scripts/<папка>/**`) общие для всех скриптов источника: их смена помечает все установленные скрипты.
+- **Файл без записи** (скачан до появления файла версий). Sha его содержимого равен sha manifest - запись создаётся (`versions.adopt`), иначе `hasUpdate`. Ошибка чтения при сравнении логируется, `hasUpdate` остаётся false, ошибка `stat` кроме `ENOENT` не считается "не скачан": sync не должен затереть файл. Файл с другим sha хешируется заново при каждом чтении списка, пока его не установят или не обновят. Старый кеш `global_vault/<sourceId>/.local-cache.json` не читается и не удаляется.
+- **Порядок записи.** Файлы пишутся первыми (cfg, `support`, скрипт последним), версии - одним `versions.record` в конце установки: сбой между ними оставляет старую запись, `hasUpdate` остаётся true, обновление повторится. Сбой скачивания cfg валит установку скрипта. `adopt` не перезаписывает ключ, поэтому запоздалая миграция из устаревшего снимка не вернёт старый sha поверх свежей установки.
+- **Сериализация.** Чтение-правка-запись одного файла (`catalog.config.save` и `install`) и записи файла версий одного источника идут по очереди `fsx.queue(ключ, задача)`: параллельные операции не теряют правок друг друга.
+- **Обновление** перезаписывает файл целиком; значения переносятся `catalog.config.install` -> `ahk.merge`: значения старого рабочего файла вносятся в новый по имени переменной (без учёта регистра), метаданные и порядок берутся из нового, исчезнувшая переменная отбрасывается. Выражения `:=` без кавычек не переносятся. Принято: новый default из репозитория не доходит до поля, которое пользователь не трогал (без оригинала не отличить "поставил сам" от "было по умолчанию"); смена режима парсера теряет перенос значений ставших скрытыми констант; ручные правки скрипта, lib и пресета при обновлении теряются.
+- **Bulk-sync** (`libs:sync`, `binds:sync`) качает только не скачанное и с `hasUpdate`: иначе правки пользователя затирались бы без обновления.
+- **Чтение ничего не пишет**, кроме `adopt` для файла без записи. `catalog.config.read` только `ENOENT` считает "нет файла" (`null`), прочее - `failed`.
+- **Битый файл версий** читается как пустой, следующая запись его пересоздаёт: файлы с правками пройдут правило "без записи" и могут получить `hasUpdate`. Запись атомарна (`fsx.write`), битым файл бывает только от ручной правки.
+- **Старое v2.** Файлы `global_vault/<sourceId>/.local-cache.json` и `*.values.json` прежних версий остаются на диске, приложение их не читает.
 
 ## Версии и лог
 
@@ -223,7 +239,7 @@ docs/versions/release.md   лог релизного канала               
 - `app/updater` - надстройка над шаблоном (diff с эталоном ненулевой): лимит ручной проверки `updater:refresh` (5 мин между проверками, не более 4 в час, отказ `rate_limited`), флаг `downloaded` глушит плановые проверки и смену канала после скачивания, событие `updater:checked` на `update-not-available`. Потеряно: `UpdaterIpcResult` (ошибки теперь throw), `autoInstallOnAppQuit=false` как таковой.
 - `app/scripts/module.ts` - `start` ловит сбой watcher (`try/catch` + `warn`): иначе модуль станет `failed` и все `scripts:*` ответят `unavailable`; без watcher список просто не обновляется сам.
 - `app/fonts` - снятие шрифтов удалённого источника идёт по событию `source:changed` после записи списка источников (fire-and-forget), а не до неё: прямой вызов из `sources` замкнул бы цикл `sources` <-> `fonts`. Осиротевшие записи индекса убирает reconcile в `start`, и только по успешно прочитанному списку источников.
-- Handler не бросает там, где отказ - данные: `github:limit:get` (сбой пробы в `entries[].ok / error`), `binds:schema:get` (`null`), `scripts:config:get` (`{}` без файла), `scripts:processes:get` (`false` при сбое PowerShell), `scripts:run` (небезопасный путь - статус `error` через событие), `sources:list` (сбой vault - `tokenMask: null`).
+- Handler не бросает там, где отказ - данные: `github:limit:get` (сбой пробы в `entries[].ok / error`), `binds:schema:get` и `scripts:config:get` (`null` без файла), `scripts:processes:get` (`false` при сбое PowerShell), `scripts:run` (нет AutoHotkey v1 - статус `error` через событие), `sources:list` (сбой vault - `tokenMask: null`).
 - Словарь глаголов не расширялся: остановка скрипта - `scripts:processes:remove`, остановка всех - `scripts:processes:clear`, проверка внешних - `scripts:processes:get`, проверка зависимостей - `scripts:deps:get`, `sync` у `libs` / `binds` - довести локальную копию до каталога (не то же, что `catalog:sync`, обновление manifest).
 - `shared/types/updater.ts` - `UpdaterInfo`, `UpdaterProgress`: имена с `Info` против CLAUDE.md (тип результата - существительное без `Info`). Это нагрузки событий `updater:*`, а не результат канала, и файл общий с эталоном: имена шаблона оставлены, чтобы diff с ним был нулевым.
 - `shared/settings.ts` - `theme` по умолчанию `dark` (шаблон: `system`), как в старом UI; в файле settings старого warden лежит `system`, поэтому `migrateLegacyState` явно ставит `dark` при апгрейде. Окно 900x450 (min 800x400), а не 1100x520 шаблона: размер старого warden, дальше `persist` ядра.

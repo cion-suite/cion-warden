@@ -48,12 +48,15 @@ Footer (без заголовка группы)
 - Ожидаемая структура репозитория:
 
   ```text
-  scripts/          скрипты (.ahk)
-  scripts/cfg/      JSON-конфиги (имя совпадает со скриптом)
+  scripts/          скрипты (.ahk, AutoHotkey v1)
+  scripts/cfg/      конфиги скриптов: cfg_<файл скрипта>.ahk (include скрипта)
+  scripts/<папка>/  общие файлы скриптов, например misc/ (include скриптов)
   lib/              библиотеки (файл или папка)
-  presets/          пресеты биндов (JSON)
+  presets/          пресеты биндов (.ahk)
   assets/fonts/     шрифты источника (+ _fonts.json с описанием)
   ```
+
+  Скрипты, cfg, пресеты и общие файлы - исходники AutoHotkey v1; формат cfg и пресета - раздел "Формат cfg и пресета".
 
 ### Раскладка диалога (`SourcesDialog`)
 
@@ -127,7 +130,7 @@ Split-panel modal (`sm:max-w-3xl`, высота `min(520px, 100dvh - 2rem)`):
   - `[...]` dropdown:
     - `Open in Explorer` -> `scripts:folder:open`
     - `Delete` (destructive) -> confirmation Dialog -> `scripts:delete`
-  - `[cfg]` - ghost icon. Disabled если нет `configPath`. Открывает `ScriptConfigDialog`.
+  - `[cfg]` - ghost icon. Disabled, если у скрипта нет `config` (нет `cfg_<файл>.ahk` или в нём нет полей). Открывает `ScriptConfigDialog`.
   - `[> Run] / [# Stop]` - одна кнопка, зависит от `script.status === 'running'`. Run = `default`, Stop = `secondary` (`scripts:processes:remove`).
 - **Индикатор состояния:** `border-primary/30` при running; при проверке зависимостей - спиннер и подпись.
 
@@ -135,16 +138,23 @@ Split-panel modal (`sm:max-w-3xl`, высота `min(520px, 100dvh - 2rem)`):
 
 Перед `scripts:run` renderer зовёт `scripts:deps:get(id)`: main разбирает `#Include` скрипта (`ahk.includes`) и ищет недостающие lib и пресеты в manifest источника. Если чего-то не хватает, показывается `MissingLibsDialog` (список, прогресс): подтверждение последовательно ставит `libs:install` / `binds:install`, затем скрипт запускается; отказ части установок - тост с числом ошибок, запуск не происходит.
 
+Include'ы, которые поставляет сам источник (`scripts/cfg`, общие файлы `scripts/<папка>`, `presets\`), и динамические (`*i`, пути с `%`) в недостающие и неизвестные не попадают.
+
+### Запуск скрипта
+
+`scripts:run` запускает скрипт найденным AutoHotkey v1: `AutoHotkeyU64.exe` / `AutoHotkeyU32.exe` по реестру (`SOFTWARE\AutoHotkey`, `Version` 1.x), по каталогам `v1.*` рядом с v2 или в `Program Files\AutoHotkey`. `AutoHotkey.exe` берётся, только если реестр того же каталога подтвердил v1: это имя есть и у v2. Параметры - `/CP65001 <путь к скрипту>`, без оболочки. Exe не найден - статус `error` с текстом "AutoHotkey v1 is not installed". Путь найденного exe кешируется до его исчезновения.
+
+Скрипт, завершившийся кодом 0 (например `Reload` на Insert), считается запущенным, если процесс с его путём ещё есть в системе: перезапуск - это новый процесс, а не завершение.
+
 ### Диалог конфига (`ScriptConfigDialog`, часть `values`)
 
-Modal (`max-w-sm`) с двумя табами:
+Modal (`max-w-sm`) с общей формой `ConfigForm` (`src/kit/config-form`): секции из `; @Title` с заголовками, у поля - label, опциональный `[?]` tooltip и редактор по типу:
 
-- **Hotkeys** (`hk` из `ScriptCfgFile`): label + опциональный `[?]` tooltip + `KeyBindInput` (chip с режимом записи клавиши или кнопки мыши).
-- **Values** (`val`): label + tooltip + input по типу (`boolean` - Switch, `number` - numeric Input, `string` - text Input).
+- `hotkey` - `KeyBindInput` (chip с режимом записи клавиши или кнопки мыши); значение может быть пустым;
+- `number` - numeric Input;
+- `string` - text Input.
 
-Default-таб - `hotkeys`, если есть `hk`-записи, иначе `values`. Disabled-таб, если соответствующих записей нет.
-
-Сохранение: `scripts:config:save(configPath, values)` (файл `<cfg>.values.json`). Загрузка: `scripts:config:get(configPath)` при каждом открытии, мерж с дефолтами из `script.config`.
+Значения берутся из `cfg_<файл>.ahk`: `scripts:config:get(id)` читает схему с текущими `field.value` при каждом открытии (кеша нет). Правки копятся в форме; `[Save]` (`scripts:config:save(id, values)`) пишет значения прямо в присваивания файла (остальной текст и скрытые константы не меняются), затем схема перечитывается и правки сбрасываются. Reset нет: значений по умолчанию отдельно от файла не хранится.
 
 ### Наблюдение за каталогом
 
@@ -155,7 +165,7 @@ Default-таб - `hotkeys`, если есть `hk`-записи, иначе `val
 ### Сущность
 
 - `src/entities/script/list` - `ScriptsPage`, `ScriptRow`, `useScripts` (список + признак запущенных).
-- `src/entities/script/values` - диалог хоткеев и значений.
+- `src/entities/script/values` - диалог конфига скрипта (форма - `src/kit/config-form`).
 - `src/entities/script/deps` - проверка и установка недостающего перед запуском.
 
 ---
@@ -202,13 +212,21 @@ Default-таб - `hotkeys`, если есть `hk`-записи, иначе `val
 
 ### Поток скачивания
 
-`catalog:scripts:install(sourceId, fileName)` качает скрипт и соответствующий `cfg/<name>.json` (если есть в источнике) в `global_vault/<sourceId>/scripts` и `scripts/cfg`. Main событие не эмитит; renderer после успеха сбрасывает `catalog:scripts:list` и `scripts:list` (позже придёт `script:changed` от watcher). Тост успеха.
+`catalog:scripts:install(sourceId, fileName)` качает в `global_vault/<sourceId>/scripts`:
+
+1. `cfg/cfg_<файл>` (если есть в источнике). Значения рабочего cfg переходят в новый файл по имени переменной; сбой скачивания валит установку: скрипт без cfg не загрузится.
+2. Общие файлы `scripts/<папка>/**` (`misc/` и подобные), если их нет или их версия отличается.
+3. Сам скрипт, последним. Версии записываются одним вызовом после успеха всех файлов.
+
+Main событие не эмитит; renderer после успеха сбрасывает `catalog:scripts:list` и `scripts:list` (позже придёт `script:changed` от watcher). Тост успеха.
+
+**Обновление** перезаписывает скрипт, lib и пресет целиком: ручные правки в них теряются. Значения cfg и пресета при этом переносятся в новый файл по имени переменной (без учёта регистра): новое поле приходит со значением из репозитория, подписи, подсказки, секции и порядок - из нового файла, исчезнувшая переменная отбрасывается. Следствие: новое значение по умолчанию из репозитория не доходит до поля, которое пользователь не трогал.
 
 ### Семантика синхронизации
 
 - `sources:list` - текущие источники.
 - `catalog:scripts:list()` - агрегат всех источников по сохранённому manifest; `catalog:scripts:list(sourceId)` - один источник.
-- `catalog:sync(sourceId?)` - свежий листинг (GitHub API, etag, TTL 30 с) и пересчёт `sha` <-> `localSha`.
+- `catalog:sync(sourceId?)` - свежий листинг (GitHub API, etag, TTL 30 с); `hasUpdate` считается при чтении списка: запись о скачанной версии (файл `global_vault/<sourceId>/.versions.json`) против `sha` в manifest. Правка скачанного файла пользователем `hasUpdate` не вызывает: содержимое локальных файлов не сравнивается. cfg скрипта сам обновления не вызывает (кроме случая, когда рабочего cfg нет), пресет версионируется отдельно. Общие файлы `scripts/<папка>` общие для всех скриптов источника: их изменение в репозитории помечает `hasUpdate` у всех установленных скриптов.
 
 ---
 
@@ -243,7 +261,7 @@ Default-таб - `hotkeys`, если есть `hk`-записи, иначе `val
 ### Тулбар
 
 - `[Sources]` - общий диалог источников.
-- `[v Download All]` - `outline`; `libs:sync()` качает lib всех источников; disabled, если нечего скачивать или идёт операция. Итог тостом (`ok` / `failed`).
+- `[v Download All]` - `outline`; `libs:sync()` качает не скачанные lib и lib с обновлением (актуальные не перекачиваются, правки пользователя в них не затираются); disabled, если все lib уже скачаны (обновление отдельной lib - кнопка в её строке) или идёт операция. Итог тостом (`ok` / `failed`).
 - `[R]` - `catalog:sync()`, как в Get Scripts.
 
 ### Строка (`LibraryRow`)
@@ -266,7 +284,7 @@ Default-таб - `hotkeys`, если есть `hk`-записи, иначе `val
 
 ## Страница: Binds
 
-**Суть:** глобальные пресеты с биндами и значениями для скриптов. Пресеты - JSON-файлы источников (`presets/`), копии - в `global_vault/<sourceId>/presets`.
+**Суть:** глобальные пресеты с биндами и значениями для скриптов. Пресеты - `.ahk`-файлы источников (`presets/`), копии - в `global_vault/<sourceId>/presets`; значения пользователя хранятся прямо в этих копиях.
 
 ### Два режима
 
@@ -300,21 +318,45 @@ Default-таб - `hotkeys`, если есть `hk`-записи, иначе `val
 |  |  Attack         [  F1  ]                        |  |
 |  |  Defend         [  F2  ]                        |  |
 |  |  Delay (ms)     [ 1000 ]                        |  |
-|  |                       [Reset]  [Save]          |  |
+|  |                                      [Save]    |  |
 |  +-------------------------------------------------+  |
 +-------------------------------------------------------+
 ```
 
 ### Форма пресета (часть `form`)
 
-- Секции и поля выводятся из JSON пресета: ключи верхнего уровня - секции, внутри пары `поле: значение`; тип поля - по значению по умолчанию (`boolean` - Switch, `number` - numeric Input, строка - hotkey `KeyBindInput`). Ключи с `$` пропускаются.
-- Клик по `[F1]` -> chip в режиме "нажми клавишу" -> клавиша или кнопка мыши записываются в черновик.
-- Изменения копятся в форме; `[Save]` (`binds:values:save`) пишет значения, которые отличаются от значений по умолчанию, в `<имя>.values.json` (вложенный формат); `[Reset]` (`binds:values:reset`) удаляет файл значений.
-- Схема - `binds:schema:get` (`null`, если пресета нет на диске или в нём нет полей - показывается подсказка), значения - `binds:values:get`.
+- Секции и поля выводятся из `.ahk` пресета (раздел "Формат cfg и пресета"); форма - общая `ConfigForm` (`src/kit/config-form`), та же, что в диалоге конфига скрипта. Тип поля: `hotkey` - `KeyBindInput`, `number` - numeric Input, `string` - text Input.
+- Клик по `[F1]` -> chip в режиме "нажми клавишу" -> клавиша или кнопка мыши записываются в черновик. Пустой бинд допустим.
+- Изменения копятся в форме; `[Save]` (`binds:values:save`) пишет значения прямо в присваивания рабочего `presets/<файл>.ahk`, после чего схема перечитывается и правки сбрасываются. Reset нет: значений по умолчанию отдельно от файла не хранится.
+- Схема со значениями - `binds:schema:get` (`ConfigSchema`, текущее значение - в `field.value`; `null`, если пресета нет на диске; пресет без полей - подсказка).
 
 ### Формат значений
 
-Ключ значения в renderer - плоский `<section>.<field>`, на диске - вложенный объект `{ section: { field: value } }`. Допустимы только примитивы (`string | number | boolean`).
+Ключ значения - имя переменной AHK без учёта регистра, плоский для всех секций. Значение - конечное число или строка без перевода строки.
+
+---
+
+## Формат cfg и пресета (AutoHotkey v1)
+
+Один парсер (`ahk.parse` в `app/utils/ahk.ts`) читает cfg скрипта (`scripts/cfg/cfg_<файл>.ahk`) и пресет (`presets/<файл>.ahk`) и выдаёт `ConfigSchema` (секции -> поля). Правка значений (`ahk.patch`) меняет только значение в строке присваивания.
+
+**Поле** - три строки подряд:
+
+```text
+; @Tooltip <текст>          необязательна
+; @Bind                     или ; @Value
+Name = value ; label        (legacy)  либо  Name := 300
+```
+
+- **Секции.** `; @Title X` открывает секцию до следующего `@Title`; поля до первого `@Title` попадают в безымянную секцию.
+- **Label** - хвост строки после комментария: у `=` это первое `[ \t];`, у `:=` первая `;` вне кавычек. Нет хвоста - label равен имени переменной.
+- **Тип поля.** `@Bind` -> `hotkey`; `@Value` с числом -> `number`, иначе `string`.
+- **Скрытая константа.** Присваивание без аннотации (`Abil_2_Cooldown := 5000`) в форме не показывается и в файле сохраняется байт-в-байт.
+- **Режим файла.** Строгий, если есть хотя бы одна `@Bind` или `@Value`; тогда полями являются только аннотированные присваивания. Иначе свободный (типичный пресет): каждое присваивание - поле (число -> `number`, остальное -> `hotkey`), строка-комментарий над группой присваиваний - заголовок секции. Первая `@Bind` в пресете превращает остальные присваивания в скрытые константы: их значения при обновлении не переносятся.
+- **Ключ поля** - имя переменной, без учёта регистра. Повтор имени - первое вхождение, предупреждение в лог.
+- **Запись.** Сохраняются BOM, перевод строки (CRLF / LF), выравнивание, оператор `=` / `:=`, хвостовой комментарий, отсутствие финального перевода строки. В значении при `=` экранируются `;`, `%` и backtick (backtick'ом); при `:=` число пишется как есть, строка - в кавычках. Поля `:=` с выражением без кавычек (`false`, `A_ScreenWidth`) при переносе значений не затрагиваются: остаётся значение нового файла.
+
+Те же правила для `ahk.merge`, который переносит значения старого рабочего файла в новый при обновлении.
 
 ---
 
@@ -358,23 +400,11 @@ export interface Source {
 // shared/types/scripts.ts
 export type ScriptStatus = 'idle' | 'running' | 'error';
 
-export interface ScriptCfgFile {
-    $version?: number;
-    hk?: Record<string, HkEntry>;
-    val?: Record<string, ValEntry>;
-}
-
-export interface ScriptCfgValues {
-    hk: Record<string, string>;
-    val: Record<string, string | number | boolean>;
-}
-
 export interface Script {
     id: string; // sha1(путь).slice(0, 16)
     name: string;
     filePath: string;
-    configPath?: string;
-    config?: ScriptCfgFile;
+    config?: ConfigSchema; // поля cfg_<файл>.ahk; нет файла или полей - не задан
     status: ScriptStatus;
     errorMessage?: string;
     modifiedAt?: number;
@@ -389,8 +419,7 @@ export interface CatalogScript {
     fileName: string;
     sourceId: string;
     sourceName: string;
-    sha?: string;
-    localSha?: string;
+    sha?: string; // sha файла в репозитории (manifest)
     isDownloaded: boolean;
     hasUpdate: boolean;
     downloadUrl?: string;
@@ -403,7 +432,31 @@ export interface SourceSync {
 }
 ```
 
-`Lib` (`libs.ts`: `kind: 'file' | 'folder'`, `files`, `webUrl`), `Bind` и `PresetSchema` / `PresetValues` (`binds.ts`), `ScriptDeps` (`script-deps.ts`: `missing`, `unknown`), `GithubLimit` и `GithubRepo` (`github.ts`), `Font` и `FontInstall` (`fonts.ts`) - по тем же правилам.
+```ts
+// shared/types/config.ts: общая форма cfg скрипта и пресета
+export type ConfigFieldType = 'hotkey' | 'number' | 'string';
+
+export interface ConfigField {
+    key: string; // имя переменной AHK, без учёта регистра
+    label: string;
+    type: ConfigFieldType;
+    value: string | number; // текущее значение в файле
+    tooltip?: string;
+}
+
+export interface ConfigSection {
+    title: string; // пусто у полей до первого @Title
+    fields: ConfigField[];
+}
+
+export interface ConfigSchema {
+    sections: ConfigSection[];
+}
+
+export type ConfigValues = Record<string, string | number>;
+```
+
+`Lib` (`libs.ts`: `kind: 'file' | 'folder'`, `files`, `webUrl`), `Bind` (`binds.ts`), `ScriptDeps` (`script-deps.ts`: `missing`, `unknown`), `GithubLimit` и `GithubRepo` (`github.ts`), `Font` и `FontInstall` (`fonts.ts`) - по тем же правилам.
 
 ---
 
@@ -420,8 +473,8 @@ scripts:processes:get         ()                    -> boolean          // ес�
 scripts:processes:remove      (id)                  -> void             // остановить скрипт
 scripts:processes:clear       ()                    -> void             // остановить все
 scripts:folder:open           (filePath)            -> void
-scripts:config:get            (configPath)          -> Partial<ScriptCfgValues>
-scripts:config:save           (configPath, values)  -> void
+scripts:config:get            (id)                  -> ConfigSchema | null   // нет cfg - null
+scripts:config:save           (id, values)          -> void
 scripts:deps:get              (id)                  -> ScriptDeps
 
 // sources
@@ -455,10 +508,8 @@ binds:install                 (sourceId, presetId)  -> void
 binds:sync                    (sourceId?)           -> BindSync
 binds:delete                  (sourceId, presetId)  -> void
 binds:folder:open             (sourceId, presetId)  -> void
-binds:schema:get              (sourceId, presetId)  -> PresetSchema | null
-binds:values:get              (sourceId, presetId)  -> PresetValues
-binds:values:save             (sourceId, presetId, values) -> void
-binds:values:reset            (sourceId, presetId)  -> void
+binds:schema:get              (sourceId, presetId)  -> ConfigSchema | null   // значения - в field.value
+binds:values:save             (sourceId, presetId, values: ConfigValues) -> void
 
 // fonts (Windows)
 fonts:list                    ()                    -> Font[]
@@ -508,10 +559,11 @@ src/
 |-- shell/                   layout, navbar, sidebar, command, settings, update
 |-- entities/
 |   |-- source/   manage/ (SourcesButton, диалог), sync/ (useSourcesSync)
-|   |-- script/   list/ (ScriptsPage), catalog/ (GetScriptsPage), values/, deps/
+|   |-- script/   list/ (ScriptsPage), catalog/ (GetScriptsPage), values/ (ScriptConfigDialog), deps/
 |   |-- library/  list/ (LibrariesPage)
 |   `-- bind/     grid/ (BindsPage), form/ (PresetForm)
 |-- kit/catalog-actions/     install / remove / openFolder / sync для library и bind
+|-- kit/config-form/         форма полей ConfigSchema: диалог скрипта и форма пресета
 |-- ui/                      shadcn, ListPanel, ListRow, ConfirmDialog, KeyBindInput, toast, ...
 `-- lib/                     state, i18n, hooks (useQuerySync, useInvalidate, useBusy), navbar, github-error
 ```
@@ -528,8 +580,10 @@ src/
 - Scripts: добавление файла в папку источника -> строка появляется без refresh; удаление -> исчезает.
 - Run/Stop: кнопка переключается; при ошибке скрипт получает `status: 'error'` + `errorMessage`; недостающие lib предлагаются к установке перед запуском.
 - `Stop All` disabled, пока нет запущенных.
-- Диалог конфига: открывается только при наличии `configPath`; hk-chip перехватывает нажатие; Save вызывает `scripts:config:save`.
+- Запуск: без AutoHotkey v1 - статус `error` "AutoHotkey v1 is not installed"; с ним скрипт стартует через найденный `AutoHotkeyU64.exe` / `AutoHotkeyU32.exe`.
+- Диалог конфига: открывается только при наличии `config`; hotkey-chip перехватывает нажатие; Save вызывает `scripts:config:save` и пишет значения в `cfg_<файл>.ahk`.
+- Обновление скрипта: значения cfg переносятся в новый файл, правка скачанного скрипта `hasUpdate` не вызывает.
 - Диалог источников: add git (private + token) -> `sources:add` + `sources:token:set`; маска видна после reopen; разлоченный токен сохраняется заново.
 - Get Scripts / Libraries / Binds: refresh -> `catalog:sync` по всем источникам; ошибки токена и доступа дают правильную фразу; Download -> строка переходит в "Up to date" / "Latest".
-- Binds: Save пишет `<имя>.values.json`, Reset его удаляет.
+- Binds: Save пишет значения в `presets/<файл>.ahk`; Update пресета сохраняет значения пользователя.
 - `pnpm typecheck` -> 0 ошибок; `pnpm lint` -> 0 нарушений boundaries; `pnpm test` зелёный.

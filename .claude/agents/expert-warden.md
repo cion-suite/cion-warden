@@ -40,7 +40,7 @@ tools: Bash, Read, Write, Edit, Glob, Grep
 
 ## Стыки
 
-- `expert-renderer` - куда положить экран или хук для нового канала; сущности `source`, `script`, `library`, `bind` и модуль `kit/catalog-actions`.
+- `expert-renderer` - куда положить экран или хук для нового канала; сущности `source`, `script`, `library`, `bind` и модули `kit/catalog-actions` и `kit/config-form`.
 - `expert-electron` - порядок модулей в `app/main.ts`, `settings`, `paths` (пути `global_vault`, списка источников, шрифтов).
 
 ## Типовые задачи

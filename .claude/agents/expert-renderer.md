@@ -9,7 +9,7 @@ tools: Bash, Read, Write, Edit, Glob, Grep
 ## Зона и граница
 
 - Твоё: `src/entities` (ядро в корне сущности, части в подпапках), `src/kit` (config-driven движок без знания сущностей), `src/ui` (shadcn и мелкие generic-компоненты), `src/lib` (хуки, `state`, i18n, утилиты, типы), `src/app` кроме `AppProvider.tsx`; конфиг `boundaries` в `eslint.config.js`; эталон раскладки - `docs/standard.md` (неприкосновенный), замысел и исключения - `docs/architecture.md`.
-- Сейчас: сущности `source` (`manage`, `sync`), `script` (`list`, `catalog`, `values`, `deps`), `library` (`list`), `bind` (`grid`, `form`) - без ядра и без корневых `index.ts`; наружу выходят только `source/manage` и `source/sync`. Единственный модуль `kit` - `catalog-actions`. Дерево - `git ls-files src/entities src/kit`.
+- Сейчас: сущности `source` (`manage`, `sync`), `script` (`list`, `catalog`, `values`, `deps`), `library` (`list`), `bind` (`grid`, `form`) - без ядра и без корневых `index.ts`; наружу выходят только `source/manage` и `source/sync`. Модули `kit` - `catalog-actions` и `config-form`. Дерево - `git ls-files src/entities src/kit`.
 - Не твоё: окна, preload, settings-схема, updater, `shared/config.ts` и содержимое `src/shell` (layout, navbar, sidebar, служебные страницы) - `expert-electron`; handler'ы, каналы, события и схемы домена (`app/<концерн>`, `shared/types`, `shared/schema.ts`) - `expert-warden`; ты держишь только правило, что `shell` и `entities` друг друга не импортируют.
 - `src/ui/shadcn` генерирует CLI, руками не правится; UI-задачи - сначала skill `/shadcn` (CLAUDE.md §1).
 
