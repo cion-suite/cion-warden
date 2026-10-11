@@ -80,6 +80,8 @@ export const manifest = {
     cfg: {
         // v1: конфиг скрипта - cfg_<файл скрипта> с расширением
         name: (fileName: string): string => `cfg_${fileName}`,
+        // Путь cfg скрипта от корня источника
+        path: (fileName: string): string => `${dir.scripts}/${dir.cfg}/${manifest.cfg.name(fileName)}`,
     },
     preset: {
         id: (sourceId: string, fileName: string): string => `${sourceId}:preset:${fileName}`,

@@ -9,7 +9,7 @@ import { processes } from '@app/scripts/processes';
 import { fsx } from '@app/utils/fsx';
 import { paths } from '@app/utils/paths';
 import { schema } from '@shared/schema';
-import type { Script, ScriptCfgValues } from '@shared/types';
+import type { Script } from '@shared/types';
 
 const log = logger.child('Scripts');
 
@@ -41,8 +41,6 @@ async function sweepCompanions(filePath: string): Promise<void> {
         if (entry.isDirectory() && entry.name !== catalog.dir.cfg) await sweep(path.join(source.scripts, entry.name));
     }
 }
-
-const valuesPath = (configPath: string): string => configPath.replace(/\.json$/, '.values.json');
 
 export const scriptsHandlers = {
     'scripts:list': (): Promise<Script[]> => scripts.list(),
@@ -82,22 +80,13 @@ export const scriptsHandlers = {
     },
 
     'scripts:config:get': {
-        args: [schema.config.path],
-        handle: async (configPath): Promise<Partial<ScriptCfgValues>> => {
-            fsx.confine(paths.vault(), configPath);
-            return (await fsx.json.read<Partial<ScriptCfgValues>>(valuesPath(configPath)).catch((e: unknown) => {
-                log.warn(`Config values are unreadable: ${configPath}`, e);
-                return undefined;
-            })) ?? {};
-        },
+        args: [schema.script.id],
+        handle: id => catalog.config.read(scripts.config.ref(id)),
     },
 
     'scripts:config:save': {
-        args: [schema.config.path, schema.script.values],
-        handle: async (configPath, values) => {
-            fsx.confine(paths.vault(), configPath);
-            await fsx.json.write(valuesPath(configPath), values);
-        },
+        args: [schema.script.id, schema.config.values],
+        handle: (id, values) => catalog.config.save(scripts.config.ref(id), values),
     },
 
     'scripts:deps:get': {

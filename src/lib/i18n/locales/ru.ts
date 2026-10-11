@@ -73,8 +73,7 @@ export const ru = {
             empty: 'Скриптов нет. Добавьте файлы скриптов в папку vault.',
             configDialog: {
                 title: 'Настройка',
-                hotkeys: 'Хоткеи',
-                values: 'Значения',
+                empty: 'В конфиге нет полей.',
                 save: 'Сохранить',
             },
             deps: {

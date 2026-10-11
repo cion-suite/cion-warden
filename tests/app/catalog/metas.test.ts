@@ -193,6 +193,48 @@ describe('metas(sourceId)', () => {
         });
     });
 
+    describe('cfg скрипта', () => {
+        const withCfg = () => manifest.write('a', data({ cfgs: [file('cfg_a.ahk', 'c')] }));
+
+        it('в manifest есть, рабочего файла нет: hasUpdate у скачанного скрипта', async () => {
+            await withCfg();
+            await localFile('a', 'scripts/a.ahk', content);
+
+            expect((await metas('a')).scripts[0]).toMatchObject({ isDownloaded: true, hasUpdate: true });
+        });
+
+        it('нескачанному скрипту hasUpdate не ставится', async () => {
+            await withCfg();
+
+            expect((await metas('a')).scripts[0]).toMatchObject({ isDownloaded: false, hasUpdate: false });
+        });
+
+        it('рабочий файл есть: правка и расхождение с manifest не дают hasUpdate', async () => {
+            await withCfg();
+            await localFile('a', 'scripts/a.ahk', content);
+            await localFile('a', 'scripts/cfg/cfg_a.ahk', Buffer.from('edited by user'));
+
+            expect((await metas('a')).scripts[0]).toMatchObject({ hasUpdate: false });
+            expect(await saved('a')).toEqual({ 'scripts/a.ahk': sha });
+        });
+
+        it('cfg чужого скрипта и скрипт без cfg в manifest: hasUpdate false', async () => {
+            await manifest.write('a', data({ cfgs: [file('cfg_b.ahk', 'c')] }));
+            await localFile('a', 'scripts/a.ahk', content);
+
+            expect((await metas('a')).scripts[0]).toMatchObject({ hasUpdate: false });
+        });
+
+        it('ошибка stat не ENOENT: файл считается скачанным, hasUpdate false и warn', async () => {
+            await withCfg();
+            await localFile('a', 'scripts/a.ahk', content);
+            failStat('scripts/cfg/cfg_a.ahk', 'EACCES');
+
+            expect((await metas('a')).scripts[0]).toMatchObject({ hasUpdate: false });
+            expect(log.warn).toHaveBeenCalledWith('Local file unreadable', expect.anything(), { sourceId: 'a', key: 'scripts/cfg/cfg_a.ahk' });
+        });
+    });
+
     describe('support', () => {
         const withSupport = () => manifest.write('a', data({ support: [file('misc/misc.ahk', sha)] }));
 

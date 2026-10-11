@@ -3,9 +3,11 @@ import type { Dirent } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { errors, events, logger } from '@cion-suite/core';
+import { catalog } from '@app/catalog';
 import { fsx } from '@app/utils/fsx';
 import { paths } from '@app/utils/paths';
-import type { Script, ScriptCfgFile, ScriptStatus } from '@shared/types';
+import type { ConfigRef } from '@app/catalog/types';
+import type { ConfigSchema, Script, ScriptStatus } from '@shared/types';
 
 const log = logger.child('Scripts');
 
@@ -27,14 +29,22 @@ async function readDir(dir: string): Promise<Dirent[]> {
     }
 }
 
-async function readConfig(cfgPath: string): Promise<ScriptCfgFile | undefined> {
-    return fsx.json.read<ScriptCfgFile>(cfgPath).catch((e: unknown) => {
-        log.warn(`Config is unreadable: ${cfgPath}`, e);
-        return undefined;
-    });
+function configRef(sourceId: string, fileName: string): ConfigRef {
+    return { sourceId, path: catalog.cfg.path(fileName) };
 }
 
-async function readScript(dir: string, file: Dirent): Promise<Script | null> {
+// Сбой одного cfg не должен ронять список
+async function readConfig(ref: ConfigRef): Promise<ConfigSchema | undefined> {
+    try {
+        const config = await catalog.config.read(ref);
+        return config?.sections.some(section => section.fields.length > 0) ? config : undefined;
+    } catch (e) {
+        log.warn(`Config is unreadable: ${ref.path}`, e, { sourceId: ref.sourceId });
+        return undefined;
+    }
+}
+
+async function readScript(sourceId: string, dir: string, file: Dirent): Promise<Script | null> {
     if (!file.isFile() || fsx.isTemp(file.name)) return null;
     const filePath = path.join(dir, file.name);
     let modifiedAt: number;
@@ -46,8 +56,7 @@ async function readScript(dir: string, file: Dirent): Promise<Script | null> {
     }
     const ext = path.extname(file.name);
     const name = ext ? file.name.slice(0, -ext.length) : file.name;
-    const cfgPath = path.join(dir, 'cfg', `${name}.json`);
-    const config = await readConfig(cfgPath);
+    const config = await readConfig(configRef(sourceId, file.name));
     const id = scriptId(filePath);
     filePaths.set(id, filePath);
     const known = statuses.get(id);
@@ -55,7 +64,6 @@ async function readScript(dir: string, file: Dirent): Promise<Script | null> {
         id,
         name,
         filePath,
-        configPath: config ? cfgPath : undefined,
         config,
         status: known?.status ?? 'idle',
         errorMessage: known?.errorMessage,
@@ -77,7 +85,7 @@ async function list(): Promise<Script[]> {
     const sources = (await readDir(root)).filter(entry => entry.isDirectory());
     const perSource = await Promise.all(sources.map(async (source) => {
         const dir = paths.source(source.name).scripts;
-        const found = await Promise.all((await readDir(dir)).map(file => readScript(dir, file)));
+        const found = await Promise.all((await readDir(dir)).map(file => readScript(source.name, dir, file)));
         return found.filter((script): script is Script => script !== null);
     }));
     const all = perSource.flat();
@@ -94,6 +102,16 @@ export const scripts = {
         const filePath = filePaths.get(id);
         if (filePath === undefined) throw errors.fail('not_found', `Script not found: ${id}`);
         return filePath;
+    },
+
+    config: {
+        /** cfg скрипта по id из последнего list. */
+        ref(id: string): ConfigRef {
+            const filePath = scripts.path(id);
+            const sourceId = path.relative(paths.vault(), filePath).split(path.sep)[0];
+            errors.assert(sourceId, `Script is outside vault: ${id}`);
+            return configRef(sourceId, path.basename(filePath));
+        },
     },
 
     /** Известные id с путями: сверка с процессами ОС. */

@@ -1,34 +1,13 @@
-export interface HkEntry {
-    key: string;
-    description: string;
-    tooltip?: string;
-}
-
-export interface ValEntry {
-    val: string | number | boolean;
-    description: string;
-    tooltip?: string;
-}
-
-export interface ScriptCfgFile {
-    $version?: number;
-    hk?: Record<string, HkEntry>;
-    val?: Record<string, ValEntry>;
-}
+import type { ConfigSchema } from './config';
 
 export type ScriptStatus = 'idle' | 'running' | 'error';
-
-export interface ScriptCfgValues {
-    hk: Record<string, string>;
-    val: Record<string, string | number | boolean>;
-}
 
 export interface Script {
     id: string;
     name: string;
     filePath: string;
-    configPath?: string;
-    config?: ScriptCfgFile;
+    /** Поля cfg скрипта; нет файла или полей - не задан. */
+    config?: ConfigSchema;
     status: ScriptStatus;
     errorMessage?: string;
     modifiedAt?: number;

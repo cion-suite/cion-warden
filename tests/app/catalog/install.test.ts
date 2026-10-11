@@ -100,6 +100,19 @@ describe('install', () => {
         expect(github.file).toHaveBeenCalledWith(source, 'scripts/cfg/cfg_tool.ahk');
     });
 
+    it('cfg: значения рабочего файла переносятся в новый, версия cfg не пишется', async () => {
+        await synced('tool.ahk', { cfgs: [entry('cfg_tool.ahk')] });
+        await seed('scripts/cfg/cfg_tool.ahk', '; @Bind\nKey = F1 ; Run\n');
+        github.file.mockImplementation((_s: unknown, repoPath: string) => Promise.resolve(repoPath.includes('/cfg/')
+            ? Buffer.from('; @Bind\nKey = F5 ; Run\n; @Value\nFps := 60 ; Fps\n')
+            : bodyOf(repoPath)));
+
+        await install('a', 'tool.ahk');
+
+        expect(await read('scripts/cfg/cfg_tool.ahk')).toBe('; @Bind\nKey = F1 ; Run\n; @Value\nFps := 60 ; Fps\n');
+        expect(Object.keys(await recorded())).toEqual(['scripts/tool.ahk']);
+    });
+
     it('cfg чужого скрипта и cfg без записи в manifest не качаются', async () => {
         await synced('tool.ahk', { cfgs: [entry('cfg_other.ahk')] });
 

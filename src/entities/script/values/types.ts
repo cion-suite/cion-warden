@@ -1,5 +1,4 @@
-import type { ReactNode } from 'react';
-import type { Script } from '@shared/types/scripts';
+import type { Script } from '@shared/types';
 
 export interface ScriptConfigDialogProps {
     script: Script;
@@ -9,12 +8,5 @@ export interface ScriptConfigDialogProps {
 
 export interface ScriptConfigFormProps {
     script: Script;
-    configPath: string;
     onClose: () => void;
-}
-
-export interface ValueRowProps {
-    description: string;
-    tooltip?: string;
-    children: ReactNode;
 }

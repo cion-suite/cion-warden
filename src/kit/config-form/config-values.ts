@@ -1,13 +1,13 @@
 import type { ConfigField, ConfigSchema, ConfigValues } from '@shared/types';
 
-export const presetValues = {
+export const configValues = {
     fields(schema: ConfigSchema | null): ConfigField[] {
         return schema?.sections.flatMap((s) => s.fields) ?? [];
     },
 
     /** Значения, как они сейчас в файле. */
     saved(schema: ConfigSchema | null): ConfigValues {
-        return Object.fromEntries(presetValues.fields(schema).map((f) => [f.key, f.value]));
+        return Object.fromEntries(configValues.fields(schema).map((f) => [f.key, f.value]));
     },
 
     equal(a: ConfigValues, b: ConfigValues): boolean {

@@ -110,6 +110,10 @@ describe('id и поиск', () => {
         expect(manifest.cfg.name('sculptor_updater.ahk')).toBe('cfg_sculptor_updater.ahk');
     });
 
+    it('путь cfg - от корня источника, в каталоге scripts/cfg', () => {
+        expect(manifest.cfg.path('sculptor_updater.ahk')).toBe('scripts/cfg/cfg_sculptor_updater.ahk');
+    });
+
     it('stem снимает последнее расширение', () => {
         expect([manifest.stem('a.b.ahk'), manifest.stem('plain'), manifest.stem('.hidden')]).toEqual(['a.b', 'plain', '.hidden']);
     });

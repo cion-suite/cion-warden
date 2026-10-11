@@ -1,6 +1,6 @@
 export type { UpdaterInfo, UpdaterProgress } from './updater';
 export type { Source, SourceType, AddSourceOptions, UpdateSourceOptions } from './sources';
-export type { Script, ScriptCfgFile, ScriptCfgValues, ScriptStatus, HkEntry, ValEntry } from './scripts';
+export type { Script, ScriptStatus } from './scripts';
 export type { ScriptDeps, MissingItem, MissingLib, MissingPreset } from './script-deps';
 export type { CatalogScript, SourceSync } from './catalog';
 export type { Lib, LibFile, LibKind, LibSync } from './libs';

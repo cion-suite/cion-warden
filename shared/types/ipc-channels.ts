@@ -1,7 +1,7 @@
 // Без импорта front не грузит ядро: augmentation падает
 import type {} from '@cion-suite/core';
 import type { AddSourceOptions, Source, UpdateSourceOptions } from './sources';
-import type { Script, ScriptCfgValues } from './scripts';
+import type { Script } from './scripts';
 import type { ScriptDeps } from './script-deps';
 import type { CatalogScript, SourceSync } from './catalog';
 import type { Lib, LibSync } from './libs';
@@ -62,8 +62,8 @@ declare module '@cion-suite/core' {
         'scripts:processes:remove': { args: [id: string]; return: void };
         'scripts:processes:clear': { args: []; return: void };
         'scripts:folder:open': { args: [filePath: string]; return: void };
-        'scripts:config:get': { args: [configPath: string]; return: Partial<ScriptCfgValues> };
-        'scripts:config:save': { args: [configPath: string, values: ScriptCfgValues]; return: void };
+        'scripts:config:get': { args: [id: string]; return: ConfigSchema | null };
+        'scripts:config:save': { args: [id: string, values: ConfigValues]; return: void };
         'scripts:deps:get': { args: [id: string]; return: ScriptDeps };
 
         // -- Fonts --

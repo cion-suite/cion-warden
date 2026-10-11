@@ -2,6 +2,7 @@ import path from 'node:path';
 import { errors } from '@cion-suite/core';
 import { github } from '@app/github';
 import { store } from '@app/sources/store';
+import { config } from '@app/catalog/config';
 import { manifest } from '@app/catalog/manifest';
 import type { Versions } from '@app/catalog/types';
 import { versions } from '@app/catalog/versions';
@@ -22,11 +23,13 @@ export async function install(sourceId: string, fileName: string): Promise<void>
     // Скрипт без cfg не загрузится: сбой валит установку
     const cfgName = manifest.cfg.name(fileName);
     if (data.cfgs.some(cfg => cfg.fileName === cfgName)) {
-        const cfg = await github.file(source, `${dir.scripts}/${dir.cfg}/${cfgName}`)
+        const ref = { sourceId, path: manifest.cfg.path(fileName) };
+        const cfg = await github.file(source, ref.path)
             .catch((e: unknown) => {
                 throw errors.wrap(e, `Cannot download ${cfgName}`);
             });
-        await fsx.write(fsx.confine(local.cfg, path.join(local.cfg, cfgName)), cfg);
+        // Значения рабочего cfg переходят в новый файл
+        await config.install(ref, cfg);
     }
 
     const known = await versions.read(sourceId);

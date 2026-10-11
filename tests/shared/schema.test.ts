@@ -35,13 +35,6 @@ describe('schema.file.name', () => {
     });
 });
 
-describe('schema.config.path', () => {
-    it('требует .json', () => {
-        expect(ok(schema.config.path, 'C:\\v\\id\\scripts\\cfg\\a.json')).toBe(true);
-        expect(ok(schema.config.path, 'C:\\v\\id\\scripts\\a.ahk')).toBe(false);
-    });
-});
-
 describe('schema.token', () => {
     it('обрезает пробелы и отвергает пустое', () => {
         expect(schema.token.parse('  ghp_x  ')).toBe('ghp_x');
@@ -72,15 +65,6 @@ describe('schema.updateSource', () => {
         expect(ok(schema.updateSource, { type: 'git' })).toBe(false);
         expect(ok(schema.updateSource, { id: 'x' })).toBe(false);
         expect(ok(schema.updateSource, { url: '' })).toBe(false);
-    });
-});
-
-describe('schema.script.values', () => {
-    it('требует обе секции с примитивами', () => {
-        expect(ok(schema.script.values, { hk: { a: 'F1' }, val: { n: 1, s: 'x', b: false } })).toBe(true);
-        expect(ok(schema.script.values, { hk: {} })).toBe(false);
-        expect(ok(schema.script.values, { hk: { a: 1 }, val: {} })).toBe(false);
-        expect(ok(schema.script.values, { hk: {}, val: { o: {} } })).toBe(false);
     });
 });
 

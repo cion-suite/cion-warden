@@ -1,20 +1,19 @@
 import { SaveIcon } from 'lucide-react';
 
+import { ConfigForm, configValues } from '@/kit/config-form';
 import { Button } from '@/ui/shadcn/button';
 import { Card, CardContent, CardFooter } from '@/ui/shadcn/card';
 import { Separator } from '@/ui/shadcn/separator';
 import { Skeleton } from '@/ui/shadcn/skeleton';
 import { Spinner } from '@/ui/shadcn/spinner';
 import { useT } from '@/lib/i18n';
-import { PresetFieldRow } from './PresetFieldRow';
 import type { PresetFormProps } from './types';
 import { usePresetForm } from './usePresetForm';
 
 export function PresetForm({ sourceId, presetId }: PresetFormProps) {
     const t = useT();
     const { schema, values, loading, dirty, saving, setValue, save } = usePresetForm(sourceId, presetId);
-    const sections = schema?.sections.filter((s) => s.fields.length > 0) ?? [];
-    const hasAnyField = sections.length > 0;
+    const hasAnyField = configValues.fields(schema).length > 0;
 
     return (
         <div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col">
@@ -26,30 +25,10 @@ export function PresetForm({ sourceId, presetId }: PresetFormProps) {
                                 <Skeleton key={i} className="h-8" />
                             ))}
                         </div>
-                    ) : !hasAnyField ? (
-                        <p className="py-4 text-center text-sm text-muted-foreground">{t('binds.schemaEmpty')}</p>
+                    ) : schema && hasAnyField ? (
+                        <ConfigForm schema={schema} values={values} onChange={setValue} />
                     ) : (
-                        <div className="flex flex-col gap-5">
-                            {sections.map((section, index) => (
-                                <div key={index} className="flex flex-col">
-                                    {section.title && (
-                                        <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                            {section.title}
-                                        </h3>
-                                    )}
-                                    <div className="flex flex-col divide-y divide-border/60">
-                                        {section.fields.map((f) => (
-                                            <PresetFieldRow
-                                                key={f.key}
-                                                field={f}
-                                                value={values[f.key]}
-                                                onChange={(v) => setValue(f.key, v)}
-                                            />
-                                        ))}
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                        <p className="py-4 text-center text-sm text-muted-foreground">{t('binds.schemaEmpty')}</p>
                     )}
                 </CardContent>
                 {hasAnyField && (

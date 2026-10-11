@@ -3,8 +3,6 @@
 import { z } from 'zod';
 import { cmd } from './cmd';
 
-const primitive = z.union([z.string(), z.number(), z.boolean()]);
-
 // Ключ поля - имя переменной AHK, без имён прототипа
 const PROTO_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
@@ -32,18 +30,12 @@ export const schema = {
     },
     script: {
         id: z.string().regex(/^[0-9a-f]{16}$/),
-        values: z.strictObject({
-            hk: z.record(z.string(), z.string()),
-            val: z.record(z.string(), primitive),
-        }),
     },
     file: {
         // Один сегмент пути из manifest, без метасимволов
         name: z.string().min(1).refine(name => name !== '.' && name !== '..' && !/[\\/]/.test(name) && cmd.allows(name)),
     },
     config: {
-        // Без .json values.json совпал бы с cfg и затёр его
-        path: z.string().min(1).endsWith('.json'),
         // Значение - одна строка файла
         values: z.record(
             z.string().refine(isVariable),

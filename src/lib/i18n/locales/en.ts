@@ -73,8 +73,7 @@ export const en = {
             empty: 'No scripts found. Add script files to your vault.',
             configDialog: {
                 title: 'Configure',
-                hotkeys: 'Hotkeys',
-                values: 'Values',
+                empty: 'Config has no fields.',
                 save: 'Save',
             },
             deps: {

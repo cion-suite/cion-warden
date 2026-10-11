@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ConfigSchema } from '@shared/types';
 
-import { presetValues } from '@/entities/bind/form/preset-values';
+import { configValues } from '@/kit/config-form/config-values';
 
 const schema: ConfigSchema = {
     sections: [
@@ -17,38 +17,38 @@ const schema: ConfigSchema = {
     ],
 };
 
-describe('presetValues.fields', () => {
+describe('configValues.fields', () => {
     it('собирает поля всех секций, включая секцию без заголовка', () => {
-        expect(presetValues.fields(schema).map((f) => f.key)).toEqual(['keys_jump', 'keys_name', 'tune_speed']);
+        expect(configValues.fields(schema).map((f) => f.key)).toEqual(['keys_jump', 'keys_name', 'tune_speed']);
     });
 
     it('без схемы - пусто', () => {
-        expect(presetValues.fields(null)).toEqual([]);
+        expect(configValues.fields(null)).toEqual([]);
     });
 });
 
-describe('presetValues.saved', () => {
+describe('configValues.saved', () => {
     it('значения полей как в файле, включая 0', () => {
-        expect(presetValues.saved(schema)).toEqual({ keys_jump: 'Space', keys_name: 'hero', tune_speed: 0 });
+        expect(configValues.saved(schema)).toEqual({ keys_jump: 'Space', keys_name: 'hero', tune_speed: 0 });
     });
 
     it('без схемы - пусто', () => {
-        expect(presetValues.saved(null)).toEqual({});
+        expect(configValues.saved(null)).toEqual({});
     });
 });
 
-describe('presetValues.equal', () => {
+describe('configValues.equal', () => {
     it('равны по ключам и значениям', () => {
-        expect(presetValues.equal({ a: 1, b: 'x' }, { b: 'x', a: 1 })).toBe(true);
+        expect(configValues.equal({ a: 1, b: 'x' }, { b: 'x', a: 1 })).toBe(true);
     });
 
     it('разные значения или набор ключей', () => {
-        expect(presetValues.equal({ a: 1 }, { a: 2 })).toBe(false);
-        expect(presetValues.equal({ a: 1 }, { a: 1, b: 2 })).toBe(false);
-        expect(presetValues.equal({ a: 1 }, { b: 1 })).toBe(false);
+        expect(configValues.equal({ a: 1 }, { a: 2 })).toBe(false);
+        expect(configValues.equal({ a: 1 }, { a: 1, b: 2 })).toBe(false);
+        expect(configValues.equal({ a: 1 }, { b: 1 })).toBe(false);
     });
 
     it('строка и число не равны', () => {
-        expect(presetValues.equal({ a: 1 }, { a: '1' })).toBe(false);
+        expect(configValues.equal({ a: 1 }, { a: '1' })).toBe(false);
     });
 });

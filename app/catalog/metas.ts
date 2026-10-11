@@ -19,18 +19,25 @@ async function toMetas(source: SourceRecord, data: ManifestFile): Promise<Catalo
     const known = await versions.read(source.id);
     const adopted: Versions = {};
 
+    // Только ENOENT - "нет файла": иначе sync затрёт правки
+    async function probe(key: string): Promise<'missing' | 'unreadable' | 'exists'> {
+        try {
+            await fs.stat(path.join(root, key));
+            return 'exists';
+        } catch (e) {
+            if (fsx.isMissing(e)) return 'missing';
+            log.warn('Local file unreadable', e, { sourceId: source.id, key });
+            return 'unreadable';
+        }
+    }
+
     // Версия - запись об установке, не sha правленого файла.
     // Ключ - путь от корня источника.
     async function status(key: string, sha: string): Promise<Status> {
+        const found = await probe(key);
+        if (found === 'missing') return 'missing';
+        if (found === 'unreadable') return 'fresh';
         const file = path.join(root, key);
-        try {
-            await fs.stat(file);
-        } catch (e) {
-            if (fsx.isMissing(e)) return 'missing';
-            // "Не скачан" заставил бы sync затереть правки пользователя
-            log.warn('Local file unreadable', e, { sourceId: source.id, key });
-            return 'fresh';
-        }
         const recorded = known[key];
         if (recorded !== undefined) return recorded === sha ? 'fresh' : 'stale';
 
@@ -49,8 +56,12 @@ async function toMetas(source: SourceRecord, data: ManifestFile): Promise<Catalo
     const supportStale = (await Promise.all(data.support.map(item => status(`${dir.scripts}/${item.fileName}`, item.sha))))
         .some(state => state !== 'fresh');
 
+    // Скрипт без cfg не загрузится: нехватка файла - обновление
+    const cfgNames = new Set(data.cfgs.map(cfg => cfg.fileName));
     const scripts = await Promise.all(data.scripts.map(async (item): Promise<CatalogScript> => {
         const state = await status(`${dir.scripts}/${item.fileName}`, item.sha);
+        const cfgLost = cfgNames.has(manifest.cfg.name(item.fileName))
+            && await probe(manifest.cfg.path(item.fileName)) === 'missing';
         return {
             id: `${source.id}:${item.fileName}`,
             name: manifest.stem(item.fileName),
@@ -59,7 +70,7 @@ async function toMetas(source: SourceRecord, data: ManifestFile): Promise<Catalo
             sourceName: source.name,
             sha: item.sha,
             isDownloaded: state !== 'missing',
-            hasUpdate: state !== 'missing' && (state === 'stale' || supportStale),
+            hasUpdate: state !== 'missing' && (state === 'stale' || supportStale || cfgLost),
             downloadUrl: item.downloadUrl ?? undefined,
         };
     }));

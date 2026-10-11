@@ -39,7 +39,7 @@ export function ScriptRow({ script, onRun, checking }: ScriptRowProps) {
     const [deleteOpen, setDeleteOpen] = useState(false);
 
     const running = script.status === 'running';
-    const hasConfig = Boolean(script.configPath);
+    const hasConfig = Boolean(script.config);
 
     const runOrStop = async () => {
         if (checking) return;

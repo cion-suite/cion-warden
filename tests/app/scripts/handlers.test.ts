@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const where = vi.hoisted(() => ({ vault: '' }));
 const shell = vi.hoisted(() => ({ trashItem: vi.fn(), showItemInFolder: vi.fn() }));
 const log = vi.hoisted(() => ({ warn: vi.fn() }));
+const ref = vi.hoisted(() => vi.fn());
 
 vi.mock('electron', () => ({ shell }));
 vi.mock('@app/utils/paths', () => ({
@@ -13,11 +14,11 @@ vi.mock('@app/utils/paths', () => ({
         vault: () => where.vault,
         source: (id: string) => {
             const scripts = path.join(where.vault, id, 'scripts');
-            return { scripts, cfg: path.join(scripts, 'cfg') };
+            return { base: path.join(where.vault, id), scripts, cfg: path.join(scripts, 'cfg') };
         },
     },
 }));
-vi.mock('@app/scripts', () => ({ scripts: {} }));
+vi.mock('@app/scripts', () => ({ scripts: { config: { ref } } }));
 vi.mock('@app/scripts/processes', () => ({ processes: {} }));
 vi.mock('@app/scripts/deps', () => ({ deps: {} }));
 vi.mock('@cion-suite/core', async (importOriginal) => {
@@ -34,8 +35,9 @@ let cfg: string;
 
 beforeEach(async () => {
     where.vault = await fs.mkdtemp(path.join(os.tmpdir(), 'warden-scripts-'));
-    cfg = path.join(where.vault, 's1', 'scripts', 'cfg', 'a.json');
+    cfg = path.join(where.vault, 's1', 'scripts', 'cfg', 'cfg_a.ahk');
     await fs.mkdir(path.dirname(cfg), { recursive: true });
+    ref.mockReset().mockReturnValue({ sourceId: 's1', path: 'scripts/cfg/cfg_a.ahk' });
     shell.trashItem.mockReset().mockImplementation((target: string) => fs.rm(target, { recursive: true }));
     shell.showItemInFolder.mockReset();
     log.warn.mockReset();
@@ -155,38 +157,64 @@ describe('scripts:folder:open', () => {
 });
 
 describe('scripts:config', () => {
-    const values = { hk: { run: 'F1' }, val: { fps: 60 } };
+    const id = '0123456789abcdef';
+    const text = '\uFEFF; @Title Keys\r\n; @Bind\r\nRunKey = F1 ; Run\r\nHidden := 5000\r\n; @Value\r\nFps := 60 ; Fps';
 
-    it('save пишет в <cfg>.values.json, get читает', async () => {
-        await channel('scripts:config:save').handle(cfg, values);
+    it('get: схема cfg_<файл> со значениями файла, ref - по id', async () => {
+        await fs.writeFile(cfg, text);
 
-        expect(JSON.parse(await fs.readFile(cfg.replace(/\.json$/, '.values.json'), 'utf8'))).toEqual(values);
-        await expect(channel('scripts:config:get').handle(cfg)).resolves.toEqual(values);
+        const result = await channel('scripts:config:get').handle(id);
+
+        expect(ref).toHaveBeenCalledWith(id);
+        expect(result).toEqual({
+            sections: [{
+                title: 'Keys',
+                fields: [
+                    { key: 'RunKey', label: 'Run', type: 'hotkey', value: 'F1' },
+                    { key: 'Fps', label: 'Fps', type: 'number', value: 60 },
+                ],
+            }],
+        });
+    });
+
+    it('get: нет файла - null', async () => {
+        await expect(channel('scripts:config:get').handle(id)).resolves.toBeNull();
+    });
+
+    it('save: значения пишутся в присваивания, остальное в файле целое', async () => {
+        await fs.writeFile(cfg, text);
+
+        await channel('scripts:config:save').handle(id, { RunKey: 'F2', Fps: 90, Unknown: 'x' });
+
+        expect(await fs.readFile(cfg, 'utf8')).toBe(
+            '\uFEFF; @Title Keys\r\n; @Bind\r\nRunKey = F2 ; Run\r\nHidden := 5000\r\n; @Value\r\nFps := 90 ; Fps',
+        );
+    });
+
+    it('save: нет файла - not_found', async () => {
+        await expect(channel('scripts:config:save').handle(id, { RunKey: 'F2' })).rejects.toMatchObject({ code: 'not_found' });
         await expect(fs.access(cfg)).rejects.toBeDefined();
     });
 
-    it('нет файла - {}; битый - {} и warn', async () => {
-        await expect(channel('scripts:config:get').handle(cfg)).resolves.toEqual({});
+    it('неизвестный id: ошибка ref доходит до вызывающего', () => {
+        ref.mockImplementation(() => {
+            throw Object.assign(new Error('Script not found'), { code: 'not_found' });
+        });
 
-        await fs.writeFile(cfg.replace(/\.json$/, '.values.json'), '{oops');
-
-        await expect(channel('scripts:config:get').handle(cfg)).resolves.toEqual({});
-        expect(log.warn).toHaveBeenCalledTimes(1);
+        expect(() => channel('scripts:config:get').handle(id)).toThrow('Script not found');
+        expect(() => channel('scripts:config:save').handle(id, {})).toThrow('Script not found');
     });
 
-    it('вне vault - validation', async () => {
-        const outside = path.join(where.vault, '..', 'a.json');
+    it('схемы аргументов: id - 16 hex, значения - число или строка', () => {
+        type Parser = { safeParse: (v: unknown) => { success: boolean } };
+        const [idSchema] = channel('scripts:config:get').args as [Parser];
+        const [saveId, valuesSchema] = channel('scripts:config:save').args as [Parser, Parser];
 
-        await expect(channel('scripts:config:get').handle(outside)).rejects.toMatchObject({ code: 'validation' });
-        await expect(channel('scripts:config:save').handle(outside, values)).rejects.toMatchObject({ code: 'validation' });
-    });
-
-    it('схемы аргументов: .json обязателен, значения - строгий объект', () => {
-        const [configPath] = channel('scripts:config:get').args as [{ safeParse: (v: unknown) => { success: boolean } }];
-        const [, valuesSchema] = channel('scripts:config:save').args as [unknown, { safeParse: (v: unknown) => { success: boolean } }];
-
-        expect(configPath.safeParse('a.values').success).toBe(false);
-        expect(valuesSchema.safeParse({ hk: {}, val: {}, extra: 1 }).success).toBe(false);
-        expect(valuesSchema.safeParse({ hk: { a: 'F1' }, val: { b: 1 } }).success).toBe(true);
+        for (const parser of [idSchema, saveId]) {
+            expect(parser.safeParse(id).success).toBe(true);
+            expect(parser.safeParse('C:\\vault\\a.ahk').success).toBe(false);
+        }
+        expect(valuesSchema.safeParse({ RunKey: 'F1', Fps: 60 }).success).toBe(true);
+        expect(valuesSchema.safeParse({ Fps: true }).success).toBe(false);
     });
 });

@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Input } from '@/ui/shadcn/input';
 import { InfoTip } from '@/ui/InfoTip';
 import { KeyBindInput } from '@/ui/KeyBindInput';
-import type { NumberInputProps, PresetFieldRowProps } from './types';
+import type { ConfigFieldRowProps, NumberInputProps } from './types';
 
 // Пустой ввод не уходит в значение, на blur откат.
 function NumberInput({ value, onChange }: NumberInputProps) {
@@ -25,7 +25,7 @@ function NumberInput({ value, onChange }: NumberInputProps) {
     );
 }
 
-export function PresetFieldRow({ field, value, onChange }: PresetFieldRowProps) {
+export function ConfigFieldRow({ field, value, onChange }: ConfigFieldRowProps) {
     const current = value ?? field.value;
     return (
         <div className="flex items-center justify-between gap-3 py-1.5">
