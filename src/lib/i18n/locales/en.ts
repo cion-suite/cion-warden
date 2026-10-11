@@ -177,14 +177,8 @@ export const en = {
             },
             updates: {
                 title: 'Updates',
-                description: 'Update channel and manual check.',
+                description: 'Manual update check.',
                 version: 'Current version',
-                channel: { stable: 'Stable', beta: 'Beta' },
-                beta: {
-                    label: 'Beta builds',
-                    description:
-                        'Get pre-release builds first. Switching channel checks right away; going back to Stable may install an older version.',
-                },
                 status: {
                     idle: 'Updates are checked automatically every hour.',
                     checking: 'Checking for updates...',
@@ -206,13 +200,10 @@ export const en = {
             empty: 'No version history yet.',
             description: 'What changed in each version, newest first.',
             current: 'Current',
-            stable: 'Stable',
-            beta: 'Beta',
             emptyDescription: 'Release notes appear here with each release.',
             failed: 'Failed to load version history',
             dialog: {
                 title: 'Update installed',
-                titleBeta: 'Beta update installed',
                 since: 'Changes since v{{version}}',
                 close: 'Got it',
             },

@@ -6,25 +6,15 @@ import {
     RefreshCwIcon,
     TriangleAlertIcon,
 } from 'lucide-react';
-import { settings, useSetting } from '@cion-suite/core/renderer';
 
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@/ui/shadcn/alert';
 import { Badge } from '@/ui/shadcn/badge';
 import { Button } from '@/ui/shadcn/button';
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/ui/shadcn/card';
-import {
-    Field,
-    FieldContent,
-    FieldDescription,
-    FieldGroup,
-    FieldLabel,
-    FieldSeparator,
-    FieldTitle,
-} from '@/ui/shadcn/field';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/ui/shadcn/card';
+import { Field, FieldContent, FieldGroup, FieldSeparator, FieldTitle } from '@/ui/shadcn/field';
 import { Item, ItemActions, ItemContent, ItemDescription, ItemFooter, ItemMedia, ItemTitle } from '@/ui/shadcn/item';
 import { Progress } from '@/ui/shadcn/progress';
 import { Spinner } from '@/ui/shadcn/spinner';
-import { Switch } from '@/ui/shadcn/switch';
 import { useLocale, useT } from '@/lib/i18n';
 import { toast } from '@/ui/toast';
 import type { StatusView } from './types';
@@ -33,7 +23,6 @@ import { useUpdateStatus, type UpdateStatus } from './useUpdateStatus';
 export function UpdatesCard() {
     const t = useT();
     const locale = useLocale();
-    const beta = useSetting('updaterBeta');
     const { status, refresh } = useUpdateStatus();
     const { isDev } = window.app.env;
 
@@ -130,11 +119,6 @@ export function UpdatesCard() {
             <CardHeader>
                 <CardTitle>{t('settings.updates.title')}</CardTitle>
                 <CardDescription>{t('settings.updates.description')}</CardDescription>
-                <CardAction>
-                    <Badge variant={beta ? 'default' : 'secondary'}>
-                        {t(beta ? 'settings.updates.channel.beta' : 'settings.updates.channel.stable')}
-                    </Badge>
-                </CardAction>
             </CardHeader>
             <CardContent>
                 <FieldGroup>
@@ -145,17 +129,6 @@ export function UpdatesCard() {
                         <Badge variant="outline" className="shrink-0 font-mono">
                             v{window.app.env.version}
                         </Badge>
-                    </Field>
-                    <Field orientation="horizontal">
-                        <FieldContent>
-                            <FieldLabel htmlFor="settings-beta">{t('settings.updates.beta.label')}</FieldLabel>
-                            <FieldDescription>{t('settings.updates.beta.description')}</FieldDescription>
-                        </FieldContent>
-                        <Switch
-                            id="settings-beta"
-                            checked={beta}
-                            onCheckedChange={(checked) => void settings.set('updaterBeta', checked)}
-                        />
                     </Field>
                     <FieldSeparator />
                     {renderStatus()}

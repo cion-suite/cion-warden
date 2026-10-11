@@ -9,18 +9,12 @@ const autoUpdater = vi.hoisted(() => ({
     checkForUpdates: vi.fn(),
     quitAndInstall: vi.fn(),
     logger: null as unknown,
-    allowDowngrade: false,
 }));
 const events = vi.hoisted(() => ({ emit: vi.fn() }));
 const shellMock = vi.hoisted(() => ({ main: { shown: vi.fn() }, splash: { update: vi.fn() } }));
 const fsMock = vi.hoisted(() => ({ readFile: vi.fn() }));
 const pathsMock = vi.hoisted(() => ({ changelog: vi.fn((file: string) => `/versions/${file}`) }));
 const log = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
-const store = vi.hoisted(() => ({
-    beta: false,
-    unsubscribe: vi.fn(),
-    on: vi.fn(),
-}));
 
 vi.mock('electron', () => electron);
 vi.mock('node:fs/promises', () => fsMock);
@@ -33,11 +27,10 @@ vi.mock('@cion-suite/core', async (importOriginal) => {
         ...original,
         events,
         logger: { ...original.logger, child: () => log },
-        settings: { ...original.settings, get: () => store.beta, on: store.on },
     };
 });
 vi.mock('@shared/config', () => ({
-    CONFIG: { feeds: { latestUrl: 'https://latest.test/', betaUrl: 'https://beta.test/' } },
+    CONFIG: { feeds: { latestUrl: 'https://latest.test/' } },
 }));
 
 const FIRST_CHECK_MS = 3_000;
@@ -52,15 +45,11 @@ beforeEach(() => {
     electron.app.getVersion = () => '1.0.0';
     fsMock.readFile.mockReset();
     pathsMock.changelog.mockClear();
-    store.beta = false;
-    store.unsubscribe.mockReset();
-    store.on.mockReset().mockReturnValue(store.unsubscribe);
     autoUpdater.on.mockReset();
     autoUpdater.setFeedURL.mockReset();
     autoUpdater.checkForUpdates.mockReset().mockResolvedValue(null);
     autoUpdater.quitAndInstall.mockReset();
     autoUpdater.logger = null;
-    autoUpdater.allowDowngrade = false;
     events.emit.mockReset();
     log.info.mockReset();
     log.error.mockReset();
@@ -123,7 +112,6 @@ describe('расписание проверок', () => {
             url: 'https://latest.test/',
             channel: 'latest',
         });
-        expect(autoUpdater.allowDowngrade).toBe(true);
     });
 
     it('сбой проверки пишется в лог и не рвёт расписание', async () => {
@@ -148,37 +136,6 @@ describe('расписание проверок', () => {
         await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
 
         expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
-    });
-});
-
-describe('канал обновлений', () => {
-    it('флаг updaterBeta выбирает beta-фид без отката версии', async () => {
-        store.beta = true;
-        const { startUpdater } = await load();
-        startUpdater();
-        showMain();
-        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
-
-        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
-            provider: 'generic',
-            url: 'https://beta.test/',
-            channel: 'beta',
-        });
-        expect(autoUpdater.allowDowngrade).toBe(false);
-    });
-
-    it('смена флага проверяет новый фид сразу, не дожидаясь расписания', async () => {
-        const { startUpdater } = await load();
-        startUpdater();
-        expect(store.on).toHaveBeenCalledWith('updaterBeta', expect.any(Function));
-        const onChange = store.on.mock.calls[0][1] as () => void;
-
-        store.beta = true;
-        onChange();
-        await vi.advanceTimersByTimeAsync(0);
-
-        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith(expect.objectContaining({ channel: 'beta' }));
-        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
     });
 });
 
@@ -326,17 +283,15 @@ describe('updater:refresh: лимит ручных проверок', () => {
         expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2);
     });
 
-    it('плановая проверка и смена канала лимит не трогают', async () => {
+    it('плановая проверка лимит не трогает', async () => {
         const { startUpdater, updaterHandlers } = await load();
         startUpdater();
         showMain();
         await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
-        (store.on.mock.calls[0][1] as () => void)();
-        await vi.advanceTimersByTimeAsync(0);
 
         await expect(updaterHandlers['updater:refresh']()).resolves.toBeUndefined();
 
-        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(3);
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2);
     });
 });
 
@@ -355,15 +310,6 @@ describe('после скачивания обновления', () => {
         await downloadedState();
 
         await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS + HOUR_MS * 2);
-
-        expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
-    });
-
-    it('смена канала проверку не запускает', async () => {
-        await downloadedState();
-
-        (store.on.mock.calls[0][1] as () => void)();
-        await vi.advanceTimersByTimeAsync(0);
 
         expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
     });
@@ -388,7 +334,7 @@ describe('updater:install', () => {
 });
 
 describe('updater:changelog:get', () => {
-    it('релизная версия читает release.md', async () => {
+    it('читает release.md', async () => {
         fsMock.readFile.mockResolvedValue('### Версия v1.0.0');
         const { updaterHandlers } = await load();
 
@@ -396,16 +342,6 @@ describe('updater:changelog:get', () => {
 
         expect(pathsMock.changelog).toHaveBeenCalledWith('release.md');
         expect(fsMock.readFile).toHaveBeenCalledWith('/versions/release.md', 'utf8');
-    });
-
-    it('версия с суффиксом читает beta.md', async () => {
-        electron.app.getVersion = () => '1.1.0-beta.3';
-        fsMock.readFile.mockResolvedValue('');
-        const { updaterHandlers } = await load();
-
-        await expect(updaterHandlers['updater:changelog:get']()).resolves.toBe('');
-
-        expect(pathsMock.changelog).toHaveBeenCalledWith('beta.md');
     });
 
     it('файла нет -> null', async () => {
@@ -426,7 +362,7 @@ describe('updater:changelog:get', () => {
 });
 
 describe('stopUpdater', () => {
-    it('снимает подписку на канал и расписание', async () => {
+    it('снимает расписание', async () => {
         const { startUpdater, stopUpdater } = await load();
         startUpdater();
         showMain();
@@ -436,7 +372,6 @@ describe('stopUpdater', () => {
         stopUpdater();
         await vi.advanceTimersByTimeAsync(HOUR_MS * 3);
 
-        expect(store.unsubscribe).toHaveBeenCalledTimes(1);
         expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
     });
 

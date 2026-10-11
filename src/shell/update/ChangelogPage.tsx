@@ -12,7 +12,7 @@ import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/
 import { Skeleton } from '@/ui/shadcn/skeleton';
 import { Spinner } from '@/ui/shadcn/spinner';
 import { useT } from '@/lib/i18n';
-import { isPrerelease, listChangelog } from './changelog-filter';
+import { listChangelog } from './changelog-filter';
 
 const SKELETONS = [0, 1, 2];
 
@@ -74,7 +74,6 @@ export default function ChangelogPage() {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2 font-mono">
                             v{entry.version}
-                            {isPrerelease(entry.version) && <Badge variant="outline">{t('changelog.beta')}</Badge>}
                         </CardTitle>
                         {isCurrent && (
                             <CardAction>
@@ -98,14 +97,9 @@ export default function ChangelogPage() {
                 title={t('nav.changelog')}
                 description={t('changelog.description')}
                 actions={
-                    <>
-                        <Badge variant="outline" className="font-mono">
-                            v{version}
-                        </Badge>
-                        <Badge variant={isPrerelease(version) ? 'default' : 'secondary'}>
-                            {t(isPrerelease(version) ? 'changelog.beta' : 'changelog.stable')}
-                        </Badge>
-                    </>
+                    <Badge variant="outline" className="font-mono">
+                        v{version}
+                    </Badge>
                 }
             />
             {renderBody()}

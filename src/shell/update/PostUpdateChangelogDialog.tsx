@@ -19,7 +19,7 @@ import { usePostUpdateChangelog } from './usePostUpdateChangelog';
 export function PostUpdateChangelogDialog() {
     const t = useT();
     const { version } = window.app.env;
-    const { open, changelog, fromVersion, isBeta, close } = usePostUpdateChangelog();
+    const { open, changelog, fromVersion, close } = usePostUpdateChangelog();
 
     return (
         <AlertDialog open={open}>
@@ -29,7 +29,7 @@ export function PostUpdateChangelogDialog() {
                         <SparklesIcon />
                     </AlertDialogMedia>
                     <AlertDialogTitle className="flex items-center gap-2">
-                        {t(isBeta ? 'changelog.dialog.titleBeta' : 'changelog.dialog.title')}
+                        {t('changelog.dialog.title')}
                         <Badge variant="secondary" className="font-mono">
                             v{version}
                         </Badge>

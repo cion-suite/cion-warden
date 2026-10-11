@@ -26,7 +26,6 @@
         "preview": "install-electron && electron-vite preview",
         "check:placeholders": "node scripts/check-placeholders.mjs",
         "dist": "pnpm check:placeholders && electron-vite build && electron-builder --config electron-builder.json",
-        "dist:beta": "pnpm check:placeholders && electron-vite build && electron-builder --config electron-builder.beta.json",
         "typecheck:front": "tsc --noEmit -p tsconfig.front.json",
         "typecheck:back": "tsc --noEmit -p tsconfig.back.json",
         "typecheck": "tsc --noEmit -p tsconfig.front.json && tsc --noEmit -p tsconfig.back.json && tsc --noEmit -p tsconfig.node.json",

@@ -45,9 +45,6 @@ export function filterChangelog(markdown: string, current: string, target: strin
     );
 }
 
-/** Версия с суффиксом (-beta.N) - бета-канал. */
-export const isPrerelease = (version: string): boolean => version.includes('-');
-
 type ChangelogEntry = { version: string; notes: string };
 
 /** История до current включительно, notes без заголовка. */

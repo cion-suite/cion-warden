@@ -1,9 +1,9 @@
-// Дайджест правок для changelog и запись раздела версии в docs/versions/{beta,release}.md.
-//   node .claude/scripts/notes.mjs collect [git-range]   - режим, версия, канал, коммиты, файлы по областям
+// Дайджест правок для changelog и запись раздела версии в docs/versions/release.md.
+//   node .claude/scripts/notes.mjs collect [git-range]   - режим, версия, файл лога, коммиты, файлы по областям
 //   node .claude/scripts/notes.mjs write [--replace]     - записать [USERS] из .claude/cache/notes/entry.txt
 //   node .claude/scripts/notes.mjs --selftest            - самопроверка механики файла
 // collect пишет .claude/cache/notes/{digest.md,meta.json,diff.patch[,top.patch]}; что читать модели - READ=diff|top|digest в stdout.
-// Файл канала пишет только write. Раздел версии - итог относительно прошлой версии, не история
+// Файл лога пишет только write. Раздел версии - итог относительно прошлой версии, не история
 // правок: [USERS] записи - ВЕСЬ раздел целиком (collect кладёт текущие буллеты в section.txt),
 // write заменяет им раздел и называет убранное. Раздел range-режима - только с --replace.
 import fs from 'node:fs';
@@ -236,8 +236,11 @@ const VERSION_HEADING = /^### Версия v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)[
 const SEPARATOR = '---';
 const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
 
-// Суффикс после `-` (beta.N, alpha.N) - бета-канал, иначе релиз
-const channelFile = version => `${VERSIONS_DIR}/${version.includes('-') ? 'beta' : 'release'}.md`;
+// Версия с суффиксом (-beta.N) не выпускается: лог один - release.md
+const channelFile = version => {
+    if (version.includes('-')) refuse(`версия ${version} с суффиксом: выпускаются только стабильные версии`);
+    return `${VERSIONS_DIR}/release.md`;
+};
 
 // BOM от правки в Windows-редакторе скрыл бы первый заголовок
 const splitLines = text => text.replace(/^\uFEFF/, '').split(/\r?\n/);
@@ -352,13 +355,7 @@ function write() {
 
     const file = channelFile(meta.version);
     const before = repo.read(file);
-    let result;
-    try {
-        result = applyEntry({ text: before, version: meta.version, bullets: entry.users, mode: meta.mode, replace: flags.includes('--replace') });
-    } catch (e) {
-        if (e instanceof Refusal) die(e.message);
-        throw e;
-    }
+    const result = applyEntry({ text: before, version: meta.version, bullets: entry.users, mode: meta.mode, replace: flags.includes('--replace') });
     if (result.text !== before) {
         const abs = path.join(ROOT, file);
         fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -423,9 +420,8 @@ function selftest() {
 
     check('CRLF', crlf.text.includes(`${C}\r\n`) && !/[^\r]\n/.test(crlf.text));
 
-    check('канал beta', channelFile('2.1.0-beta.3') === 'docs/versions/beta.md'
-        && channelFile('2.1.0-alpha.1') === 'docs/versions/beta.md');
     check('канал release', channelFile('2.1.0') === 'docs/versions/release.md');
+    check('суффикс - отказ', ['2.1.0-beta.3', '2.1.0-alpha.1'].every(v => thrown(() => channelFile(v))?.includes('суффикс')));
 
     // range: новый раздел создаётся, существующий - отказ, с --replace - только он
     check('range создаёт', apply({ text: existing, version: '1.0.0', bullets: [C], mode: 'range' }).action === 'created');
@@ -462,4 +458,9 @@ function selftest() {
 if (cmd === '--selftest') process.exit(selftest());
 const run = { collect, write }[cmd];
 if (!run) die('использование: notes.mjs collect [git-range] | notes.mjs write [--replace] | notes.mjs --selftest');
-run();
+try {
+    run();
+} catch (e) {
+    if (e instanceof Refusal) die(e.message);
+    throw e;
+}

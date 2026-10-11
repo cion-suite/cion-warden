@@ -55,7 +55,6 @@ pnpm dev                 # electron-vite dev (main + preload + renderer)
 pnpm build               # electron-vite build (build/out/)
 pnpm preview             # preview production-сборки
 pnpm dist                # check:placeholders + build + electron-builder (latest)
-pnpm dist:beta           # то же, beta-канал
 pnpm typecheck           # front + back + node (typecheck:front / typecheck:back - по отдельности)
 pnpm lint                # ESLint: правила ядра, boundaries, rules.mjs
 pnpm test                # vitest run (tests/ - зеркало app/ shared/ src/)

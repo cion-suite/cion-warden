@@ -1,4 +1,4 @@
-// Инвариант: appId и feeds == electron-builder.<channel>.json
+// Инвариант: appId и feeds == electron-builder.json
 // (CLAUDE.md "Before first ship"); без импортов: читает скрипт
 
 export const CONFIG = {
@@ -6,6 +6,5 @@ export const CONFIG = {
     productName: 'Cion Warden',
     feeds: {
         latestUrl: 'https://example.com/updates/latest/',
-        betaUrl: 'https://example.com/updates/beta/',
     },
 } as const;

@@ -2,13 +2,12 @@ import { useEffect, useState } from 'react';
 import * as semver from 'semver';
 
 import { state } from '@/lib/state';
-import { filterChangelog, isPrerelease } from './changelog-filter';
+import { filterChangelog } from './changelog-filter';
 
 type PostUpdateChangelog = {
     open: boolean;
     changelog: string;
     fromVersion: string;
-    isBeta: boolean;
     close: () => void;
 };
 
@@ -56,5 +55,5 @@ export function usePostUpdateChangelog(): PostUpdateChangelog {
         state.set('lastShownChangelogVersion', version);
     };
 
-    return { open, changelog, fromVersion, isBeta: isPrerelease(version), close };
+    return { open, changelog, fromVersion, close };
 }

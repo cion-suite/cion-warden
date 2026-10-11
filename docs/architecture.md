@@ -24,7 +24,7 @@ app/                      # main process -> build/out/main/
   libs/                   # files.ts (скачать / удалить lib), handlers.ts, module.ts
   binds/                  # files.ts (пресеты на диске, схема и значения через `catalog.config`), handlers.ts, module.ts
   scripts/                # index.ts (namespace `scripts`: список, статусы, пути), processes.ts (запуск, остановка, сверка с ОС), watcher.ts (fs.watch), deps.ts (чего не хватает скрипту), handlers.ts, module.ts
-  updater/                # module.ts (`updaterModule`), updater.ts - electron-updater через ядро; канал latest / beta - в settings; лог версий - `updater:changelog:get`
+  updater/                # module.ts (`updaterModule`), updater.ts - electron-updater через ядро; лог версий - `updater:changelog:get`
   utils/                  # paths.ts (namespace `paths`, единственный дом путей), environment.ts (`env`), fsx.ts (namespace `fsx`: confine, атомарная запись, очередь `queue`, json, sha как у git), ahk.ts (namespace `ahk`: `includes`, `parse`, `patch`, `merge` для AutoHotkey v1)
 ```
 
@@ -73,8 +73,8 @@ app/                      # main process -> build/out/main/
 
 ```
 shared/                   # @shared/
-  config.ts               # `CONFIG`: appId, productName, feeds { latestUrl, betaUrl } - единственный редактируемый конфиг
-  settings.ts             # zod-схема settings: источник типа и дефолтов (у каждого ключа .default()): theme, locale, telemetryOptIn, updaterBeta
+  config.ts               # `CONFIG`: appId, productName, feeds { latestUrl } - единственный редактируемый конфиг
+  settings.ts             # zod-схема settings: источник типа и дефолтов (у каждого ключа .default()): theme, locale, telemetryOptIn
   schema.ts               # namespace `schema`: общие zod-схемы аргументов каналов (nonEmpty, token, addSource, updateSource, `source.id`, `script.id`, `file.name`, `config.values`)
   cmd.ts                  # namespace `cmd`: единственный набор метасимволов cmd (`allows`); от него `schema.file.name`: имя из репозитория без метасимволов
   repo.ts                 # namespace `repo`: `parse` / `name` для ссылок на репозитории GitHub (нужен обоим процессам)
@@ -212,21 +212,20 @@ shared/                   # @shared/
 Лог для пользователей - markdown-файлы `docs/versions/`; пишет их только `/notes`, читает приложение и CI. Правила процесса (ветки, режимы `/notes`, порядок релиза) - CLAUDE.md, раздел 9; здесь - устройство.
 
 ```text
-docs/versions/beta.md      лог бета-канала (версии с суффиксом)         пока пустой
-docs/versions/release.md   лог релизного канала                         пока пустой
+docs/versions/release.md   лог версий
         |
         |-- /notes (.claude/scripts/notes.mjs write)    пишет разделы
-        |-- app:  updater:changelog:get -> paths.changelog(file)        читает main, отдаёт строку | null
-        |         dev: docs/versions/<file>
-        |         пакет: resources/versions/<file>  <- extraResources в electron-builder.json
+        |-- app:  updater:changelog:get -> paths.changelog('release.md')  читает main, отдаёт строку | null
+        |         dev: docs/versions/release.md
+        |         пакет: resources/versions/release.md  <- extraResources в electron-builder.json
         '-- CI:   scripts/release-notes.mjs docs/versions/release.md <версия> -> текст GitHub Release
 ```
 
-- **Формат.** Раздел `### Версия vX.Y.Z[-pre]`, буллеты `- текст`, новые разделы сверху, между ними `---`. Заголовок разбирают три места одним regex - `.claude/scripts/notes.mjs`, `scripts/release-notes.mjs`, `src/shell/update/changelog-filter.ts`; общего модуля нет, потому что CI и renderer `.claude/` не импортируют. Пустой файл - валидный лог.
-- **Канал.** `updater:changelog:get` (`shared/types/ipc-channels.ts`, handler в `app/updater/updater.ts`, `window.updater.changelog.get()`) выбирает файл по `app.getVersion()`: суффикс `-` -> `beta.md`, иначе `release.md`. Файла нет (`ENOENT`) - `null`, прочие ошибки пробрасываются. `paths.changelog(file)` - единственный дом пути; запись `extraResources` (`docs/versions` -> `versions`, `*.md`) наследует и `electron-builder.beta.json`.
+- **Формат.** Раздел `### Версия vX.Y.Z`, буллеты `- текст`, новые разделы сверху, между ними `---`. Заголовок разбирают три места одним regex - `.claude/scripts/notes.mjs`, `scripts/release-notes.mjs`, `src/shell/update/changelog-filter.ts`; общего модуля нет, потому что CI и renderer `.claude/` не импортируют. Пустой файл - валидный лог.
+- **Канал.** `updater:changelog:get` (`shared/types/ipc-channels.ts`, handler в `app/updater/updater.ts`, `window.updater.changelog.get()`) читает `release.md`. Файла нет (`ENOENT`) - `null`, прочие ошибки пробрасываются. `paths.changelog(file)` - единственный дом пути; файлы кладёт запись `extraResources` (`docs/versions` -> `versions`, `*.md`).
 - **Экран.** Раздел сайдбара `#/changelog` ("Что нового", группа footer, `src/shell/sidebar/sections.ts`) - `src/shell/update/ChangelogPage.tsx`: `listChangelog(data, version)` (без версий новее установленной) как по Card на версию: текущая подсвечена, состояния Skeleton / Empty / Alert; запрос через react-query. Markdown рисует `src/ui/markdown` (`react-markdown` + `remark-gfm`, без подсветки кода; ссылки отключены, чтобы клик не уводил окно со страницы).
 - **Диалог после обновления.** `PostUpdateChangelogDialog` в `Layout` (хук `usePostUpdateChangelog`): разделы в `(последняя показанная, текущая]` (`filterChangelog`), один раз. Последняя показанная версия - ключ state `lastShownChangelogVersion` (`src/lib/state.ts`). Первый запуск, откат версии и битое сохранённое значение - диалога нет, версия просто помечается показанной; ошибка чтения лога версию не помечает, повтор на следующем запуске.
-- **Релиз из CI.** `.github/workflows/release.yml` запускается после зелёного CI на push в `main` (и вручную из `main`), права `contents: write`. Версия из `package.json`: с суффиксом или с уже существующим тегом `vX.Y.Z` - выход без действий; иначе раздел из `release.md` через `scripts/release-notes.mjs` (нет раздела или он пуст - job падает), аннотированный тег на `head_sha` и `gh release create`. Установщик в CI не собирается и на feed вручную: `pnpm dist` / `pnpm dist:beta`.
+- **Релиз из CI.** `.github/workflows/release.yml` запускается после зелёного CI на push в `main` (и вручную из `main`), права `contents: write`. Версия из `package.json`: с суффиксом или с уже существующим тегом `vX.Y.Z` - выход без действий; иначе раздел из `release.md` через `scripts/release-notes.mjs` (нет раздела или он пуст - job падает), аннотированный тег на `head_sha` и `gh release create`. Установщик в CI не собирается и на feed вручную: `pnpm dist`.
 
 ## Исключения
 

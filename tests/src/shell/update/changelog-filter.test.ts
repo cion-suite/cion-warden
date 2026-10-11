@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { filterChangelog, isPrerelease, listChangelog } from '@/shell/update/changelog-filter';
+import { filterChangelog, listChangelog } from '@/shell/update/changelog-filter';
 
 const LOG = [
     '### Версия v1.2.0-beta.1',
@@ -122,12 +122,5 @@ describe('listChangelog', () => {
 
     it('битая текущая версия -> все разделы', () => {
         expect(listChangelog(LOG, 'dev')).toHaveLength(3);
-    });
-});
-
-describe('isPrerelease', () => {
-    it('суффикс -> бета, иначе релиз', () => {
-        expect(isPrerelease('1.1.0-beta.0')).toBe(true);
-        expect(isPrerelease('1.1.0')).toBe(false);
     });
 });

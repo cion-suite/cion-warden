@@ -126,8 +126,8 @@ describe('остальные пути', () => {
 
     it('changelog: упакованная - resources/versions, иначе docs/versions', () => {
         electron.app.isPackaged = true;
-        expect(paths.changelog('beta.md')).toBe(
-            path.join('C:\\Users\\Иван Петров\\resources', 'versions', 'beta.md'),
+        expect(paths.changelog('release.md')).toBe(
+            path.join('C:\\Users\\Иван Петров\\resources', 'versions', 'release.md'),
         );
 
         electron.app.isPackaged = false;

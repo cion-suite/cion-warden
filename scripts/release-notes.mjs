@@ -28,7 +28,7 @@ function selftest() {
     check('последний раздел', extract(log, '1.0.0') === '- Старое.');
     check('нет раздела', extract(log, '2.0.0') === null);
     check('пустой файл', extract('', '1.0.0') === null);
-    check('версия не префикс', extract('### Версия v1.0.0-beta.1\n\n- x\n', '1.0.0') === null);
+    check('версия не префикс', extract('### Версия v1.0.0-rc.1\n\n- x\n', '1.0.0') === null);
     check('без разделителя', extract('### Версия v1.0.0\n- a\n### Версия v0.9.0\n- b\n', '1.0.0') === '- a');
     check('BOM', extract('\uFEFF### Версия v1.0.0\n- a\n', '1.0.0') === '- a');
     check('пустое тело', extract('### Версия v1.0.0\n\n---\n', '1.0.0') === '');

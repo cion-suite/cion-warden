@@ -27,4 +27,4 @@ node .claude/scripts/ship.mjs $ARGUMENTS
 
 Аудита границ сущностей и слоёв здесь нет: его делает `lint` (`boundaries/dependencies`).
 
-Не делает: семантическое ревью - `/isgood`, commit-сообщение - `/notes`, сборку инсталлятора - `pnpm dist` / `pnpm dist:beta`.
+Не делает: семантическое ревью - `/isgood`, commit-сообщение - `/notes`, сборку инсталлятора - `pnpm dist`.

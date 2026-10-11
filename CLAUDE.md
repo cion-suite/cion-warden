@@ -54,7 +54,6 @@ DRY, KISS, Clean Code, **Clean API** - закон проекта. Нарушен
 pnpm dev                # install-electron && electron-vite dev (main + preload + renderer)
 pnpm build              # electron-vite build -> build/out/
 pnpm dist               # check:placeholders + build + electron-builder (latest)
-pnpm dist:beta          # то же, beta-канал
 pnpm check:placeholders # placeholder-URL / appId / метаданные заменены; URL в shared/config.ts == electron-builder
 pnpm typecheck          # front + back + node
 pnpm typecheck:front    # src/ + shared/ и их тесты
@@ -66,7 +65,7 @@ pnpm ship               # typecheck + lint + test + build
 
 > Корневой `tsconfig.json` имеет `"files": []` - `tsc --noEmit` без `-p` не проверяет ничего. Всегда `typecheck` / `typecheck:front` / `typecheck:back`.
 
-`pnpm dist` / `dist:beta` сначала прогоняют `check:placeholders` - релиз с placeholder-URL'ами / appId не соберётся (bypass `ALLOW_PLACEHOLDERS=1`, только для отладки, не для релиза).
+`pnpm dist` сначала прогоняет `check:placeholders` - релиз с placeholder-URL'ами / appId не соберётся (bypass `ALLOW_PLACEHOLDERS=1`, только для отладки, не для релиза).
 
 ---
 
@@ -109,27 +108,26 @@ pnpm ship               # typecheck + lint + test + build
 - **ESLint-плагины** `@cion-suite/core/eslint` резолвятся из слинкованного `cion-suite`: без собранного `dist` ядра `pnpm lint` не стартует.
 - **CSP `style-src 'unsafe-inline'`** в `index.html` - осознанный релакс: Tailwind v4 + Vite HMR инжектят inline `<style>`, `onHeadersReceived` не применяется к `file://` prod `loadFile`. Строгая CSP в prod - custom protocol (`app://`), out of scope.
 - **`npmRebuild: false`** в `electron-builder.json` - корректно без native deps. Добавил `keytar` / `better-sqlite3` / N-API модуль - переключи в `true` или запусти `npx electron-builder install-app-deps`.
-- **Updater** в dev не проверяет обновления (`app.isPackaged`); канал latest / beta - настройка settings, не отдельная сборка.
+- **Updater** в dev не проверяет обновления (`app.isPackaged`); канал один - latest.
 - **Имя приложения и `userData` закреплены** первыми строками `app/main.ts`: `app.setName(CONFIG.appId)` и `app.setPath('userData', paths.userData())` (`%APPDATA%\@cion-suite\warden`). Сторы `vault` и `settings` называются по `app.getName()` (файлы `io.cion.warden-secure` и `io.cion.warden-settings` в `userData`): токены и настройки прежнего warden читаются без миграции. Смена `CONFIG.appId` или пути в `paths.userData` осиротит список источников, `global_vault`, индекс шрифтов, Local Storage и оба стора. `name` / `productName` в `package.json` на путь не влияют.
 - **`global_vault` - не `vault`.** `global_vault/<sourceId>/` - локальная копия репозитория источника (скрипты, lib, пресеты, manifest); `vault` ядра - только секреты (PAT источников, ключ `source:token:<sourceId>`).
 - **Шрифты - только win32** (реестр HKCU, `%LOCALAPPDATA%\Microsoft\Windows\Fonts`): на других ОС `fonts:install` возвращает нули.
-- **Лог версий** (`docs/versions/*.md`) читает main (`updater:changelog:get`, `paths.changelog`): в dev из `docs/versions/`, в сборке из `resources/versions/` - туда файлы кладёт `extraResources` в `electron-builder.json` (beta-конфиг его наследует). Убрал запись - экран "Что нового" тихо покажет пустой лог.
+- **Лог версий** (`docs/versions/*.md`) читает main (`updater:changelog:get`, `paths.changelog`): в dev из `docs/versions/`, в сборке из `resources/versions/` - туда файлы кладёт `extraResources` в `electron-builder.json`. Убрал запись - экран "Что нового" тихо покажет пустой лог.
 - **Заголовок раздела версии** - один regex в трёх местах: `.claude/scripts/notes.mjs` (пишет), `scripts/release-notes.mjs` (CI), `src/shell/update/changelog-filter.ts` (renderer). Из CI и renderer `.claude/` не импортируется, поэтому копии; менять только все три разом.
 
 ---
 
 ## 5. Before first ship
 
-Что в warden уже заменено: `appId` (`io.cion.warden`), `productName` (`Cion Warden`), `index.html` `<title>`, `app/splash.html`, `name` / `homepage` / `repository` в `package.json`. Осталось (`pnpm check:placeholders` не даст собрать `dist` / `dist:beta`, пока URL - placeholder). **Инвариант:** URL в `shared/config.ts` == `electron-builder.<channel>.json[publish[0].url]`.
+Что в warden уже заменено: `appId` (`io.cion.warden`), `productName` (`Cion Warden`), `index.html` `<title>`, `app/splash.html`, `name` / `homepage` / `repository` в `package.json`. Осталось (`pnpm check:placeholders` не даст собрать `dist`, пока URL - placeholder). **Инвариант:** URL в `shared/config.ts` == `electron-builder.json[publish[0].url]`.
 
 | Где | Что |
 |---|---|
-| `shared/config.ts` | `feeds.latestUrl`, `feeds.betaUrl` - сейчас `example.com`, нужны реальные фиды |
+| `shared/config.ts` | `feeds.latestUrl` - сейчас `example.com`, нужен реальный фид |
 | `electron-builder.json` | `publish[0].url` - тот же URL, что `feeds.latestUrl` |
-| `electron-builder.beta.json` | `publish[0].url` - тот же URL, что `feeds.betaUrl` |
 | `public/assets/` | иконки (`icon.png`, `icon.ico`, `icon.icns`, `icon_dev.ico`) побайтно совпадают с шаблоном: нужны иконки warden |
 | `package.json` | `author` - object с `name` + `email` для подписи (сейчас строка); `description` - убрать хвостовой пробел |
-| `docs/versions/beta.md`, `release.md` | пустые - заменять нечего; первый релиз - раздел `### Версия vX.Y.Z` в `release.md` через `/notes` (раздел 9) |
+| `docs/versions/release.md` | раздел версии пишет `/notes` (раздел 9); перед первым релизом - `/notes <корневой коммит>..HEAD --replace` |
 | `.github/workflows/release.yml` | править нечего; в репозитории: Settings -> Actions -> General -> Workflow permissions -> Read and write (иначе тег и Release не создать) |
 
 Не менять: `CONFIG.appId` и `paths.userData()` (раздел 4, "Имя приложения и `userData` закреплены") - иначе токены источников, настройки и все локальные данные прежнего warden осиротеют. В `package.json` `productName` не добавлен: на путь он не влияет, а имя приложения и так задаёт `app.setName` в `app/main.ts`.
@@ -193,11 +191,10 @@ pnpm ship               # typecheck + lint + test + build
 Лог для пользователей - файлы `docs/versions/`, их читает окно "Что нового" в приложении. Пишет их только `/notes` (`.claude/scripts/notes.mjs write`), руками файлы не правим. Changesets не используем.
 
 ```text
-feature/version-2.x    2.1.0-beta.0 -> beta.1 -> ... -> beta.N       /notes -> docs/versions/beta.md
-        |                    |                                       (каждый bump: раздел версии)
-        |                    '-- pnpm dist:beta (вручную) -> feed beta, тег НЕ ставится
+feature/version-2.x    правки по фазам      /notes -> docs/versions/release.md
+        |                                  (каждая фаза: раздел версии)
         |
-        |  версия 2.1.0, /notes v2.0.0..HEAD -> docs/versions/release.md
+        |  версия 2.1.0, /notes v2.0.0..HEAD --replace -> docs/versions/release.md
         v  merge / PR
 main  --------------------------------------------------- 2.1.0     только релизы
                                                             |
@@ -208,26 +205,26 @@ main  --------------------------------------------------- 2.1.0     только
                                                   pnpm dist (вручную) -> feed latest
 ```
 
-- **Файлы.** `beta.md` - лог бета-канала, `release.md` - релизного. Канал по версии: суффикс (`-beta.N`, `-alpha.N`) -> `beta.md`, иначе `release.md`. Сейчас оба файла пустые: релизов ещё не было.
-- **Формат раздела.** `### Версия vX.Y.Z` (у беты `vX.Y.Z-beta.N`), ниже буллеты `- текст`, разделы новые сверху, между ними строка `---`. Без подзаголовков и emoji, только клавиатурные символы. Пример:
+- **Файл.** Лог один - `release.md`. Выпускаются только стабильные версии: версия с суффиксом (`-beta.N`, `-alpha.N`) - `/notes` отказывает.
+- **Формат раздела.** `### Версия vX.Y.Z`, ниже буллеты `- текст`, разделы новые сверху, между ними строка `---`. Без подзаголовков и emoji, только клавиатурные символы. Пример:
 
   ```markdown
-  ### Версия v2.1.0-beta.1
+  ### Версия v2.1.0
 
-  - Добавлен выбор канала обновлений.
+  - Добавлена кнопка ручной проверки обновлений.
 
   ---
 
-  ### Версия v2.1.0-beta.0
+  ### Версия v2.0.0
 
   - Ускорено первое открытие приложения.
   ```
-- **`/notes` в beta.** Без аргумента, на каждый bump версии: `[USERS]` - итоговый список ВСЕГО раздела текущей версии: уже записанные буллеты (`section.txt`) сведены с новыми, `write` заменяет раздел целиком и печатает убранное (раздела нет - создаётся сверху). Раздел - итог относительно прошлой версии, а не история правок: в нём нет пар "добавлено" и "удалено" или "добавлено" и "исправлено" об одном и том же. `[GIT]` в файл не идёт - только в commit-сообщение. Дубли между разделами `beta.md` допустимы (история бет), пользователь сводит их сам при финальной сборке лога.
-- **`/notes` в релизе.** `/notes <тег прошлого релиза>..HEAD`: `[USERS]` строится от суммарного диффа диапазона, а не склейкой записей бет (фича, которую дорабатывали во всех бетах, для пользователя релиза - просто добавленная). Раздел создаётся в `release.md`; уже есть - отказ, перезапись только `--replace` после явного согласия. Скрипт сам выбирает файл, вставляет раздел, проверяет формат и ASCII; от модели нужен только текст буллетов.
+- **`/notes` в работе.** Без аргумента, после каждой фазы: `[USERS]` - итоговый список ВСЕГО раздела текущей версии: уже записанные буллеты (`section.txt`) сведены с новыми, `write` заменяет раздел целиком и печатает убранное (раздела нет - создаётся сверху). Раздел - итог относительно прошлой версии, а не история правок: в нём нет пар "добавлено" и "удалено" или "добавлено" и "исправлено" об одном и том же. `[GIT]` в файл не идёт - только в commit-сообщение.
+- **`/notes` в релизе.** `/notes <тег прошлого релиза>..HEAD`: `[USERS]` строится от суммарного диффа диапазона, а не склейкой промежуточных записей (фича, которую дорабатывали по ходу работы, для пользователя релиза - просто добавленная). Раздел создаётся в `release.md`; уже есть - отказ, перезапись только `--replace` после явного согласия. Скрипт сам выбирает файл, вставляет раздел, проверяет формат и ASCII; от модели нужен только текст буллетов.
 - **Тег и Release.** Только стабильные релизы и только из `main`: workflow `.github/workflows/release.yml` запускается после зелёного CI на push в `main` (или вручную из `main`), читает версию из `package.json` и:
   - версия с суффиксом -> пропуск без ошибки; тег `vX.Y.Z` уже есть -> пропуск;
   - иначе берёт раздел `### Версия vX.Y.Z` из `release.md` (`scripts/release-notes.mjs`, без зависимостей и вне `.claude/`), создаёт GitHub Release с текстом раздела: тег `vX.Y.Z` на `head_sha` создаётся вместе с ним, упавший Release тег не оставляет.
   - Нет непустого раздела версии -> Release красный, тега нет: релиз без лога не создаётся (задумано). Merge в `main` с новой версией без записи в `release.md` - красный Release; первый merge в `main` с версией `1.0.0` красный, пока нет раздела `### Версия v1.0.0`.
-- **Установщик.** CI тег и Release создаёт, инсталлятор не собирает: на feed он выкладывается вручную (`pnpm dist` для latest, `pnpm dist:beta` для beta).
-- **Порядок релиза.** (1) на ветке версии поднять `package.json` до стабильной (`2.1.0`) и **закоммитить**: диапазонный `/notes` читает версию из `package.json` на конце диапазона (`HEAD`), незакоммиченный bump он не видит и выберет не тот канал; (2) `/notes <тег прошлого релиза>..HEAD` -> раздел в `release.md`; первого релиза тега нет - вместо него корневой коммит (`git rev-list --max-parents=0 HEAD`), `/notes <корневой коммит>..HEAD`; (3) commit лога, merge в `main`; (4) CI зелёный -> Release создал тег; (5) `pnpm dist` и выкладка на feed.
-- **В приложении.** Окно "Что нового" (`#/changelog`) показывает лог канала установленной версии; после обновления один раз открывается диалог с разделами между прошлой показанной и текущей версией (не при первом запуске и не при откате). Устройство - `docs/architecture.md`, раздел "Версии и лог".
+- **Установщик.** CI тег и Release создаёт, инсталлятор не собирает: на feed он выкладывается вручную (`pnpm dist`).
+- **Порядок релиза.** (1) на ветке версии поднять `package.json` до стабильной (`2.1.0`) и **закоммитить**: диапазонный `/notes` читает версию из `package.json` на конце диапазона (`HEAD`), незакоммиченный bump он не видит и возьмёт старую версию; (2) `/notes <тег прошлого релиза>..HEAD` -> раздел в `release.md`; первого релиза тега нет - вместо него корневой коммит (`git rev-list --max-parents=0 HEAD`), `/notes <корневой коммит>..HEAD`; (3) commit лога, merge в `main`; (4) CI зелёный -> Release создал тег; (5) `pnpm dist` и выкладка на feed.
+- **В приложении.** Окно "Что нового" (`#/changelog`) показывает лог версий из `release.md`; после обновления один раз открывается диалог с разделами между прошлой показанной и текущей версией (не при первом запуске и не при откате). Устройство - `docs/architecture.md`, раздел "Версии и лог".
