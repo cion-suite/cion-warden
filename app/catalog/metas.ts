@@ -3,7 +3,8 @@ import path from 'node:path';
 import { logger } from '@cion-suite/core';
 import { store, type SourceRecord } from '@app/sources/store';
 import { manifest } from '@app/catalog/manifest';
-import type { CatalogMetas, LocalCache, LocalCacheEntry, ManifestFile } from '@app/catalog/types';
+import type { CatalogMetas, ManifestFile, Versions } from '@app/catalog/types';
+import { versions } from '@app/catalog/versions';
 import { fsx } from '@app/utils/fsx';
 import { paths } from '@app/utils/paths';
 import type { Bind, CatalogScript, Lib } from '@shared/types';
@@ -11,52 +12,45 @@ import type { Bind, CatalogScript, Lib } from '@shared/types';
 const log = logger.child('Catalog');
 const { dir } = manifest;
 
-async function readCache(sourceId: string): Promise<LocalCache> {
-    const cache = await fsx.json.read<LocalCache>(paths.source(sourceId).cache).catch((e: unknown) => {
-        log.warn('Local cache unreadable', e, { sourceId });
-        return undefined;
-    });
-    return cache ?? {};
-}
-
-// Без смены mtime и size файл не перечитываем
-async function resolveSha(file: string, cached: LocalCacheEntry | undefined): Promise<LocalCacheEntry | null> {
-    const stat = await fs.stat(file).catch(() => null);
-    if (!stat) return null;
-    if (cached && cached.mtime === stat.mtimeMs && cached.size === stat.size) return cached;
-    return { mtime: stat.mtimeMs, size: stat.size, sha: fsx.sha(await fs.readFile(file)) };
-}
-
-function sameCache(a: LocalCache, b: LocalCache): boolean {
-    const keys = Object.keys(a);
-    if (keys.length !== Object.keys(b).length) return false;
-    return keys.every((key) => {
-        const x = a[key];
-        const y = b[key];
-        return x !== undefined && y !== undefined && x.mtime === y.mtime && x.size === y.size && x.sha === y.sha;
-    });
-}
+type Status = 'missing' | 'fresh' | 'stale';
 
 async function toMetas(source: SourceRecord, data: ManifestFile): Promise<CatalogMetas> {
     const root = paths.source(source.id).base;
-    const cache = await readCache(source.id);
-    const next: LocalCache = {};
+    const known = await versions.read(source.id);
+    const adopted: Versions = {};
 
-    // Ключ кеша - путь от корня источника
-    async function local(key: string): Promise<LocalCacheEntry | null> {
-        const entry = await resolveSha(path.join(root, key), cache[key]);
-        if (entry) next[key] = entry;
-        return entry;
+    // Версия - запись об установке, не sha правленого файла.
+    // Ключ - путь от корня источника.
+    async function status(key: string, sha: string): Promise<Status> {
+        const file = path.join(root, key);
+        try {
+            await fs.stat(file);
+        } catch (e) {
+            if (fsx.isMissing(e)) return 'missing';
+            // "Не скачан" заставил бы sync затереть правки пользователя
+            log.warn('Local file unreadable', e, { sourceId: source.id, key });
+            return 'fresh';
+        }
+        const recorded = known[key];
+        if (recorded !== undefined) return recorded === sha ? 'fresh' : 'stale';
+
+        // Скачан без записи: совпадение с manifest - версия известна
+        try {
+            if (fsx.sha(await fs.readFile(file)) !== sha) return 'stale';
+        } catch (e) {
+            log.warn('Local file unreadable', e, { sourceId: source.id, key });
+            return 'fresh';
+        }
+        adopted[key] = sha;
+        return 'fresh';
     }
 
     // support общий для скриптов источника: одно сравнение на всех
-    const supportStale = (await Promise.all(data.support.map(async (item) => {
-        const found = await local(`${dir.scripts}/${item.fileName}`);
-        return found?.sha !== item.sha;
-    }))).some(Boolean);
+    const supportStale = (await Promise.all(data.support.map(item => status(`${dir.scripts}/${item.fileName}`, item.sha))))
+        .some(state => state !== 'fresh');
 
     const scripts = await Promise.all(data.scripts.map(async (item): Promise<CatalogScript> => {
-        const found = await local(`${dir.scripts}/${item.fileName}`);
+        const state = await status(`${dir.scripts}/${item.fileName}`, item.sha);
         return {
             id: `${source.id}:${item.fileName}`,
             name: manifest.stem(item.fileName),
@@ -64,21 +58,15 @@ async function toMetas(source: SourceRecord, data: ManifestFile): Promise<Catalo
             sourceId: source.id,
             sourceName: source.name,
             sha: item.sha,
-            localSha: found?.sha,
-            isDownloaded: found !== null,
-            hasUpdate: found !== null && (found.sha !== item.sha || supportStale),
+            isDownloaded: state !== 'missing',
+            hasUpdate: state !== 'missing' && (state === 'stale' || supportStale),
             downloadUrl: item.downloadUrl ?? undefined,
         };
     }));
 
     const libs = await Promise.all(data.libs.map(async (lib): Promise<Lib> => {
-        let isDownloaded = lib.files.length > 0;
-        let hasUpdate = false;
-        for (const file of lib.files) {
-            const found = await local(`${dir.lib}/${file.path}`);
-            if (!found) isDownloaded = false;
-            else if (found.sha !== file.sha) hasUpdate = true;
-        }
+        const states = await Promise.all(lib.files.map(file => status(`${dir.lib}/${file.path}`, file.sha)));
+        const isDownloaded = states.length > 0 && !states.includes('missing');
         return {
             id: manifest.lib.id(source.id, lib.name),
             name: lib.name,
@@ -88,14 +76,14 @@ async function toMetas(source: SourceRecord, data: ManifestFile): Promise<Catalo
             sourceName: source.name,
             sha: lib.sha,
             isDownloaded,
-            hasUpdate: isDownloaded && hasUpdate,
+            hasUpdate: isDownloaded && states.includes('stale'),
             webUrl: lib.webUrl,
             files: lib.files,
         };
     }));
 
     const presets = await Promise.all(data.presets.map(async (item): Promise<Bind> => {
-        const found = await local(`${dir.presets}/${item.fileName}`);
+        const state = await status(`${dir.presets}/${item.fileName}`, item.sha);
         return {
             id: manifest.preset.id(source.id, item.fileName),
             name: manifest.stem(item.fileName),
@@ -103,18 +91,16 @@ async function toMetas(source: SourceRecord, data: ManifestFile): Promise<Catalo
             sourceId: source.id,
             sourceName: source.name,
             sha: item.sha,
-            isDownloaded: found !== null,
-            hasUpdate: found !== null && found.sha !== item.sha,
+            isDownloaded: state !== 'missing',
+            hasUpdate: state === 'stale',
             downloadUrl: item.downloadUrl ?? undefined,
         };
     }));
 
-    // Кеш - оптимизация: сбой записи не должен ронять список
-    if (!sameCache(cache, next)) {
-        await fsx.write(paths.source(source.id).cache, JSON.stringify(next)).catch((e: unknown) => {
-            log.warn('Local cache not saved', e, { sourceId: source.id });
-        });
-    }
+    // Сбой записи не должен ронять список
+    await versions.adopt(source.id, adopted).catch((e: unknown) => {
+        log.warn('Versions not adopted', e, { sourceId: source.id });
+    });
     return { scripts, libs, presets };
 }
 

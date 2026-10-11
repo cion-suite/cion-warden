@@ -50,14 +50,8 @@ export interface FontsSidecar {
     fonts: FontsSidecarEntry[];
 }
 
-/** Кеш sha: mtime и size - признак годности записи. */
-export interface LocalCacheEntry {
-    mtime: number;
-    size: number;
-    sha: string;
-}
-
-export type LocalCache = Record<string, LocalCacheEntry>;
+/** .versions.json: путь от корня -> sha скачанного. */
+export type Versions = Record<string, string>;
 
 /** Ссылки на файлы репозитория источника. */
 export interface RepoLinks {

@@ -25,6 +25,19 @@ async function write(file: string, content: string | Uint8Array): Promise<void> 
     }
 }
 
+// Ждёт предыдущую задачу ключа; её сбой не блокирует
+const tails = new Map<string, Promise<void>>();
+
+function queue<T>(key: string, task: () => Promise<T>): Promise<T> {
+    const run = (tails.get(key) ?? Promise.resolve()).then(() => task());
+    const tail = run.then(() => undefined, () => undefined);
+    tails.set(key, tail);
+    void tail.then(() => {
+        if (tails.get(key) === tail) tails.delete(key);
+    });
+    return run;
+}
+
 /** Временный файл записи: не данные. */
 function isTemp(name: string): boolean {
     return name.endsWith('.tmp');
@@ -35,7 +48,7 @@ async function read<T>(file: string): Promise<T | undefined> {
     try {
         raw = await fs.readFile(file, 'utf-8');
     } catch (e) {
-        if ((e as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+        if (isMissing(e)) return undefined;
         throw errors.fail('failed', `Cannot read ${path.basename(file)}`, { cause: e });
     }
     try {
@@ -45,12 +58,20 @@ async function read<T>(file: string): Promise<T | undefined> {
     }
 }
 
+/** Файла нет: ENOENT, остальные сбои чтения не прячем. */
+function isMissing(e: unknown): boolean {
+    return (e as NodeJS.ErrnoException).code === 'ENOENT';
+}
+
 /** Пути, атомарная запись JSON и хеш blob как у git. */
 export const fsx = {
     confine,
     write,
     exists: (file: string): Promise<boolean> => fs.access(file).then(() => true, () => false),
     isTemp,
+    isMissing,
+    /** Задачи с одним ключом идут по очереди. */
+    queue,
     /** Совпадает с sha из GitHub tree. */
     sha(content: Uint8Array): string {
         return createHash('sha1')

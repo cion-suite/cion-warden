@@ -1,5 +1,6 @@
 import { manifest } from '@app/catalog/manifest';
 import { metas } from '@app/catalog/metas';
+import { versions } from '@app/catalog/versions';
 
 /** Каталог источников: manifest и метаданные для libs и binds. */
 export const catalog = {
@@ -11,4 +12,5 @@ export const catalog = {
     preset: manifest.preset,
     font: manifest.font,
     metas,
+    versions,
 };

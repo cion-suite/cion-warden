@@ -184,7 +184,7 @@ describe('paths: данные приложения', () => {
             lib: path.join(base, 'lib'),
             presets: path.join(base, 'presets'),
             manifest: path.join(base, '.manifest.json'),
-            cache: path.join(base, '.local-cache.json'),
+            versions: path.join(base, '.versions.json'),
         });
     });
 

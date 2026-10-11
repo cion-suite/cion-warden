@@ -14,7 +14,7 @@ vi.mock('@app/utils/paths', () => ({
     paths: {
         source: (id: string) => {
             const base = path.join(where.vault, id);
-            return { base, presets: path.join(base, 'presets') };
+            return { base, presets: path.join(base, 'presets'), versions: path.join(base, '.versions.json') };
         },
     },
 }));
@@ -29,9 +29,12 @@ vi.mock('@cion-suite/core', async (importOriginal) => {
     return { ...original, events };
 });
 
+import { catalog } from '@app/catalog';
 import { binds } from '@app/binds/files';
+import { fsx } from '@app/utils/fsx';
 
 const source = { id: 's1', type: 'git', name: 'o/r', url: 'https://github.com/o/r', branch: 'main', isPrivate: false };
+const body = (repoPath: string) => Buffer.from(`{"title":"${repoPath}"}`);
 const entry = (fileName: string) => ({ fileName, sha: 'x', downloadUrl: null });
 const id = (fileName: string) => `s1:preset:${fileName}`;
 const presets = () => path.join(where.vault, 's1', 'presets');
@@ -44,7 +47,7 @@ beforeEach(async () => {
     manifest.read.mockReset().mockResolvedValue({ presets: [entry('a.json'), entry('b.json')] });
     manifest.get.mockReset().mockResolvedValue({ presets: [entry('a.json'), entry('b.json')] });
     metas.mockReset().mockResolvedValue({ presets: [] });
-    github.file.mockReset().mockResolvedValue(Buffer.from('{"misc":{"fps":60}}'));
+    github.file.mockReset().mockImplementation(async (_source: unknown, repoPath: string) => body(repoPath));
     events.emit.mockReset();
 });
 
@@ -57,13 +60,45 @@ describe('binds.install', () => {
         await binds.install('s1', id('a.json'));
 
         expect(github.file).toHaveBeenCalledWith(source, 'presets/a.json');
-        expect(await saved('a.json')).toEqual({ misc: { fps: 60 } });
+        expect(await saved('a.json')).toEqual({ title: 'presets/a.json' });
         expect(events.emit).toHaveBeenCalledWith('bind:changed', { sourceId: 's1', presetId: id('a.json') });
     });
 
     it('нет пресета в manifest - not_found', async () => {
         await expect(binds.install('s1', id('zzz.json'))).rejects.toMatchObject({ code: 'not_found' });
         expect(events.emit).not.toHaveBeenCalled();
+    });
+
+    it('пишет версию: ключ presets/<файл>, значение sha скачанных байт', async () => {
+        await binds.install('s1', id('a.json'));
+
+        await expect(catalog.versions.read('s1')).resolves.toEqual({
+            'presets/a.json': fsx.sha(body('presets/a.json')),
+        });
+    });
+
+    it('сбой скачивания - версия не записана, события нет', async () => {
+        const record = vi.spyOn(catalog.versions, 'record');
+        github.file.mockRejectedValue(new Error('down'));
+
+        await expect(binds.install('s1', id('a.json'))).rejects.toThrow('down');
+
+        expect(record).not.toHaveBeenCalled();
+        await expect(catalog.versions.read('s1')).resolves.toEqual({});
+        expect(events.emit).not.toHaveBeenCalled();
+        record.mockRestore();
+    });
+
+    it('сбой записи файла - версия не записана', async () => {
+        const record = vi.spyOn(catalog.versions, 'record');
+        await fs.mkdir(path.join(where.vault, 's1'), { recursive: true });
+        await fs.writeFile(presets(), 'not a directory');
+
+        await expect(binds.install('s1', id('a.json'))).rejects.toMatchObject({ code: 'failed' });
+
+        expect(record).not.toHaveBeenCalled();
+        await expect(catalog.versions.read('s1')).resolves.toEqual({});
+        record.mockRestore();
     });
 });
 
@@ -79,6 +114,40 @@ describe('binds.sync', () => {
         github.file.mockRejectedValue(new Error('down'));
 
         await expect(binds.sync()).resolves.toEqual({ ok: 0, failed: 2 });
+    });
+
+    it('актуальный не перекачивает: правка цела, качает остальные с версией', async () => {
+        await binds.install('s1', id('a.json'));
+        await fs.writeFile(path.join(presets(), 'a.json'), '{"user":"edit"}');
+        github.file.mockClear();
+        metas.mockResolvedValue({ presets: [{ id: id('a.json'), isDownloaded: true, hasUpdate: false }] });
+
+        await expect(binds.sync('s1')).resolves.toEqual({ ok: 1, failed: 0 });
+
+        expect(await saved('a.json')).toEqual({ user: 'edit' });
+        expect(github.file).toHaveBeenCalledTimes(1);
+        expect(github.file).toHaveBeenCalledWith(source, 'presets/b.json');
+        await expect(catalog.versions.read('s1')).resolves.toEqual({
+            'presets/a.json': fsx.sha(body('presets/a.json')),
+            'presets/b.json': fsx.sha(body('presets/b.json')),
+        });
+    });
+
+    it('с обновлением перекачивает, сбой одного не мешает другому', async () => {
+        await binds.install('s1', id('a.json'));
+        await fs.writeFile(path.join(presets(), 'a.json'), '{"user":"edit"}');
+        metas.mockResolvedValue({ presets: [{ id: id('a.json'), isDownloaded: true, hasUpdate: true }] });
+        github.file.mockImplementation(async (_source: unknown, repoPath: string) => {
+            if (repoPath.endsWith('b.json')) throw new Error('down');
+            return body(repoPath);
+        });
+
+        await expect(binds.sync('s1')).resolves.toEqual({ ok: 1, failed: 1 });
+
+        expect(await saved('a.json')).toEqual({ title: 'presets/a.json' });
+        await expect(catalog.versions.read('s1')).resolves.toEqual({
+            'presets/a.json': fsx.sha(body('presets/a.json')),
+        });
     });
 
     it('источник без manifest - нули', async () => {

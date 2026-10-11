@@ -3,7 +3,7 @@ import path from 'node:path';
 import { errors, events, logger } from '@cion-suite/core';
 import { catalog } from '@app/catalog';
 import { fanout } from '@app/catalog/fanout';
-import type { ManifestLibEntry } from '@app/catalog/types';
+import type { ManifestLibEntry, Versions } from '@app/catalog/types';
 import { github } from '@app/github';
 import { store, type SourceRecord } from '@app/sources/store';
 import { fsx } from '@app/utils/fsx';
@@ -26,16 +26,24 @@ async function resolve(sourceId: string, libId: string): Promise<Resolved> {
 
 async function download(source: SourceRecord, lib: ManifestLibEntry): Promise<void> {
     const root = paths.source(source.id).lib;
+    const recorded: Versions = {};
     for (const file of lib.files) {
         const content = await github.file(source, `${catalog.dir.lib}/${file.path}`);
         await fsx.write(fsx.confine(root, path.join(root, file.path)), content);
+        recorded[`${catalog.dir.lib}/${file.path}`] = fsx.sha(content);
     }
+    await catalog.versions.record(source.id, recorded);
 }
 
 async function syncSource(source: SourceRecord): Promise<LibSync> {
     const data = await catalog.manifest.read(source.id);
     const result: LibSync = { ok: 0, failed: 0 };
+
+    // Актуальные не качаем: затёрли бы правки пользователя
+    const { libs: metas } = await catalog.metas(source.id);
+    const fresh = new Set(metas.filter(lib => lib.isDownloaded && !lib.hasUpdate).map(lib => lib.id));
     for (const lib of data?.libs ?? []) {
+        if (fresh.has(catalog.lib.id(source.id, lib.name))) continue;
         try {
             await download(source, lib);
             result.ok++;
@@ -55,7 +63,6 @@ export const libs = {
         events.emit('lib:changed', { sourceId, libId });
     },
 
-    // Весь каталог источника, а не только отсутствующие
     async sync(sourceId?: string): Promise<LibSync> {
         return fanout(sourceId, async (source) => {
             const result = await syncSource(source);

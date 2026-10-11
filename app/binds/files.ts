@@ -50,6 +50,7 @@ async function findOrNull(sourceId: string, presetId: string): Promise<Located |
 async function download({ source, entry, schemaPath }: Located): Promise<void> {
     const content = await github.file(source, `${catalog.dir.presets}/${entry.fileName}`);
     await fsx.write(schemaPath, content);
+    await catalog.versions.record(source.id, { [`${catalog.dir.presets}/${entry.fileName}`]: fsx.sha(content) });
 }
 
 async function syncSource(source: SourceRecord): Promise<BindSync> {
