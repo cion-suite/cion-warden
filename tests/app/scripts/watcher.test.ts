@@ -55,6 +55,15 @@ describe('watcher: фильтр путей', () => {
         expect(emit).not.toHaveBeenCalled();
     });
 
+    it('каталоги scripts/cfg, scripts/misc и вложенные файлы - не скрипты', async () => {
+        for (const name of ['s\\scripts\\cfg', 's\\scripts\\misc', 's/scripts/other', 's\\scripts\\misc\\misc.ahk', 's\\scripts\\cfg\\cfg_a.ahk']) {
+            fire('rename', name);
+        }
+        await vi.advanceTimersByTimeAsync(500);
+
+        expect(emit).not.toHaveBeenCalled();
+    });
+
     it('игнорирует tmp атомарной записи', async () => {
         fire('rename', 's\\scripts\\a.ahk.1234.tmp');
         await vi.advanceTimersByTimeAsync(500);

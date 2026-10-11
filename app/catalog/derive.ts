@@ -52,10 +52,22 @@ function fileIn(entry: GithubTreeEntry, prefix: string): string | null {
     return rel !== '' && !rel.includes('/') && isName(rel) ? rel : null;
 }
 
-function scripts(tree: Tree, to: RepoLinks): { scripts: ManifestFileEntry[]; cfgs: ManifestFileEntry[] } {
-    const cfgPrefix = `${dir.scripts}/${dir.cfg}/`;
+type ScriptEntries = { scripts: ManifestFileEntry[]; cfgs: ManifestFileEntry[]; support: ManifestFileEntry[] };
+
+// Файл scripts/<папка>/**: путь от scripts/, сегменты - имена
+function supportIn(entry: GithubTreeEntry, prefix: string): string | null {
+    if (entry.type !== 'blob' || !entry.path.startsWith(prefix)) return null;
+    const rel = entry.path.slice(prefix.length);
+    const parts = rel.split('/');
+    return parts.length > 1 && parts.every(isName) ? rel : null;
+}
+
+function scripts(tree: Tree, to: RepoLinks): ScriptEntries {
+    const root = `${dir.scripts}/`;
+    const cfgPrefix = `${root}${dir.cfg}/`;
     const scriptList: ManifestFileEntry[] = [];
     const cfgList: ManifestFileEntry[] = [];
+    const supportList: ManifestFileEntry[] = [];
     for (const entry of tree) {
         const cfg = fileIn(entry, cfgPrefix);
         if (cfg !== null) {
@@ -64,12 +76,18 @@ function scripts(tree: Tree, to: RepoLinks): { scripts: ManifestFileEntry[]; cfg
         }
         // Всё под cfg/ - не скрипт, даже с отвергнутым именем
         if (entry.path.startsWith(cfgPrefix)) continue;
-        const name = fileIn(entry, `${dir.scripts}/`);
-        if (name !== null) scriptList.push({ fileName: name, sha: entry.sha, downloadUrl: to.raw(entry.path) });
+        const name = fileIn(entry, root);
+        if (name !== null) {
+            scriptList.push({ fileName: name, sha: entry.sha, downloadUrl: to.raw(entry.path) });
+            continue;
+        }
+        const nested = supportIn(entry, root);
+        if (nested !== null) supportList.push({ fileName: nested, sha: entry.sha, downloadUrl: to.raw(entry.path) });
     }
     return {
         scripts: sorted(scriptList, item => item.fileName),
         cfgs: sorted(cfgList, item => item.fileName),
+        support: sorted(supportList, item => item.fileName),
     };
 }
 
@@ -77,11 +95,7 @@ function presets(tree: Tree, to: RepoLinks): ManifestFileEntry[] {
     const list: ManifestFileEntry[] = [];
     for (const entry of tree) {
         const name = fileIn(entry, `${dir.presets}/`);
-        if (name === null) continue;
-        const lower = name.toLowerCase();
-        // <name>.values.json - локальные значения, не схема: иначе
-        // карточка-призрак и столкновение при удалении
-        if (!lower.endsWith('.json') || lower.endsWith('.values.json')) continue;
+        if (name === null || !name.toLowerCase().endsWith('.ahk')) continue;
         list.push({ fileName: name, sha: entry.sha, downloadUrl: to.raw(entry.path) });
     }
     return sorted(list, item => item.fileName);

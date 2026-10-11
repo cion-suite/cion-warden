@@ -13,10 +13,13 @@ const DEBOUNCE_MS = 150;
 let watching: fs.FSWatcher | null = null;
 const pending = new Map<string, NodeJS.Timeout>();
 
-// <источник>/scripts/<файл>: ни cfg/, ни tmp записи не скрипты
+// <источник>/scripts/<имя.ext>; каталог (cfg, misc) без ext
+// не скрипт: удалённый уже не stat'нуть
 function isScript(relative: string): boolean {
     const parts = relative.replace(/\\/g, '/').split('/');
-    return parts.length === 3 && parts[1] === 'scripts' && !fsx.isTemp(parts[2]);
+    const name = parts[2];
+    return parts.length === 3 && parts[1] === 'scripts' && name !== undefined
+        && path.extname(name) !== '' && !fsx.isTemp(name);
 }
 
 async function resolveType(filePath: string): Promise<'change' | 'unlink'> {

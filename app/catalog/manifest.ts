@@ -8,7 +8,7 @@ const log = logger.child('Catalog');
 
 // Смена формы manifest: старый etag дал бы 304 и оставил
 // неполные записи навсегда, поэтому версия сбрасывает кеш
-export const MANIFEST_VERSION = 4;
+export const MANIFEST_VERSION = 5;
 
 const normalizeLib = (raw: Partial<ManifestLibEntry>): ManifestLibEntry => ({
     name: raw.name ?? '',
@@ -30,6 +30,7 @@ function normalize(raw: Partial<ManifestFile>): ManifestFile {
         lastCheckedAt: raw.lastCheckedAt ?? raw.lastSyncedAt ?? 0,
         scripts: raw.scripts ?? [],
         cfgs: raw.cfgs ?? [],
+        support: raw.support ?? [],
         libs: Array.isArray(raw.libs) ? raw.libs.map(normalizeLib) : [],
         presets: raw.presets ?? [],
         fonts: Array.isArray(raw.fonts) ? raw.fonts : [],
@@ -75,6 +76,10 @@ export const manifest = {
         id: (sourceId: string, name: string): string => `${sourceId}:lib:${name}`,
         find: (data: ManifestFile, sourceId: string, libId: string): ManifestLibEntry | null =>
             data.libs.find(lib => manifest.lib.id(sourceId, lib.name) === libId) ?? null,
+    },
+    cfg: {
+        // v1: конфиг скрипта - cfg_<файл скрипта> с расширением
+        name: (fileName: string): string => `cfg_${fileName}`,
     },
     preset: {
         id: (sourceId: string, fileName: string): string => `${sourceId}:preset:${fileName}`,

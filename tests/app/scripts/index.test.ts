@@ -31,4 +31,15 @@ describe('scripts.list', () => {
         await fs.writeFile(path.join(dir, 'a.ahk.0b1c.tmp'), '');
         expect((await scripts.list()).map(s => s.name)).toEqual(['a']);
     });
+
+    it('вложенные каталоги (cfg, misc) не скрипты', async () => {
+        const dir = path.join(where.vault, 's1', 'scripts');
+        await fs.mkdir(path.join(dir, 'cfg'), { recursive: true });
+        await fs.mkdir(path.join(dir, 'misc'), { recursive: true });
+        await fs.writeFile(path.join(dir, 'a.ahk'), '');
+        await fs.writeFile(path.join(dir, 'cfg', 'cfg_a.ahk'), '');
+        await fs.writeFile(path.join(dir, 'misc', 'misc.ahk'), '');
+
+        expect((await scripts.list()).map(s => s.name)).toEqual(['a']);
+    });
 });

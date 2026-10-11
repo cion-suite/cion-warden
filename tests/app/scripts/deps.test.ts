@@ -39,6 +39,7 @@ import { deps } from '@app/scripts/deps';
 const source = { id: 's1', type: 'git', name: 'o/r', url: 'https://github.com/o/r', branch: 'main', isPrivate: false };
 const lib = (name: string, file = `${name}.ahk`) => ({ name, kind: 'file', path: file, sha: 'x', files: [{ path: file, sha: 'x', downloadUrl: null }] });
 const entry = (fileName: string) => ({ fileName, sha: 'x', downloadUrl: null });
+const base = { libs: [], presets: [], cfgs: [], support: [] };
 
 let script: string;
 
@@ -76,6 +77,7 @@ describe('deps.get', () => {
 
     it('libs по #Include, имени файла и пресеты по имени', async () => {
         read.mockResolvedValue({
+            ...base,
             libs: [lib('a'), lib('b'), lib('cfgdata', 'cfgdata.json'), lib('ok')],
             presets: [entry('Binds.json'), entry('have.json')],
         });
@@ -107,8 +109,46 @@ describe('deps.get', () => {
         ]);
     });
 
+    it('include с *i, presets, support, cfg и % не попадают в unknown', async () => {
+        read.mockResolvedValue({
+            ...base,
+            support: [entry('misc/misc.ahk'), entry('Misc/Deep/Tool.ahk')],
+            cfgs: [entry('cfg_main.ahk')],
+        });
+        await fs.writeFile(script, [
+            '#Include *i misc\\misc.ahk',
+            '#Include %A_ScriptDir%\\MISC\\deep\\tool.ahk',
+            '#Include ./misc/misc.ahk',
+            '#Include cfg\\cfg_%A_Scriptname%',
+            '#Include cfg\\cfg_main.ahk',
+            '#Include ..\\presets\\game.ahk',
+            '#Include *i presets\\game.ahk',
+            '#Include %A_ScriptDir%\\..\\presets\\game.ahk',
+            '#Include misc\\other.ahk',
+            '#Include ..\\misc\\misc.ahk',
+        ].join('\n'));
+
+        const result = await deps.get('0123456789abcdef');
+
+        expect(result).toEqual({ missing: [], unknown: ['misc\\other.ahk'] });
+    });
+
+    it('пресет .ahk ищется по имени файла в тексте', async () => {
+        read.mockResolvedValue({ ...base, presets: [entry('game_settings.ahk'), entry('other.ahk')] });
+        await fs.writeFile(script, 'Load("Presets\\Game_Settings.ahk")');
+        await fs.mkdir(path.join(where.vault, 's1', 'presets'), { recursive: true });
+
+        await expect(deps.get('0123456789abcdef')).resolves.toEqual({
+            missing: [{ kind: 'preset', sourceId: 's1', presetId: 's1:preset:game_settings.ahk', name: 'game_settings' }],
+            unknown: [],
+        });
+
+        await fs.writeFile(path.join(where.vault, 's1', 'presets', 'game_settings.ahk'), '');
+        await expect(deps.get('0123456789abcdef')).resolves.toEqual({ missing: [], unknown: [] });
+    });
+
     it('отказ GitHub при чтении lib пробрасывается', async () => {
-        read.mockResolvedValue({ libs: [lib('a')], presets: [] });
+        read.mockResolvedValue({ ...base, libs: [lib('a')] });
         await fs.writeFile(script, '#Include lib\\a.ahk');
         github.file.mockRejectedValue(Object.assign(new Error('rate'), { code: 'rate_limited' }));
 

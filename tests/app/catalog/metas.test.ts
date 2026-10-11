@@ -30,14 +30,15 @@ const sha = fsx.sha(content);
 const file = (fileName: string, fileSha: string) => ({ fileName, sha: fileSha, downloadUrl: `https://raw/${fileName}` });
 
 const data = (patch: Partial<ManifestFile> = {}): ManifestFile => ({
-    version: 4, etag: null, treeSha: null, branch: 'main', lastSyncedAt: 1, lastCheckedAt: 1,
+    version: 5, etag: null, treeSha: null, branch: 'main', lastSyncedAt: 1, lastCheckedAt: 1,
     scripts: [file('a.ahk', sha), file('b.ahk', 'other')],
     cfgs: [],
+    support: [],
     libs: [{
         name: 'pack', kind: 'folder', path: 'pack', sha: 'x',
         files: [{ path: 'pack/1.ahk', sha, downloadUrl: null }, { path: 'pack/2.ahk', sha: 'new', downloadUrl: null }],
     }],
-    presets: [file('p.json', sha)],
+    presets: [file('p.ahk', sha)],
     fonts: [],
     ...patch,
 });
@@ -81,7 +82,32 @@ describe('metas(sourceId)', () => {
             { id: 'a:b.ahk', isDownloaded: true, hasUpdate: true, sha: 'other', localSha: sha },
         ]);
         expect(result.libs).toMatchObject([{ id: 'a:lib:pack', isDownloaded: true, hasUpdate: true }]);
-        expect(result.presets).toMatchObject([{ id: 'a:preset:p.json', isDownloaded: false, hasUpdate: false }]);
+        expect(result.presets).toMatchObject([{ id: 'a:preset:p.ahk', isDownloaded: false, hasUpdate: false }]);
+    });
+
+    it('support: недостающий или изменённый файл даёт hasUpdate скачанным скриптам', async () => {
+        await manifest.write('a', data({ support: [file('misc/misc.ahk', sha)] }));
+        await localFile('a', 'scripts/a.ahk', content);
+
+        const missing = (await metas('a')).scripts;
+        expect(missing[0]).toMatchObject({ isDownloaded: true, hasUpdate: true });
+        expect(missing[1]).toMatchObject({ isDownloaded: false, hasUpdate: false });
+
+        await localFile('a', 'scripts/misc/misc.ahk', Buffer.from('changed'));
+        expect((await metas('a')).scripts[0]).toMatchObject({ hasUpdate: true });
+
+        await localFile('a', 'scripts/misc/misc.ahk', content);
+        expect((await metas('a')).scripts[0]).toMatchObject({ isDownloaded: true, hasUpdate: false });
+    });
+
+    it('support попадает в кеш sha по ключу scripts/<путь>', async () => {
+        await manifest.write('a', data({ support: [file('misc/misc.ahk', sha)] }));
+        await localFile('a', 'scripts/misc/misc.ahk', content);
+
+        await metas('a');
+
+        const cache = JSON.parse(await fs.readFile(path.join(where.dir, 'a', '.local-cache.json'), 'utf8')) as Record<string, { sha: string }>;
+        expect(cache['scripts/misc/misc.ahk']?.sha).toBe(sha);
     });
 
     it('lib с отсутствующим файлом не скачан и без обновления', async () => {

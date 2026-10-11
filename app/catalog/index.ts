@@ -7,6 +7,7 @@ export const catalog = {
     stem: manifest.stem,
     manifest: { read: manifest.read, get: manifest.get },
     lib: manifest.lib,
+    cfg: manifest.cfg,
     preset: manifest.preset,
     font: manifest.font,
     metas,

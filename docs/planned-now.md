@@ -102,7 +102,7 @@ Warden ждёт v2: `cfg/<имя>.json`, JSON-пресеты, `*.values.json`. `
   - форма `ConfigSchema` повторяет `PresetSchema` (`shared/types/binds.ts:1-28`), но без типа `boolean` - в v1 его нет.
 - **Depends on:** -
 
-### Phase 2: Доставка v1 и запуск через AutoHotkey v1
+### Phase 2: Доставка v1 и запуск через AutoHotkey v1 [done]
 - **What:** v1-скрипт после установки из Get Scripts запускается:
   - скачиваются `cfg_<файл>`, `scripts/misc/**` и `.ahk`-пресеты;
   - запуск идёт найденным AutoHotkey v1.

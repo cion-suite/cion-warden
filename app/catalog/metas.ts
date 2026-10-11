@@ -49,6 +49,12 @@ async function toMetas(source: SourceRecord, data: ManifestFile): Promise<Catalo
         return entry;
     }
 
+    // support общий для скриптов источника: одно сравнение на всех
+    const supportStale = (await Promise.all(data.support.map(async (item) => {
+        const found = await local(`${dir.scripts}/${item.fileName}`);
+        return found?.sha !== item.sha;
+    }))).some(Boolean);
+
     const scripts = await Promise.all(data.scripts.map(async (item): Promise<CatalogScript> => {
         const found = await local(`${dir.scripts}/${item.fileName}`);
         return {
@@ -60,7 +66,7 @@ async function toMetas(source: SourceRecord, data: ManifestFile): Promise<Catalo
             sha: item.sha,
             localSha: found?.sha,
             isDownloaded: found !== null,
-            hasUpdate: found !== null && found.sha !== item.sha,
+            hasUpdate: found !== null && (found.sha !== item.sha || supportStale),
             downloadUrl: item.downloadUrl ?? undefined,
         };
     }));

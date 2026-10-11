@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { logger } from '@cion-suite/core';
 import { catalog } from '@app/catalog';
-import type { ManifestLibEntry, ManifestPresetEntry } from '@app/catalog/types';
+import type { ManifestFile, ManifestLibEntry, ManifestPresetEntry } from '@app/catalog/types';
 import { github } from '@app/github';
 import { scripts } from '@app/scripts';
 import { store, type SourceRecord } from '@app/sources/store';
@@ -40,6 +40,24 @@ function includeKey(include: string): string {
     return key.startsWith('lib/') ? key.slice(4) : key;
 }
 
+// Относительно scripts/: без `./` и подъёма `../` наружу
+function scriptsKey(include: string): string {
+    const key = path.posix.normalize(include.trim().toLowerCase().replace(/\\/g, '/'));
+    return key.replace(/^(?:\.\.\/)+/, '');
+}
+
+// Не lib, но поставляется источником: support и cfg
+function shippedIndex(manifest: ManifestFile): Set<string> {
+    const keys = manifest.support.map(file => scriptsKey(file.fileName));
+    keys.push(...manifest.cfgs.map(file => scriptsKey(`${catalog.dir.cfg}/${file.fileName}`)));
+    return new Set(keys);
+}
+
+const isShipped = (include: string, shipped: Set<string>): boolean => {
+    const key = scriptsKey(include);
+    return key.startsWith(`${catalog.dir.presets}/`) || shipped.has(key);
+};
+
 // Все файлы lib на диске или null: неполная lib - отсутствует
 async function readLocal(libRoot: string, lib: ManifestLibEntry): Promise<string[] | null> {
     if (lib.files.length === 0) return null;
@@ -60,9 +78,10 @@ async function readRemote(source: SourceRecord, lib: ManifestLibEntry): Promise<
     return out;
 }
 
-async function scanIncludes(content: string, source: SourceRecord, libs: ManifestLibEntry[]): Promise<LibScan> {
+async function scanIncludes(content: string, source: SourceRecord, manifest: ManifestFile): Promise<LibScan> {
     const libRoot = paths.source(source.id).lib;
-    const index = libIndex(libs);
+    const index = libIndex(manifest.libs);
+    const shipped = shippedIndex(manifest);
     const visited = new Set<string>();
     const missing = new Map<string, ManifestLibEntry>();
     const unknown = new Set<string>();
@@ -73,7 +92,7 @@ async function scanIncludes(content: string, source: SourceRecord, libs: Manifes
             const key = includeKey(include);
             const lib = key === '' ? undefined : index.get(key);
             if (!lib) {
-                if (key !== '') unknown.add(include);
+                if (key !== '' && !isShipped(include, shipped)) unknown.add(include);
                 continue;
             }
             if (visited.has(lib.name)) continue;
@@ -159,7 +178,7 @@ async function check(scriptPath: string, source: SourceRecord): Promise<ScriptDe
         return empty();
     }
 
-    const libs = await scanIncludes(content, source, manifest.libs);
+    const libs = await scanIncludes(content, source, manifest);
     const named = await scanNames(content, source, manifest.libs, libs.touched);
     const presets = await scanPresets(content, source, manifest.presets);
     return { missing: [...libs.missing, ...named, ...presets], unknown: libs.unknown };

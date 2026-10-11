@@ -34,13 +34,13 @@ const reply = (paths: string[], etag: string | null = 'etag-1') => ({
 
 const stored = (patch: Partial<ManifestFile> = {}): ManifestFile => ({
     version: MANIFEST_VERSION, etag: 'old-etag', treeSha: 't', branch: 'main', lastSyncedAt: 100, lastCheckedAt: 100,
-    scripts: [], cfgs: [], libs: [], presets: [], fonts: [],
+    scripts: [], cfgs: [], support: [], libs: [], presets: [], fonts: [],
     ...patch,
 });
 
 beforeEach(async () => {
     where.dir = await fs.mkdtemp(path.join(os.tmpdir(), 'warden-sync-'));
-    github.tree.mockReset().mockResolvedValue(reply(['scripts/a.ahk', 'presets/p.json', 'lib/u.ahk']));
+    github.tree.mockReset().mockResolvedValue(reply(['scripts/a.ahk', 'scripts/cfg/cfg_a.ahk', 'scripts/misc/misc.ahk', 'presets/p.ahk', 'presets/old.json', 'lib/u.ahk']));
     github.file.mockReset().mockResolvedValue(null);
     store.get.mockReset().mockImplementation((id: string) => Promise.resolve(record(id)));
     store.list.mockReset().mockResolvedValue([record('a'), record('b')]);
@@ -75,9 +75,12 @@ describe('sync(sourceId)', () => {
             branch: 'main',
             lastSyncedAt: result!.lastSyncedAt,
             scripts: [{ fileName: 'a.ahk', sha: 'sha:scripts/a.ahk' }],
-            presets: [{ fileName: 'p.json' }],
+            cfgs: [{ fileName: 'cfg_a.ahk' }],
+            support: [{ fileName: 'misc/misc.ahk', sha: 'sha:scripts/misc/misc.ahk' }],
+            presets: [{ fileName: 'p.ahk' }],
             libs: [{ name: 'u', kind: 'file' }],
         });
+        expect(data?.presets).toHaveLength(1);
         expect(github.tree).toHaveBeenCalledWith(expect.objectContaining({ id: 'a' }), undefined);
     });
 

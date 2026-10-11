@@ -30,6 +30,8 @@ export interface ManifestFile {
     lastCheckedAt: number;
     scripts: ManifestFileEntry[];
     cfgs: ManifestFileEntry[];
+    // fileName - путь от scripts/ с прямыми слешами
+    support: ManifestFileEntry[];
     libs: ManifestLibEntry[];
     presets: ManifestFileEntry[];
     fonts: ManifestFontEntry[];

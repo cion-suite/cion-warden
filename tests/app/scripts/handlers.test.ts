@@ -8,7 +8,15 @@ const shell = vi.hoisted(() => ({ trashItem: vi.fn(), showItemInFolder: vi.fn() 
 const log = vi.hoisted(() => ({ warn: vi.fn() }));
 
 vi.mock('electron', () => ({ shell }));
-vi.mock('@app/utils/paths', () => ({ paths: { vault: () => where.vault } }));
+vi.mock('@app/utils/paths', () => ({
+    paths: {
+        vault: () => where.vault,
+        source: (id: string) => {
+            const scripts = path.join(where.vault, id, 'scripts');
+            return { scripts, cfg: path.join(scripts, 'cfg') };
+        },
+    },
+}));
 vi.mock('@app/scripts', () => ({ scripts: {} }));
 vi.mock('@app/scripts/processes', () => ({ processes: {} }));
 vi.mock('@app/scripts/deps', () => ({ deps: {} }));
@@ -28,7 +36,7 @@ beforeEach(async () => {
     where.vault = await fs.mkdtemp(path.join(os.tmpdir(), 'warden-scripts-'));
     cfg = path.join(where.vault, 's1', 'scripts', 'cfg', 'a.json');
     await fs.mkdir(path.dirname(cfg), { recursive: true });
-    shell.trashItem.mockReset().mockResolvedValue(undefined);
+    shell.trashItem.mockReset().mockImplementation((target: string) => fs.rm(target, { recursive: true }));
     shell.showItemInFolder.mockReset();
     log.warn.mockReset();
 });
@@ -40,6 +48,7 @@ afterEach(async () => {
 describe('scripts:delete', () => {
     it('в корзину - только внутри vault', async () => {
         const file = path.join(where.vault, 's1', 'scripts', 'a.ahk');
+        await fs.writeFile(file, '');
 
         await channel('scripts:delete').handle(file);
 
@@ -49,6 +58,81 @@ describe('scripts:delete', () => {
     it.each([() => where.vault, () => path.join(where.vault, '..', 'x.ahk')])('вне vault или сам корень - validation', async (target) => {
         await expect(channel('scripts:delete').handle(target())).rejects.toMatchObject({ code: 'validation' });
         expect(shell.trashItem).not.toHaveBeenCalled();
+    });
+
+    describe('cfg и support', () => {
+        const scriptsDir = () => path.join(where.vault, 's1', 'scripts');
+        const touch = async (...parts: string[]) => {
+            const file = path.join(scriptsDir(), ...parts);
+            await fs.mkdir(path.dirname(file), { recursive: true });
+            await fs.writeFile(file, '');
+            return file;
+        };
+        const names = async (dir: string) => (await fs.readdir(dir)).sort();
+
+        it('удаляет cfg_<файл> скрипта, чужие cfg остаются', async () => {
+            const script = await touch('a.ahk');
+            await touch('b.ahk');
+            await touch('cfg', 'cfg_a.ahk');
+            await touch('cfg', 'cfg_b.ahk');
+
+            await channel('scripts:delete').handle(script);
+
+            expect(await names(path.join(scriptsDir(), 'cfg'))).toEqual(['cfg_b.ahk']);
+        });
+
+        it('support остаётся, пока есть другой скрипт', async () => {
+            const script = await touch('a.ahk');
+            await touch('b.ahk');
+            await touch('misc', 'misc.ahk');
+
+            await channel('scripts:delete').handle(script);
+
+            expect(await names(scriptsDir())).toEqual(['b.ahk', 'cfg', 'misc']);
+        });
+
+        it('последний скрипт: уходят и support, и вложенные каталоги, cfg остаётся каталогом', async () => {
+            const script = await touch('a.ahk');
+            await touch('a.ahk.1.tmp');
+            await touch('misc', 'deep', 'tool.ahk');
+            await touch('cfg', 'cfg_a.ahk');
+
+            await channel('scripts:delete').handle(script);
+
+            expect(await names(scriptsDir())).toEqual(['a.ahk.1.tmp', 'cfg']);
+            expect(await names(path.join(scriptsDir(), 'cfg'))).toEqual([]);
+        });
+
+        it('нет cfg - не ошибка', async () => {
+            const script = await touch('a.ahk');
+
+            await expect(channel('scripts:delete').handle(script)).resolves.toBeUndefined();
+            expect(log.warn).not.toHaveBeenCalled();
+        });
+
+        it('сбой уборки cfg и support - warn, успех удаления скрипта', async () => {
+            const script = await touch('a.ahk');
+            await touch('misc', 'misc.ahk');
+            await touch('cfg', 'cfg_a.ahk');
+            shell.trashItem.mockImplementation(async (target: string) => {
+                if (target !== script) throw new Error('busy');
+                await fs.rm(target);
+            });
+
+            await expect(channel('scripts:delete').handle(script)).resolves.toBeUndefined();
+
+            expect(log.warn).toHaveBeenCalledTimes(2);
+        });
+
+        it('вложенный файл не <источник>/scripts/<файл> - уборки нет', async () => {
+            const nested = await touch('misc', 'misc.ahk');
+            await touch('cfg', 'cfg_misc.ahk');
+
+            await channel('scripts:delete').handle(nested);
+
+            expect(shell.trashItem).toHaveBeenCalledTimes(1);
+            expect(await names(path.join(scriptsDir(), 'cfg'))).toEqual(['cfg_misc.ahk']);
+        });
     });
 
     it('сбой корзины - failed', async () => {

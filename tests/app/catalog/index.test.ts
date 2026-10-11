@@ -14,6 +14,8 @@ describe('catalog', () => {
         expect(catalog.lib).toBe(manifest.lib);
         expect(catalog.preset).toBe(manifest.preset);
         expect(catalog.font).toBe(manifest.font);
+        expect(catalog.cfg).toBe(manifest.cfg);
+        expect(catalog.cfg.name('x.ahk')).toBe('cfg_x.ahk');
         expect(catalog.metas).toBe(metas);
         expect(catalog.stem('x.ahk')).toBe('x');
     });

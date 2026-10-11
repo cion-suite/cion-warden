@@ -27,22 +27,31 @@ vi.mock('@cion-suite/core', async (importOriginal) => {
 
 import { install } from '@app/catalog/install';
 import { manifest, MANIFEST_VERSION } from '@app/catalog/manifest';
+import type { ManifestFile } from '@app/catalog/types';
+import { fsx } from '@app/utils/fsx';
 
 const source = { id: 'a', type: 'git', name: 'o/r', url: 'https://github.com/o/r', branch: 'main', isPrivate: false };
 
-const synced = (fileName = 'tool.ahk') => manifest.write('a', {
+type Entries = Partial<Pick<ManifestFile, 'cfgs' | 'support'>>;
+
+const entry = (fileName: string, sha = '1') => ({ fileName, sha, downloadUrl: null });
+
+const synced = (fileName = 'tool.ahk', extra: Entries = {}) => manifest.write('a', {
     version: MANIFEST_VERSION, etag: null, treeSha: null, branch: 'main', lastSyncedAt: 1, lastCheckedAt: 1,
-    scripts: [{ fileName, sha: '1', downloadUrl: null }],
-    cfgs: [], libs: [], presets: [], fonts: [],
+    scripts: [entry(fileName)],
+    cfgs: [], support: [], libs: [], presets: [], fonts: [],
+    ...extra,
 });
+
+const bodyOf = (repoPath: string): Buffer =>
+    Buffer.from(repoPath.includes('/cfg/') ? 'cfg body' : repoPath.includes('/misc/') ? 'misc body' : 'script body');
 
 const read = (rel: string) => fs.readFile(path.join(where.dir, 'a', rel), 'utf8');
 
 beforeEach(async () => {
     where.dir = await fs.mkdtemp(path.join(os.tmpdir(), 'warden-install-'));
     store.get.mockReset().mockResolvedValue(source);
-    github.file.mockReset().mockImplementation((_s: unknown, repoPath: string) =>
-        Promise.resolve(repoPath.endsWith('.json') ? Buffer.from('{"cfg":1}') : Buffer.from('script body')));
+    github.file.mockReset().mockImplementation((_s: unknown, repoPath: string) => Promise.resolve(bodyOf(repoPath)));
     log.warn.mockReset();
 });
 
@@ -63,21 +72,30 @@ describe('install', () => {
         expect(github.file).not.toHaveBeenCalled();
     });
 
-    it('пишет скрипт и cfg в каталоги источника', async () => {
-        await synced();
+    it('пишет скрипт и cfg_<файл> из manifest.cfgs', async () => {
+        await synced('tool.ahk', { cfgs: [entry('cfg_tool.ahk')] });
 
         await install('a', 'tool.ahk');
 
         expect(await read('scripts/tool.ahk')).toBe('script body');
-        expect(await read('scripts/cfg/tool.json')).toBe('{"cfg":1}');
+        expect(await read('scripts/cfg/cfg_tool.ahk')).toBe('cfg body');
         expect(github.file).toHaveBeenCalledWith(source, 'scripts/tool.ahk');
-        expect(github.file).toHaveBeenCalledWith(source, 'scripts/cfg/tool.json', { fallback: null });
+        expect(github.file).toHaveBeenCalledWith(source, 'scripts/cfg/cfg_tool.ahk', { fallback: null });
+    });
+
+    it('cfg чужого скрипта и cfg без записи в manifest не качаются', async () => {
+        await synced('tool.ahk', { cfgs: [entry('cfg_other.ahk')] });
+
+        await install('a', 'tool.ahk');
+
+        expect(github.file).toHaveBeenCalledTimes(1);
+        await expect(fs.stat(path.join(where.dir, 'a', 'scripts', 'cfg'))).rejects.toThrow();
     });
 
     it('cfg нет в репозитории - только скрипт', async () => {
-        await synced();
+        await synced('tool.ahk', { cfgs: [entry('cfg_tool.ahk')] });
         github.file.mockImplementation((_s: unknown, repoPath: string) =>
-            Promise.resolve(repoPath.endsWith('.json') ? null : Buffer.from('script body')));
+            Promise.resolve(repoPath.includes('/cfg/') ? null : bodyOf(repoPath)));
 
         await install('a', 'tool.ahk');
 
@@ -85,14 +103,60 @@ describe('install', () => {
     });
 
     it('сбой cfg не валит установку скрипта, но попадает в лог', async () => {
-        await synced();
+        await synced('tool.ahk', { cfgs: [entry('cfg_tool.ahk')] });
         github.file.mockImplementation((_s: unknown, repoPath: string) =>
-            repoPath.endsWith('.json') ? Promise.reject(new Error('rate limited')) : Promise.resolve(Buffer.from('script body')));
+            repoPath.includes('/cfg/') ? Promise.reject(new Error('rate limited')) : Promise.resolve(bodyOf(repoPath)));
 
         await install('a', 'tool.ahk');
 
         expect(await read('scripts/tool.ahk')).toBe('script body');
         expect(log.warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('support докачивается во вложенные папки scripts', async () => {
+        await synced('tool.ahk', { support: [entry('misc/misc.ahk'), entry('misc/deep/more.ahk')] });
+
+        await install('a', 'tool.ahk');
+
+        expect(await read('scripts/misc/misc.ahk')).toBe('misc body');
+        expect(await read('scripts/misc/deep/more.ahk')).toBe('misc body');
+        expect(github.file).toHaveBeenCalledWith(source, 'scripts/misc/misc.ahk');
+    });
+
+    it('support с совпавшим sha не качается, с чужим - перекачивается', async () => {
+        const same = fsx.sha(Buffer.from('misc body'));
+        await synced('tool.ahk', { support: [entry('misc/same.ahk', same), entry('misc/changed.ahk', same)] });
+        await fsx.write(path.join(where.dir, 'a', 'scripts', 'misc', 'same.ahk'), 'misc body');
+        await fsx.write(path.join(where.dir, 'a', 'scripts', 'misc', 'changed.ahk'), 'stale');
+
+        await install('a', 'tool.ahk');
+
+        expect(github.file).not.toHaveBeenCalledWith(source, 'scripts/misc/same.ahk');
+        expect(await read('scripts/misc/changed.ahk')).toBe('misc body');
+    });
+
+    it('сбой скачивания support пробрасывается, скрипт уже записан', async () => {
+        await synced('tool.ahk', { support: [entry('misc/misc.ahk')] });
+        github.file.mockImplementation((_s: unknown, repoPath: string) =>
+            repoPath.includes('/misc/') ? Promise.reject(new Error('rate limited')) : Promise.resolve(bodyOf(repoPath)));
+
+        await expect(install('a', 'tool.ahk')).rejects.toThrow('rate limited');
+        expect(await read('scripts/tool.ahk')).toBe('script body');
+        await expect(fs.stat(path.join(where.dir, 'a', 'scripts', 'misc', 'misc.ahk'))).rejects.toThrow();
+    });
+
+    it('ошибка чтения локального support, кроме ENOENT, не глотается', async () => {
+        await synced('tool.ahk', { support: [entry('misc')] });
+        await fs.mkdir(path.join(where.dir, 'a', 'scripts', 'misc'), { recursive: true });
+
+        await expect(install('a', 'tool.ahk')).rejects.toThrow();
+    });
+
+    it('support с выходом из каталога не пишется', async () => {
+        await synced('tool.ahk', { support: [entry('../../evil.ahk')] });
+
+        await expect(install('a', 'tool.ahk')).rejects.toMatchObject({ code: 'validation' });
+        await expect(fs.stat(path.join(where.dir, 'evil.ahk'))).rejects.toThrow();
     });
 
     it('отказ скачивания скрипта пробрасывается, файл не создаётся', async () => {

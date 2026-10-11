@@ -28,22 +28,35 @@ describe('derive.links', () => {
 });
 
 describe('derive.scripts', () => {
-    it('скрипты и cfg раздельно, по имени, без вложенных путей', () => {
+    it('скрипты, cfg и support раздельно', () => {
         const tree = [
             blob('scripts/b.ahk'),
             blob('scripts/a.ahk'),
-            blob('scripts/cfg/a.json'),
-            blob('scripts/deep/x.ahk'),
-            blob('scripts/cfg/deep/y.json'),
+            blob('scripts/cfg/cfg_a.ahk'),
+            blob('scripts/cfg/deep/y.ahk'),
+            blob('scripts/misc/misc.ahk'),
+            blob('scripts/misc/deep/more/tool.ahk'),
             blob('README.md'),
             folder('scripts/cfg'),
+            folder('scripts/misc'),
         ];
 
-        const { scripts, cfgs } = derive.scripts(tree, to);
+        const { scripts, cfgs, support } = derive.scripts(tree, to);
 
         expect(scripts.map(s => s.fileName)).toEqual(['a.ahk', 'b.ahk']);
-        expect(cfgs.map(c => c.fileName)).toEqual(['a.json']);
+        expect(cfgs.map(c => c.fileName)).toEqual(['cfg_a.ahk']);
+        expect(support.map(s => s.fileName)).toEqual(['misc/deep/more/tool.ahk', 'misc/misc.ahk']);
         expect(scripts[0]).toMatchObject({ sha: 'sha:scripts/a.ahk', downloadUrl: expect.stringContaining('/scripts/a.ahk') });
+        expect(support[1]).toMatchObject({ sha: 'sha:scripts/misc/misc.ahk', downloadUrl: expect.stringContaining('/scripts/misc/misc.ahk') });
+    });
+
+    it('support с небезопасным сегментом пути целиком отбрасывается и не становится скриптом', () => {
+        const tree = [blob('scripts/misc/a&b.ahk'), blob('scripts/pwn & dir/x.ahk'), blob('scripts/ok/x.ahk')];
+
+        const { scripts, support } = derive.scripts(tree, to);
+
+        expect(support.map(s => s.fileName)).toEqual(['ok/x.ahk']);
+        expect(scripts).toEqual([]);
     });
 
     it('имена с метасимволами cmd не попадают в manifest', () => {
@@ -57,10 +70,13 @@ describe('derive.scripts', () => {
 });
 
 describe('derive.presets', () => {
-    it('только json, values.json исключён', () => {
-        const tree = [blob('presets/b.json'), blob('presets/a.JSON'), blob('presets/a.values.json'), blob('presets/x.txt'), blob('presets/d/e.json')];
+    it('только ahk без учёта регистра, json больше не пресет', () => {
+        const tree = [
+            blob('presets/b.ahk'), blob('presets/a.AHK'), blob('presets/a.values.json'),
+            blob('presets/c.json'), blob('presets/x.txt'), blob('presets/d/e.ahk'),
+        ];
 
-        expect(derive.presets(tree, to).map(p => p.fileName)).toEqual(['a.JSON', 'b.json']);
+        expect(derive.presets(tree, to).map(p => p.fileName)).toEqual(['a.AHK', 'b.ahk']);
     });
 });
 

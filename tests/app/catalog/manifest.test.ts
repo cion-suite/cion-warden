@@ -9,7 +9,7 @@ vi.mock('@app/utils/paths', () => ({
     paths: { source: (id: string) => ({ manifest: `${where.dir}/${id}.manifest.json` }) },
 }));
 
-import { manifest } from '@app/catalog/manifest';
+import { manifest, MANIFEST_VERSION } from '@app/catalog/manifest';
 import type { ManifestFile } from '@app/catalog/types';
 
 beforeEach(async () => {
@@ -49,6 +49,7 @@ describe('manifest.read', () => {
             lastSyncedAt: 0,
             lastCheckedAt: 0,
             cfgs: [],
+            support: [],
             presets: [],
             fonts: [],
             libs: [{ name: 'l', kind: 'file', path: '', sha: '', files: [] }],
@@ -72,8 +73,8 @@ describe('manifest.get', () => {
 describe('manifest.write', () => {
     it('читается обратно', async () => {
         const data: ManifestFile = {
-            version: 4, etag: 'e', treeSha: 't', branch: 'main', lastSyncedAt: 1, lastCheckedAt: 2,
-            scripts: [], cfgs: [], libs: [], presets: [], fonts: [],
+            version: MANIFEST_VERSION, etag: 'e', treeSha: 't', branch: 'main', lastSyncedAt: 1, lastCheckedAt: 2,
+            scripts: [], cfgs: [], support: [], libs: [], presets: [], fonts: [],
         };
 
         await manifest.write('a', data);
@@ -99,6 +100,14 @@ describe('id и поиск', () => {
         expect(manifest.lib.find(data, 's', 'x:lib:util')).toBeNull();
         expect(manifest.preset.find(data, 's', 's:preset:p.json')?.fileName).toBe('p.json');
         expect(manifest.preset.find(data, 's', 's:preset:none.json')).toBeNull();
+    });
+
+    it('версия manifest - 5: старый кеш без support сбрасывается', () => {
+        expect(MANIFEST_VERSION).toBe(5);
+    });
+
+    it('имя cfg v1 - cfg_ плюс имя скрипта с расширением', () => {
+        expect(manifest.cfg.name('sculptor_updater.ahk')).toBe('cfg_sculptor_updater.ahk');
     });
 
     it('stem снимает последнее расширение', () => {
