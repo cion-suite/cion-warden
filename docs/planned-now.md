@@ -46,7 +46,7 @@ Completion steps (после каждой фазы)
 - **Reuse:** только удаление; новых символов нет.
 - **Depends on:** -
 
-### Phase 5: двойные GitHub Release и обновлятор по двум репозиториям
+### Phase 5: двойные GitHub Release и обновлятор по двум репозиториям [done]
 - **What:** CI на зелёный push в `main` собирает установщик на windows-runner и создаёт одинаковые Release `vX.Y.Z` с ассетами (exe, blockmap, `latest.yml`) и текстом из `release.md` в `cion-suite/cion-warden` и `Lazy-World/wf-macro`. Обновлятор проверяет оба: wf-macro без токена, cion-warden - с PAT источника владельца `cion-suite` из vault, если есть; берётся самая новая версия.
 - **Where:** `shared/config.ts` (modify: `feeds` -> `CONFIG.releases: [{ owner: 'Lazy-World', repo: 'wf-macro' }, { owner: 'cion-suite', repo: 'cion-warden', private: true }]`); `electron-builder.json` (modify: `publish` -> два `github`-провайдера тем же owner/repo; `artifactName` без пробела - иначе GitHub переименует ассет и он разойдётся с `latest.yml`); `package.json` (`dist` -> `--publish never`); `scripts/check-placeholders.mjs` (инвариант `CONFIG.releases` == `publish[]`); `app/github/index.ts` (modify: новый член namespace `github` - релизы репозитория по `GithubRepoRef` + необязательный токен; `api` / `slug` / `bearer` сейчас приватны модулю, `parse` принимает `SourceRecord` - не переиспользуются снаружи напрямую); `app/updater/updater.ts` (modify); `app/updater/module.ts` (modify: `needs: [sourcesModule, githubModule]` - оба выше updater, граф вниз соблюдён); `.github/workflows/release.yml` (modify); `tests/app/updater/updater.test.ts`, `tests/app/github/*` (тест нового члена), `tests/shared/config.test.ts` (modify); CLAUDE.md разделы 5, 9, `docs/architecture.md` (modify).
 - **How:**

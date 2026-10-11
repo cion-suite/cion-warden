@@ -12,7 +12,6 @@ const bypass = process.env.ALLOW_PLACEHOLDERS === '1';
 const PLACEHOLDERS = {
     appId: 'io.cion.template',
     productName: 'Cion Template',
-    latestUrl: 'https://example.com/updates/latest/',
     homepage: 'https://github.com/cion-suite/cion-template',
 };
 
@@ -30,19 +29,21 @@ const stable = loadJson('electron-builder.json');
 const pkg = loadJson('package.json');
 const cfgSrc = loadText('shared/config.ts');
 
-const stableUrl = stable.publish?.[0]?.url;
+const publish = stable.publish ?? [];
+const publishRepos = publish.map(p => `${p.owner}/${p.repo}`);
 
 const cfgProductName = cfgSrc.match(/^\s*productName\s*:\s*['"]([^'"]+)['"]/m)?.[1];
 const splashSrc = loadText('app/splash.html');
 const cfgAppId = cfgSrc.match(/^\s*appId\s*:\s*['"]([^'"]+)['"]/m)?.[1];
-const cfgLatest = cfgSrc.match(/^\s*latestUrl\s*:\s*['"]([^'"]+)['"]/m)?.[1];
+const cfgRepos = [...cfgSrc.matchAll(/\{\s*owner\s*:\s*['"]([^'"]+)['"]\s*,\s*repo\s*:\s*['"]([^'"]+)['"]/g)]
+    .map(m => `${m[1]}/${m[2]}`);
 
 if (stable.appId === PLACEHOLDERS.appId)
     errors.push(`electron-builder.json[appId] is still the template placeholder "${stable.appId}"`);
 if (stable.productName === PLACEHOLDERS.productName)
     errors.push(`electron-builder.json[productName] is still the template placeholder "${stable.productName}"`);
-if (stableUrl === PLACEHOLDERS.latestUrl)
-    errors.push(`electron-builder.json[publish[0].url] is still the example.com placeholder`);
+if (publish.length === 0 || publish.some(p => p.provider !== 'github'))
+    errors.push('electron-builder.json[publish] must list github providers (one per release repository)');
 
 if (cfgProductName === PLACEHOLDERS.productName)
     errors.push(`shared/config.ts CONFIG.productName is still the template placeholder "${cfgProductName}"`);
@@ -51,8 +52,8 @@ if (splashSrc.includes('REPLACE BEFORE SHIP'))
 
 if (cfgAppId === PLACEHOLDERS.appId)
     errors.push(`shared/config.ts CONFIG.appId is still the template placeholder "${cfgAppId}"`);
-if (cfgLatest === PLACEHOLDERS.latestUrl)
-    errors.push(`shared/config.ts CONFIG.feeds.latestUrl is still the example.com placeholder`);
+if (cfgRepos.length === 0)
+    errors.push('shared/config.ts CONFIG.releases is empty or not parsable');
 
 if (pkg.name === '@cion-suite/template')
     errors.push(`package.json[name] is still the template default "${pkg.name}"`);
@@ -65,13 +66,13 @@ if (cfgProductName && stable.productName && cfgProductName !== stable.productNam
     errors.push(
         `drift: shared/config.ts CONFIG.productName (${cfgProductName}) != electron-builder.json[productName] (${stable.productName})`,
     );
-if (cfgLatest && stableUrl && cfgLatest !== stableUrl)
+if (cfgRepos.length > 0 && cfgRepos.join() !== publishRepos.join())
     errors.push(
-        `drift: shared/config.ts CONFIG.feeds.latestUrl (${cfgLatest}) != electron-builder.json[publish[0].url] (${stableUrl})`,
+        `drift: shared/config.ts CONFIG.releases (${cfgRepos.join(', ')}) != electron-builder.json[publish] (${publishRepos.join(', ')})`,
     );
 
 if (errors.length === 0) {
-    console.log('check:placeholders OK - appId, productName, feed URLs and package metadata look replaced.');
+    console.log('check:placeholders OK - appId, productName, release repositories and package metadata look replaced.');
     process.exit(0);
 }
 

@@ -3,7 +3,7 @@
     "appId": "io.cion.warden",
     "productName": "Cion Warden",
     "copyright": "Copyright © 2026 Cion Suite. Licensed under GPL-3.0-or-later.",
-    "artifactName": "${productName}-setup-${version}.${ext}",
+    "artifactName": "Cion-Warden-setup-${version}.${ext}",
     "generateUpdatesFilesForAllChannels": false,
     "npmRebuild": false,
     "files": [
@@ -57,9 +57,15 @@
     },
     "publish": [
         {
-            "provider": "generic",
-            "url": "https://example.com/updates/latest/",
-            "channel": "latest"
+            "provider": "github",
+            "owner": "Lazy-World",
+            "repo": "wf-macro"
+        },
+        {
+            "provider": "github",
+            "owner": "cion-suite",
+            "repo": "cion-warden",
+            "private": true
         }
     ]
 }

@@ -27,6 +27,15 @@ describe('release-notes', () => {
         expect(run(LOG, '1.1.0')).toMatchObject({ code: 0, out: '- Новое.\n- Ещё.\n' });
     });
 
+    it('категории раздела входят в тело', () => {
+        const log = '### Версия v1.1.0\n\n#### Важно знать\n\n- A.\n\n#### Интерфейс\n\n- B.\n\n---\n\n### Версия v1.0.0\n\n- C.\n';
+
+        expect(run(log, '1.1.0')).toMatchObject({
+            code: 0,
+            out: '#### Важно знать\n\n- A.\n\n#### Интерфейс\n\n- B.\n',
+        });
+    });
+
     it('принимает версию с префиксом v', () => {
         expect(run(LOG, 'v1.0.0')).toMatchObject({ code: 0, out: '- Старое.\n' });
     });

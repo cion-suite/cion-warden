@@ -15,12 +15,18 @@ const shellMock = vi.hoisted(() => ({ main: { shown: vi.fn() }, splash: { update
 const fsMock = vi.hoisted(() => ({ readFile: vi.fn() }));
 const pathsMock = vi.hoisted(() => ({ changelog: vi.fn((file: string) => `/versions/${file}`) }));
 const log = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+const githubMock = vi.hoisted(() => ({ release: vi.fn() }));
+const sourcesStore = vi.hoisted(() => ({ list: vi.fn() }));
+const sourceTokens = vi.hoisted(() => ({ get: vi.fn() }));
 
 vi.mock('electron', () => electron);
 vi.mock('node:fs/promises', () => fsMock);
 vi.mock('@app/utils/paths', () => ({ paths: pathsMock }));
 vi.mock('electron-updater', () => ({ default: { autoUpdater } }));
 vi.mock('@app/shell', () => ({ shell: shellMock }));
+vi.mock('@app/github', () => ({ github: githubMock }));
+vi.mock('@app/sources/store', () => ({ store: sourcesStore }));
+vi.mock('@app/sources/tokens', () => ({ tokens: sourceTokens }));
 vi.mock('@cion-suite/core', async (importOriginal) => {
     const original = await importOriginal<typeof import('@cion-suite/core')>();
     return {
@@ -30,7 +36,12 @@ vi.mock('@cion-suite/core', async (importOriginal) => {
     };
 });
 vi.mock('@shared/config', () => ({
-    CONFIG: { feeds: { latestUrl: 'https://latest.test/' } },
+    CONFIG: {
+        releases: [
+            { owner: 'Lazy-World', repo: 'wf-macro' },
+            { owner: 'cion-suite', repo: 'cion-warden', private: true },
+        ],
+    },
 }));
 
 const FIRST_CHECK_MS = 3_000;
@@ -45,6 +56,9 @@ beforeEach(() => {
     electron.app.getVersion = () => '1.0.0';
     fsMock.readFile.mockReset();
     pathsMock.changelog.mockClear();
+    githubMock.release.mockReset().mockResolvedValue('v1.0.1');
+    sourcesStore.list.mockReset().mockResolvedValue([{ id: 's1', url: 'https://github.com/cion-suite/macros' }]);
+    sourceTokens.get.mockReset().mockResolvedValue('tok-1');
     autoUpdater.on.mockReset();
     autoUpdater.setFeedURL.mockReset();
     autoUpdater.checkForUpdates.mockReset().mockResolvedValue(null);
@@ -107,11 +121,8 @@ describe('расписание проверок', () => {
         showMain();
         await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
 
-        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
-            provider: 'generic',
-            url: 'https://latest.test/',
-            channel: 'latest',
-        });
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledTimes(1);
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({ provider: 'github', owner: 'Lazy-World', repo: 'wf-macro' });
     });
 
     it('сбой проверки пишется в лог и не рвёт расписание', async () => {
@@ -136,6 +147,149 @@ describe('расписание проверок', () => {
         await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
 
         expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+        expect(githubMock.release).not.toHaveBeenCalled();
+    });
+});
+
+describe('выбор репозитория релизов', () => {
+    type Tag = string | Error;
+
+    function latest(macro: Tag, warden: Tag) {
+        githubMock.release.mockImplementation(async (ref: { repo: string }) => {
+            const tag = ref.repo === 'wf-macro' ? macro : warden;
+            if (tag instanceof Error) throw tag;
+            return tag;
+        });
+    }
+
+    async function check() {
+        const { startUpdater } = await load();
+        startUpdater();
+        showMain();
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
+    }
+
+    const MACRO_FEED = { provider: 'github', owner: 'Lazy-World', repo: 'wf-macro' };
+    const WARDEN_FEED = { provider: 'github', owner: 'cion-suite', repo: 'cion-warden', private: true, token: 'tok-1' };
+
+    it('берёт репозиторий с самой новой версией: приватный - с токеном', async () => {
+        latest('v1.2.0', 'v1.3.0');
+
+        await check();
+
+        expect(githubMock.release).toHaveBeenCalledWith({ owner: 'Lazy-World', repo: 'wf-macro' }, null);
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith(WARDEN_FEED);
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
+    });
+
+    it('wf-macro новее: открытый фид без токена', async () => {
+        latest('v1.4.0', 'v1.3.0');
+
+        await check();
+
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith(MACRO_FEED);
+    });
+
+    it('равные версии - первый в CONFIG (wf-macro)', async () => {
+        latest('v1.2.0', 'v1.2.0');
+
+        await check();
+
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith(MACRO_FEED);
+    });
+
+    it('победитель не новее установленной: checked без проверки', async () => {
+        latest('v0.1.1', 'v1.0.0');
+
+        await check();
+
+        expect(events.emit).toHaveBeenCalledWith('updater:checked');
+        expect(autoUpdater.setFeedURL).not.toHaveBeenCalled();
+        expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+    });
+
+    it('тег не semver - репозиторий пропускается', async () => {
+        latest('nightly', 'v1.1.0');
+
+        await check();
+
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith(WARDEN_FEED);
+        expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('Lazy-World/wf-macro'));
+    });
+
+    it('сбой одного репозитория логируется, выбор идёт по второму', async () => {
+        latest(new Error('сеть'), 'v1.1.0');
+
+        await check();
+
+        expect(log.warn).toHaveBeenCalledWith(expect.stringContaining('Lazy-World/wf-macro'));
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith(WARDEN_FEED);
+    });
+
+    it('оба репозитория упали - updater:failed, проверки нет', async () => {
+        latest(new Error('сеть'), new Error('404'));
+
+        await check();
+
+        expect(events.emit).toHaveBeenCalledWith('updater:failed', { message: expect.any(String) });
+        expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+        expect(log.error).toHaveBeenCalledTimes(1);
+    });
+
+    it('приватный репозиторий: токены источников владельца по очереди, без учёта регистра', async () => {
+        sourcesStore.list.mockResolvedValue([
+            { id: 'a', url: 'https://github.com/Cion-Suite/one' },
+            { id: 'b', url: 'git@github.com:cion-suite/two.git' },
+            { id: 'c', url: 'https://github.com/other/three' },
+        ]);
+        sourceTokens.get.mockImplementation(async (id: string) => `tok-${id}`);
+        githubMock.release.mockImplementation(async (ref: { repo: string }, token: string | null) => {
+            if (ref.repo === 'wf-macro') return 'v1.0.0';
+            if (token !== 'tok-b') throw new Error('нет доступа');
+            return 'v1.1.0';
+        });
+
+        await check();
+
+        expect(sourceTokens.get).not.toHaveBeenCalledWith('c');
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({ ...WARDEN_FEED, token: 'tok-b' });
+    });
+
+    it('приватный репозиторий без токена пропускается, без запроса', async () => {
+        sourceTokens.get.mockResolvedValue(null);
+        latest('v1.1.0', 'v9.0.0');
+
+        await check();
+
+        expect(githubMock.release).toHaveBeenCalledTimes(1);
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith(MACRO_FEED);
+    });
+
+    it('токен не попадает в лог', async () => {
+        latest('v1.0.0', 'v1.1.0');
+
+        await check();
+
+        const logged = JSON.stringify([log.info.mock.calls, log.warn.mock.calls, log.error.mock.calls]);
+        expect(logged).not.toContain('tok-1');
+    });
+
+    it('плановая и ручная проверки делят одну', async () => {
+        const pending: Array<(tag: string) => void> = [];
+        githubMock.release.mockImplementation(() => new Promise<string>((resolve) => pending.push(resolve)));
+        const { startUpdater, updaterHandlers } = await load();
+        startUpdater();
+        showMain();
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
+
+        const manual = updaterHandlers['updater:refresh']();
+        await vi.advanceTimersByTimeAsync(0);
+        for (const resolve of pending) resolve('v1.1.0');
+        await manual;
+
+        expect(githubMock.release).toHaveBeenCalledTimes(2);
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledTimes(1);
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
     });
 });
 

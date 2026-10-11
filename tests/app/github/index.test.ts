@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const api = vi.hoisted(() => ({ send: vi.fn() }));
 const raw = vi.hoisted(() => ({ send: vi.fn() }));
+const web = vi.hoisted(() => ({ send: vi.fn() }));
 const events = vi.hoisted(() => ({ emit: vi.fn() }));
 const tokens = vi.hoisted(() => ({ get: vi.fn() }));
 const store = vi.hoisted(() => ({ list: vi.fn() }));
@@ -13,7 +14,13 @@ vi.mock('@cion-suite/core', async (importOriginal) => {
     return {
         ...original,
         events,
-        http: { ...original.http, create: (options: { baseURL: string }) => (options.baseURL.includes('api') ? api : raw) },
+        http: {
+            ...original.http,
+            create: (options: { baseURL: string }) => {
+                if (options.baseURL === 'https://github.com') return web;
+                return options.baseURL.includes('api') ? api : raw;
+            },
+        },
     };
 });
 
@@ -34,6 +41,7 @@ const offline = (code: string) => ({ ok: false, headers: {}, error: { code, mess
 beforeEach(() => {
     api.send.mockReset();
     raw.send.mockReset();
+    web.send.mockReset();
     events.emit.mockReset();
     tokens.get.mockReset().mockResolvedValue('tok');
     store.list.mockReset();
@@ -253,6 +261,51 @@ describe('github.probe', () => {
 
         api.send.mockResolvedValueOnce(bad(404));
         await expect(github.probe(priv, 'tok')).rejects.toMatchObject({ code: 'forbidden', status: 404 });
+    });
+});
+
+describe('github.release', () => {
+    const ref = { owner: 'o', repo: 'r' };
+
+    it('без токена - страница github.com, не API', async () => {
+        web.send.mockResolvedValue(ok({ tag_name: 'v1.2.3' }));
+
+        await expect(github.release(ref, null)).resolves.toBe('v1.2.3');
+        expect(web.send.mock.calls[0][0]).toBe('/o/r/releases/latest');
+        expect(api.send).not.toHaveBeenCalled();
+    });
+
+    it('с токеном - API с bearer', async () => {
+        api.send.mockResolvedValue(ok({ tag_name: 'v2.0.0' }));
+
+        await expect(github.release(ref, 'tok')).resolves.toBe('v2.0.0');
+        expect(api.send.mock.calls[0][0]).toBe('/repos/o/r/releases/latest');
+        expect(api.send.mock.calls[0][1].headers).toEqual({ authorization: 'Bearer tok' });
+        expect(web.send).not.toHaveBeenCalled();
+    });
+
+    it('сегменты owner и repo кодируются', async () => {
+        web.send.mockResolvedValue(ok({ tag_name: 'v1.0.0' }));
+
+        await github.release({ owner: 'o w', repo: 'r/x' }, null);
+
+        expect(web.send.mock.calls[0][0]).toBe('/o%20w/r%2Fx/releases/latest');
+    });
+
+    it('сбой с токеном: 401 - unauthorized, 404 - forbidden', async () => {
+        api.send.mockResolvedValueOnce(bad(401));
+        await expect(github.release(ref, 'tok')).rejects.toMatchObject({ code: 'unauthorized', status: 401 });
+
+        api.send.mockResolvedValueOnce(bad(404));
+        await expect(github.release(ref, 'tok')).rejects.toMatchObject({ code: 'forbidden', status: 404 });
+    });
+
+    it('сбой без токена: 404 - not_found, сеть - код транспорта', async () => {
+        web.send.mockResolvedValueOnce(bad(404));
+        await expect(github.release(ref, null)).rejects.toMatchObject({ code: 'not_found', status: 404 });
+
+        web.send.mockResolvedValueOnce(offline('timeout'));
+        await expect(github.release(ref, null)).rejects.toMatchObject({ code: 'timeout' });
     });
 });
 

@@ -24,6 +24,8 @@ const api = http.create({
     headers: { ...userAgent, accept: 'application/vnd.github+json' },
 });
 const raw = http.create({ ...base, baseURL: 'https://raw.githubusercontent.com', headers: userAgent });
+// Страницы github.com не входят в лимит API
+const web = http.create({ ...base, baseURL: 'https://github.com', headers: { ...userAgent, accept: 'application/json' } });
 
 type Failed = Extract<HttpReply<unknown>, { ok: false }>;
 type Headers = Record<string, string>;
@@ -159,6 +161,18 @@ export const github = {
 
     /** Файл репозитория; fallback: null - null вместо not_found. */
     file,
+
+    /** Тег последнего релиза; без токена - github.com, не API. */
+    async release(ref: GithubRepoRef, token: string | null): Promise<string> {
+        const reply = token === null
+            ? await web.send<{ tag_name: string }>(`/${slug(ref)}/releases/latest`, { responseType: 'json' })
+            : await api.send<{ tag_name: string }>(`/repos/${slug(ref)}/releases/latest`, {
+                headers: bearer(token),
+                responseType: 'json',
+            });
+        if (!reply.ok) throw failure(reply, token !== null);
+        return reply.body.tag_name;
+    },
 
     /** Репозиторий источника глазами токена. */
     async probe(source: SourceRecord, token: string | null): Promise<GithubRepo> {

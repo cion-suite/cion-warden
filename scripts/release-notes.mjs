@@ -31,6 +31,8 @@ function selftest() {
     check('версия не префикс', extract('### Версия v1.0.0-rc.1\n\n- x\n', '1.0.0') === null);
     check('без разделителя', extract('### Версия v1.0.0\n- a\n### Версия v0.9.0\n- b\n', '1.0.0') === '- a');
     check('BOM', extract('\uFEFF### Версия v1.0.0\n- a\n', '1.0.0') === '- a');
+    check('категории в теле', extract('### Версия v1.0.0\n\n#### Важно знать\n\n- a\n\n#### Интерфейс\n\n- b\n\n---\n\n### Версия v0.9.0\n\n- c\n', '1.0.0')
+        === '#### Важно знать\n\n- a\n\n#### Интерфейс\n\n- b');
     check('пустое тело', extract('### Версия v1.0.0\n\n---\n', '1.0.0') === '');
     if (failed) { console.error(`selftest: упало ${failed}`); return 1; }
     console.log('selftest: OK');

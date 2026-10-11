@@ -2,10 +2,16 @@ import pkg from 'electron-updater';
 import type { UpdateInfo } from 'electron-updater';
 import { app } from 'electron';
 import { readFile } from 'node:fs/promises';
+import * as semver from 'semver';
 import { errors, events, logger, type IpcHandlers } from '@cion-suite/core';
+import { github } from '@app/github';
 import { shell } from '@app/shell';
+import { store } from '@app/sources/store';
+import { tokens } from '@app/sources/tokens';
+import type { ReleaseCandidate, ReleaseTarget } from '@app/updater/types';
 import { paths } from '@app/utils/paths';
 import { CONFIG } from '@shared/config';
+import { repo } from '@shared/repo';
 
 const log = logger.child('Updater');
 
@@ -23,6 +29,9 @@ let timers: ReturnType<typeof setTimeout>[] = [];
 // Скачанное ставит stop(); кэш electron-updater повторил бы
 // available / downloaded на каждой плановой проверке.
 let downloaded = false;
+// Плановая и ручная проверки делят одну: второй setFeedURL
+// подменил бы провайдер посреди идущей
+let checking: Promise<void> | null = null;
 const manualChecks: number[] = [];
 
 // Секунды до разрешённой ручной проверки; 0 - можно
@@ -34,15 +43,91 @@ function manualRetryAfter(now: number): number {
     return Math.max(0, Math.ceil(Math.max(byInterval, byHour) / 1000));
 }
 
-async function checkForUpdates(): Promise<void> {
+// PAT источников владельца репозитория: у fine-grained
+// токена может не быть доступа, поэтому пробуем все
+async function ownerTokens(owner: string): Promise<string[]> {
+    const sources = await store.list();
+    const found = await Promise.all(
+        sources
+            .filter((source) => repo.parse(source.url)?.owner.toLowerCase() === owner.toLowerCase())
+            .map((source) => tokens.get(source.id)),
+    );
+    return [...new Set(found.filter((token): token is string => token !== null))];
+}
+
+async function probe(target: ReleaseTarget, token: string | null): Promise<ReleaseCandidate> {
+    const tag = await github.release(target, token);
+    const version = semver.valid(tag);
+    errors.assert(version, `Invalid release tag in ${target.owner}/${target.repo}`, 'failed');
+    return { target, version, token };
+}
+
+async function probeTarget(target: ReleaseTarget): Promise<ReleaseCandidate> {
+    if (!target.private) return probe(target, null);
+
+    let failure: unknown = errors.fail('unauthorized', `No token for ${target.owner}/${target.repo}`);
+    for (const token of await ownerTokens(target.owner)) {
+        try {
+            return await probe(target, token);
+        } catch (error) {
+            failure = error;
+        }
+    }
+    throw failure;
+}
+
+// Самая новая версия; при равных - первый в CONFIG
+async function newest(): Promise<ReleaseCandidate> {
+    const targets: readonly ReleaseTarget[] = CONFIG.releases;
+    const results = await Promise.allSettled(targets.map(probeTarget));
+
+    let best: ReleaseCandidate | null = null;
+    for (const [index, result] of results.entries()) {
+        if (result.status === 'fulfilled') {
+            if (!best || semver.gt(result.value.version, best.version)) best = result.value;
+            continue;
+        }
+        const { owner, repo: name } = targets[index]!;
+        log.warn(`Release check failed for ${owner}/${name}: ${errors.explain(result.reason).message}`);
+    }
+    if (!best) throw errors.fail('unavailable', 'No release repository is reachable');
+    return best;
+}
+
+async function check(): Promise<void> {
     if (!app.isPackaged) {
         log.info('Skipping update check in development mode');
         return;
     }
 
-    autoUpdater.setFeedURL({ provider: 'generic', url: CONFIG.feeds.latestUrl, channel: 'latest' });
-    log.info(`Feed URL set to: ${CONFIG.feeds.latestUrl}`);
+    let winner: ReleaseCandidate;
+    try {
+        winner = await newest();
+    } catch (error) {
+        events.emit('updater:failed', { message: errors.explain(error).message });
+        throw error;
+    }
+    const { target, version, token } = winner;
+    log.info(`Latest release: ${target.owner}/${target.repo} v${version}`);
+
+    if (!semver.gt(version, app.getVersion())) {
+        events.emit('updater:checked');
+        return;
+    }
+    autoUpdater.setFeedURL({
+        provider: 'github',
+        owner: target.owner,
+        repo: target.repo,
+        ...(token === null ? {} : { private: true, token }),
+    });
     await autoUpdater.checkForUpdates();
+}
+
+function checkForUpdates(): Promise<void> {
+    checking ??= check().finally(() => {
+        checking = null;
+    });
+    return checking;
 }
 
 function emitUpdateInfo(eventName: 'updater:available' | 'updater:downloaded', info: UpdateInfo): void {

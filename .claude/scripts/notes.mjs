@@ -1,4 +1,5 @@
-// Дайджест правок для changelog и запись раздела версии в docs/versions/release.md.
+// Дайджест правок для changelog и запись раздела версии в docs/versions/release.md
+// (буллеты по желанию под `#### Категория` из словаря CATEGORIES).
 //   node .claude/scripts/notes.mjs collect [git-range]   - режим, версия, файл лога, коммиты, файлы по областям
 //   node .claude/scripts/notes.mjs write [--replace]     - записать [USERS] из .claude/cache/notes/entry.txt
 //   node .claude/scripts/notes.mjs --selftest            - самопроверка механики файла
@@ -214,7 +215,8 @@ function collect() {
     const found = findSection(lines, version);
     const section = found ? 'exists' : 'new';
     // Буллеты раздела: модель сводит их с новыми в один итоговый список
-    const current = found ? bulletsOf(lines.slice(found.start + 1, found.end)) : [];
+    const body = found ? entriesOf(lines.slice(found.start + 1, found.end)) : [];
+    const current = body.filter(l => BULLET.test(l));
 
     out.write('digest.md', digest);
     // write сверяет запись с тем, что увидел collect: режим и версию
@@ -222,7 +224,7 @@ function collect() {
     out.write('meta.json', JSON.stringify({ mode: diff.mode, version }));
     if (patch) out.write('diff.patch', patch);
     if (read === 'top') out.write('top.patch', top);
-    if (current.length && diff.mode === 'uncommitted') out.write('section.txt', `${current.join('\n')}\n`);
+    if (current.length && diff.mode === 'uncommitted') out.write('section.txt', `${body.join('\n')}\n`);
     console.log(`MODE=${diff.mode} VERSION=${version} FILE=${file} SECTION=${section} BULLETS=${current.length} FILES=${files.length} THEME=${theme} READ=${read} `
         + `DIGEST=${kb(digest)} DIFF=${kb(patch)}${read === 'top' ? ` TOP=${kb(top)}` : ''} -> ${out.rel}/`);
 }
@@ -258,24 +260,68 @@ const findSection = (lines, version) => {
 };
 
 const BULLET = /^- \S.*$/;
-const bulletsOf = lines => lines.map(l => l.trim()).filter(l => BULLET.test(l));
+const CATEGORY = /^#### \S.*$/;
+const entriesOf = lines => lines.map(l => l.trim()).filter(l => BULLET.test(l) || CATEGORY.test(l));
+const bulletsOf = lines => entriesOf(lines).filter(l => BULLET.test(l));
+
+// Закрытый словарь категорий раздела; порядок каноничный, write сортирует сам.
+// Новая категория - правкой словаря, описаний в .claude/commands/notes.md
+// и списка в CLAUDE.md, раздел 9
+const CATEGORIES = ['Важно знать', 'Скрипты и бинды', 'Библиотеки и источники', 'Обновления', 'Интерфейс', 'Прочее'];
+
+// Плоский список - до FLAT_MAX буллетов (категории по желанию), больше - только с категориями
+const FLAT_MAX = 5;
+
+// [USERS] -> группы: категория (null - плоский список) и её буллеты
+function groupEntries(users) {
+    const groups = [];
+    for (const line of users) {
+        if (CATEGORY.test(line)) groups.push({ name: line.slice(5).trim(), bullets: [] });
+        else {
+            if (!groups.length) groups.push({ name: null, bullets: [] });
+            groups.at(-1).bullets.push(line);
+        }
+    }
+    return groups;
+}
+
+// Тело раздела: категории по словарю, буллеты без дублей. Плоский список -
+// как есть, без подзаголовков
+function layout(users) {
+    const seen = new Set();
+    const fresh = bullet => {
+        if (seen.has(bullet)) return false;
+        seen.add(bullet);
+        return true;
+    };
+    const groups = groupEntries(users)
+        .map(g => ({ ...g, bullets: g.bullets.filter(fresh) }))
+        .filter(g => g.bullets.length)
+        .sort((a, b) => CATEGORIES.indexOf(a.name) - CATEGORIES.indexOf(b.name));
+    const lines = groups.flatMap((g, i) => g.name === null
+        ? g.bullets
+        : [...i ? [''] : [], `#### ${g.name}`, '', ...g.bullets]);
+    return { lines, bullets: groups.flatMap(g => g.bullets) };
+}
 
 class Refusal extends Error {}
 const refuse = msg => { throw new Refusal(msg); };
 
 // text - текущее содержимое файла канала (может быть пустым), возврат - новое.
 // Строки вне раздела версии не меняются ни в одном режиме.
-function applyEntry({ text, version, bullets, mode, replace = false }) {
+function applyEntry({ text, version, users, mode, replace = false }) {
     const eol = text.includes('\r\n') ? '\r\n' : '\n';
     const lines = splitLines(text);
     const section = findSection(lines, version);
     if (replace && mode !== 'range') refuse('--replace только для range-режима: в uncommitted раздел и так заменяется записью целиком');
 
+    const { lines: body, bullets } = layout(users);
+
     if (!section) {
         const first = lines.findIndex(l => l.trim());
-        const head = [`### Версия v${version}`, '', ...bullets];
-        const body = first < 0 ? [...head, ''] : [...head, '', SEPARATOR, '', ...lines.slice(first)];
-        return { text: body.join(eol), action: 'created', added: bullets.length, kept: 0, removed: [] };
+        const head = [`### Версия v${version}`, '', ...body];
+        const created = first < 0 ? [...head, ''] : [...head, '', SEPARATOR, '', ...lines.slice(first)];
+        return { text: created.join(eol), action: 'created', added: bullets.length, kept: 0, removed: [] };
     }
 
     if (mode === 'range' && !replace) {
@@ -286,15 +332,14 @@ function applyEntry({ text, version, bullets, mode, replace = false }) {
     // Раздел - итоговое состояние: запись заменяет его целиком.
     // Строки вне раздела не трогаем; убранное возвращаем - его видно в выводе
     const old = bulletsOf(lines.slice(section.start + 1, section.end));
-    const next = [...new Set(bullets)];
-    lines.splice(section.start + 1, section.last - section.start - 1, '', ...next);
-    const kept = next.filter(b => old.includes(b)).length;
+    lines.splice(section.start + 1, section.last - section.start - 1, '', ...body);
+    const kept = bullets.filter(b => old.includes(b)).length;
     return {
         text: lines.join(eol),
         action: mode === 'range' ? 'replaced' : 'rewritten',
-        added: next.length - kept,
+        added: bullets.length - kept,
         kept,
-        removed: old.filter(b => !next.includes(b)),
+        removed: old.filter(b => !bullets.includes(b)),
     };
 }
 
@@ -304,8 +349,9 @@ const NON_KEYBOARD = /[\u00A0\u00AB\u00BB\u2000-\u206F\u2190-\u2BFF\uFE0F\u{1F00
 
 const nonKeyboard = text => [...new Set(text.match(NON_KEYBOARD))];
 
-// entry.txt: `<версия> - <тема>`, `[USERS]` буллеты, `[GIT]` буллеты. [GIT] в файл
-// не идёт, только проверяется: это текст commit-сообщения
+// entry.txt: `<версия> - <тема>`, `[USERS]` буллеты (по желанию под `#### Категория`
+// из словаря), `[GIT]` буллеты. [GIT] в файл не идёт, только проверяется: это
+// текст commit-сообщения
 function parseEntry(raw) {
     const problems = [];
     const [first = '', ...rest] = splitLines(raw.trim());
@@ -324,15 +370,43 @@ function parseEntry(raw) {
             at = tag;
         } else if (!line.trim()) continue;
         else if (!at) problems.push(`строка вне секции: "${line}"`);
-        else if (!BULLET.test(line)) problems.push(`в [${at}] только однострочные буллеты "- текст": "${line}"`);
-        else sections[at].push(line.trim());
+        else if (at === 'USERS' && CATEGORY.test(line)) sections.USERS.push(line.trim());
+        else if (!BULLET.test(line)) {
+            problems.push(`в [${at}] только однострочные буллеты "- текст"${at === 'USERS' ? ' и категории "#### Название"' : ''}: "${line}"`);
+        } else sections[at].push(line.trim());
     }
-    if (!sections.USERS.length) problems.push('нет буллетов в секции [USERS]');
+    if (!sections.USERS.some(l => BULLET.test(l))) problems.push('нет буллетов в секции [USERS]');
+    problems.push(...categoryProblems(groupEntries(sections.USERS)));
     const junk = nonKeyboard(raw);
     if (junk.length) {
         problems.push(`только клавиатурные символы (-> вместо стрелки, - вместо тире, " вместо ёлочек), найдено: ${junk.join(' ')}`);
     }
     return { problems, version: head?.[1], users: sections.USERS };
+}
+
+// Либо плоский список (до FLAT_MAX), либо все буллеты под категориями из словаря
+function categoryProblems(groups) {
+    const problems = [];
+    const [only] = groups;
+    if (groups.length === 1 && only.name === null && only.bullets.length > FLAT_MAX) {
+        problems.push(`${only.bullets.length} буллетов плоским списком: от ${FLAT_MAX + 1} нужны категории "#### Название" (${CATEGORIES.join(', ')})`);
+    }
+    const named = groups.filter(g => g.name !== null);
+    if (named.length && groups.some(g => g.name === null)) problems.push('в [USERS] есть буллеты до первой категории');
+    const seen = new Set();
+    const placed = new Map();
+    for (const { name, bullets } of named) {
+        if (!CATEGORIES.includes(name)) problems.push(`категория "${name}" не из словаря: ${CATEGORIES.join(', ')}`);
+        if (seen.has(name)) problems.push(`категория "${name}" повторяется`);
+        seen.add(name);
+        if (!bullets.length) problems.push(`категория "${name}" без буллетов`);
+        for (const bullet of bullets) {
+            const first = placed.get(bullet);
+            if (first !== undefined && first !== name) problems.push(`буллет в двух категориях ("${first}" и "${name}"): ${bullet}`);
+            else placed.set(bullet, name);
+        }
+    }
+    return problems;
 }
 
 function write() {
@@ -355,7 +429,7 @@ function write() {
 
     const file = channelFile(meta.version);
     const before = repo.read(file);
-    const result = applyEntry({ text: before, version: meta.version, bullets: entry.users, mode: meta.mode, replace: flags.includes('--replace') });
+    const result = applyEntry({ text: before, version: meta.version, users: entry.users, mode: meta.mode, replace: flags.includes('--replace') });
     if (result.text !== before) {
         const abs = path.join(ROOT, file);
         fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -381,41 +455,41 @@ function selftest() {
 
     // пустой файл: раздел без `---` (под ним нечего отделять)
     for (const text of ['', '\n\n']) {
-        const r = apply({ text, version: '1.0.0-beta.0', bullets: [A] });
+        const r = apply({ text, version: '1.0.0-beta.0', users: [A] });
         check('пустой файл', r.action === 'created' && r.text === `### Версия v1.0.0-beta.0\n\n${A}\n`);
     }
 
     // новый раздел сверху, `---` под ним, остальное байт в байт
-    const created = apply({ text: existing, version: '1.0.0-beta.2', bullets: [C] });
+    const created = apply({ text: existing, version: '1.0.0-beta.2', users: [C] });
     check('создание сверху', created.action === 'created'
         && created.text === `### Версия v1.0.0-beta.2\n\n${C}\n\n---\n\n${existing}`);
 
     // раздел - итог: запись заменяет его, убранное названо, чужие разделы целы
-    const appended = apply({ text: existing, version: '1.0.0-beta.1', bullets: [A, C] });
+    const appended = apply({ text: existing, version: '1.0.0-beta.1', users: [A, C] });
     check('переписывание', appended.action === 'rewritten' && appended.added === 1 && appended.kept === 1
         && appended.removed.length === 1 && appended.removed[0] === B
         && appended.text === existing.replace(`${B}\n`, `${C}\n`));
     check('чужой раздел цел', splitLines(appended.text).slice(-4, -1).join('\n') === '### Версия v1.0.0-beta.0\n\n- Старое.');
     // противоречие: функция добавлена и убрана в одной версии - уходит из раздела
-    const gone = apply({ text: existing, version: '1.0.0-beta.1', bullets: [A] });
+    const gone = apply({ text: existing, version: '1.0.0-beta.1', users: [A] });
     check('убранное из раздела', gone.removed.length === 1 && !gone.text.includes(B) && gone.text.includes(A));
 
     // тот же список: файл не меняется
-    const dup = apply({ text: existing, version: '1.0.0-beta.1', bullets: [A, B] });
+    const dup = apply({ text: existing, version: '1.0.0-beta.1', users: [A, B] });
     check('тот же список', dup.added === 0 && dup.kept === 2 && dup.removed.length === 0 && dup.text === existing);
-    const mixed = apply({ text: existing, version: '1.0.0-beta.1', bullets: [A, C, C] });
+    const mixed = apply({ text: existing, version: '1.0.0-beta.1', users: [A, C, C] });
     check('дубль внутри записи', mixed.added === 1 && mixed.kept === 1 && mixed.text.split(C).length === 2);
     // тот же буллет в другом разделе дублем не считается
-    check('дубль между версиями допустим', apply({ text: existing, version: '1.0.0-beta.0', bullets: [A] }).added === 1);
+    check('дубль между версиями допустим', apply({ text: existing, version: '1.0.0-beta.0', users: [A] }).added === 1);
 
-    check('раздел без тела', apply({ text: '### Версия v1.0.0\n\n---\n', version: '1.0.0', bullets: [A] }).text
+    check('раздел без тела', apply({ text: '### Версия v1.0.0\n\n---\n', version: '1.0.0', users: [A] }).text
         === `### Версия v1.0.0\n\n${A}\n\n---\n`);
-    check('голый заголовок', apply({ text: '### Версия v1.0.0', version: '1.0.0', bullets: [A] }).text
+    check('голый заголовок', apply({ text: '### Версия v1.0.0', version: '1.0.0', users: [A] }).text
         === `### Версия v1.0.0\n\n${A}`);
 
-    const crlf = apply({ text: existing.replaceAll('\n', '\r\n'), version: '1.0.0-beta.1', bullets: [C] });
-    const bom = apply({ text: `\uFEFF${existing}`, version: '1.0.0-beta.1', bullets: [C] });
-    const rewritten = apply({ text: existing, version: '1.0.0-beta.1', bullets: [C] });
+    const crlf = apply({ text: existing.replaceAll('\n', '\r\n'), version: '1.0.0-beta.1', users: [C] });
+    const bom = apply({ text: `\uFEFF${existing}`, version: '1.0.0-beta.1', users: [C] });
+    const rewritten = apply({ text: existing, version: '1.0.0-beta.1', users: [C] });
     check('BOM', bom.action === 'rewritten' && bom.text === rewritten.text);
 
     check('CRLF', crlf.text.includes(`${C}\r\n`) && !/[^\r]\n/.test(crlf.text));
@@ -424,13 +498,26 @@ function selftest() {
     check('суффикс - отказ', ['2.1.0-beta.3', '2.1.0-alpha.1'].every(v => thrown(() => channelFile(v))?.includes('суффикс')));
 
     // range: новый раздел создаётся, существующий - отказ, с --replace - только он
-    check('range создаёт', apply({ text: existing, version: '1.0.0', bullets: [C], mode: 'range' }).action === 'created');
-    const refused = thrown(() => apply({ text: existing, version: '1.0.0-beta.1', bullets: [C], mode: 'range' }));
+    check('range создаёт', apply({ text: existing, version: '1.0.0', users: [C], mode: 'range' }).action === 'created');
+    const refused = thrown(() => apply({ text: existing, version: '1.0.0-beta.1', users: [C], mode: 'range' }));
     check('range отказ', refused?.includes('--replace'));
-    const replaced = apply({ text: existing, version: '1.0.0-beta.1', bullets: [C], mode: 'range', replace: true });
+    const replaced = apply({ text: existing, version: '1.0.0-beta.1', users: [C], mode: 'range', replace: true });
     check('range --replace', replaced.action === 'replaced'
         && replaced.text === `### Версия v1.0.0-beta.1\n\n${C}\n\n---\n\n### Версия v1.0.0-beta.0\n\n- Старое.\n`);
-    check('--replace вне range', thrown(() => apply({ text: existing, version: '1.0.0-beta.1', bullets: [C], replace: true })) !== null);
+    check('--replace вне range', thrown(() => apply({ text: existing, version: '1.0.0-beta.1', users: [C], replace: true })) !== null);
+
+    // категории: словарь, порядок и плоский список
+    const cats = apply({ text: '', version: '1.0.0', users: ['#### Интерфейс', A, '#### Важно знать', C] });
+    check('категории в порядке словаря', cats.text === `### Версия v1.0.0\n\n#### Важно знать\n\n${C}\n\n#### Интерфейс\n\n${A}\n`);
+    const flat = apply({ text: '', version: '1.0.0', users: [A, B] });
+    check('плоский без подзаголовков', flat.text === `### Версия v1.0.0\n\n${A}\n${B}\n`);
+    const regrouped = apply({ text: cats.text, version: '1.0.0', users: ['#### Обновления', A, B] });
+    check('перекладка категорий', regrouped.kept === 1 && regrouped.added === 1 && regrouped.removed[0] === C
+        && !regrouped.text.includes('#### Важно знать') && regrouped.text.includes('#### Обновления'));
+    const twice = apply({ text: '', version: '1.0.0', users: ['#### Интерфейс', A, '#### Прочее', A, B] });
+    check('дубль между категориями: остаётся в первой', twice.added === 2
+        && twice.text === `### Версия v1.0.0\n\n#### Интерфейс\n\n${A}\n\n#### Прочее\n\n${B}\n`);
+    check('entries: категории и буллеты', entriesOf(splitLines(cats.text)).join('|') === ['#### Важно знать', C, '#### Интерфейс', A].join('|'));
 
     // заголовок: версия целиком, не префикс
     check('заголовок', VERSION_HEADING.test('### Версия v1.2.3') && VERSION_HEADING.test('### Версия v1.2.3-beta.10')
@@ -448,6 +535,20 @@ function selftest() {
     check('entry без USERS', parseEntry('1.0.0 - UI\n\n[GIT]\n- Git.\n').problems.length > 0);
     check('entry не буллет', parseEntry(entry('Просто текст.')).problems.length > 0);
     check('entry версия', parseEntry(`v1.0.0 - UI\n\n[USERS]\n${A}\n`).problems.length > 0);
+    const withCats = (...u) => parseEntry(entry(u.join('\n')));
+    check('entry категории ок', withCats('#### Важно знать', A, '#### Интерфейс', B).problems.length === 0);
+    check('entry неизвестная категория', withCats('#### Новости', A).problems.some(p => p.includes('словаря')));
+    check('entry буллет до категории', withCats(A, '#### Интерфейс', B).problems.some(p => p.includes('до первой')));
+    check('entry пустая категория', withCats('#### Интерфейс', '#### Прочее', A).problems.some(p => p.includes('без буллетов')));
+    const bullets = n => Array.from({ length: n }, (_, i) => `- Пункт ${i + 1}.`);
+    check('entry плоский до порога ок', parseEntry(entry(bullets(5).join('\n'))).problems.length === 0);
+    check('entry плоский сверх порога - отказ', parseEntry(entry(bullets(6).join('\n'))).problems.some(p => p.includes('нужны категории')));
+    check('entry сверх порога с категориями ок', parseEntry(entry(['#### Интерфейс', ...bullets(6)].join('\n'))).problems.length === 0);
+    check('entry малый раздел с категорией допустим', withCats('#### Интерфейс', A).problems.length === 0);
+    check('entry буллет в двух категориях', withCats('#### Интерфейс', A, '#### Прочее', A, B).problems.some(p => p.includes('в двух категориях')));
+    check('entry повтор категории', withCats('#### Интерфейс', A, '#### Интерфейс', B).problems.some(p => p.includes('повторяется')));
+    check('entry только категории', withCats('#### Интерфейс').problems.some(p => p.includes('нет буллетов')));
+    check('entry категория в GIT нельзя', parseEntry(entry(A, '#### Интерфейс\n- Git.')).problems.length > 0);
     check('entry без GIT допустим', parseEntry(`1.0.0 - UI\n\n[USERS]\n${A}\n`).problems.length === 0);
 
     if (failed) { console.error(`selftest: упало ${failed}`); return 1; }

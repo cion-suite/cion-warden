@@ -1,6 +1,7 @@
 name: Release
 
 # Только после зелёного CI на push в main: упавшая сборка не получает тег.
+# Одинаковые Release (установщик + лог) в двух репозиториях: тут и в wf-macro.
 on:
   workflow_run:
     workflows: [CI]
@@ -13,11 +14,16 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+  # Инвариант: тот же репозиторий, что в CONFIG.releases (shared/config.ts)
+  MACRO_REPO: Lazy-World/wf-macro
 
 jobs:
-  release:
-    name: тег + GitHub Release
+  notes:
+    name: версия и лог
     # Ручной запуск только из main: теги ставятся только на релизы.
     if: >-
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
@@ -26,9 +32,10 @@ jobs:
        github.event.workflow_run.event == 'push')
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      HEAD_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      warden: ${{ steps.version.outputs.warden }}
+      macro: ${{ steps.version.outputs.macro }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -39,31 +46,41 @@ jobs:
         with:
           node-version: 24.21.0
 
-      - name: Resolve version
+      # Тег проверяется в каждом репозитории отдельно: упавший второй Release
+      # при повторном запуске не пересоздаёт первый.
+      - name: Resolve version and tags
         id: version
         run: |
           version="$(node -p "require('./package.json').version")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          warden=false
+          macro=false
+
+          # 2 - тега нет; любой другой код - сбой сети/доступа, не "тега нет"
+          tag_missing() {
+            local status=0
+            git ls-remote --exit-code --tags "$1" "refs/tags/v$version" > /dev/null || status=$?
+            if [[ $status == 0 ]]; then
+              echo "Тег v$version уже есть в $1: пропуск."
+              return 1
+            elif [[ $status == 2 ]]; then
+              return 0
+            fi
+            echo "::error::git ls-remote упал с кодом $status ($1)"
+            exit "$status"
+          }
+
           if [[ "$version" == *-* ]]; then
             echo "Версия $version с prerelease-суффиксом: тегируются только стабильные релизы, пропуск."
-            echo "skip=true" >> "$GITHUB_OUTPUT"
           else
-            # 2 - тега нет; любой другой код - сбой сети/доступа, не "тега нет"
-            status=0
-            git ls-remote --exit-code --tags origin "refs/tags/v$version" > /dev/null || status=$?
-            if [[ $status == 0 ]]; then
-              echo "Тег v$version уже существует: релизить нечего."
-              echo "skip=true" >> "$GITHUB_OUTPUT"
-            elif [[ $status == 2 ]]; then
-              echo "skip=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "::error::git ls-remote упал с кодом $status"
-              exit "$status"
-            fi
+            tag_missing origin && warden=true
+            tag_missing "https://github.com/$MACRO_REPO.git" && macro=true
           fi
+          echo "warden=$warden" >> "$GITHUB_OUTPUT"
+          echo "macro=$macro" >> "$GITHUB_OUTPUT"
 
       - name: Extract release notes
-        if: steps.version.outputs.skip != 'true'
+        if: steps.version.outputs.warden == 'true' || steps.version.outputs.macro == 'true'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -72,10 +89,80 @@ jobs:
             exit 1
           fi
 
-      - name: Create tag and GitHub Release
-        if: steps.version.outputs.skip != 'true'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: steps.version.outputs.warden == 'true' || steps.version.outputs.macro == 'true'
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes.md
+          if-no-files-found: error
+
+  build:
+    name: установщик
+    needs: notes
+    if: needs.notes.outputs.warden == 'true' || needs.notes.outputs.macro == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ env.HEAD_SHA }}
+          path: cion-warden
+
+      - uses: ./cion-warden/.github/actions/setup
+        with:
+          cion-suite-token: ${{ secrets.CION_SUITE_PAT }}
+
+      # check:placeholders + electron-vite build + electron-builder --publish never
+      - name: Build installer
+        working-directory: cion-warden
+        run: pnpm dist
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: installer
+          path: |
+            cion-warden/build/dist/*.exe
+            cion-warden/build/dist/*.exe.blockmap
+            cion-warden/build/dist/latest.yml
+          if-no-files-found: error
+
+  publish:
+    name: Release
+    needs: [notes, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.notes.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: installer
+          path: assets
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: notes
+          path: notes
+
+      # Тег создаёт сам release: упавший create не оставляет тег,
+      # и повторный запуск не примет его за готовый релиз.
+      - name: Release in this repository
+        if: needs.notes.outputs.warden == 'true'
         env:
-          VERSION: ${{ steps.version.outputs.version }}
-        # Тег создаёт сам release: упавший create не оставляет тег,
-        # и повторный запуск не примет его за готовый релиз.
-        run: gh release create "v$VERSION" --target "$HEAD_SHA" --title "v$VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "v$VERSION" assets/* --repo "$GITHUB_REPOSITORY" --target "$HEAD_SHA" --title "v$VERSION" --notes-file notes/notes.md
+
+      # Без --target: коммита этого репозитория в wf-macro нет (422),
+      # тег встаёт на HEAD ветки по умолчанию.
+      - name: Release in wf-macro
+        if: needs.notes.outputs.macro == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.WF_MACRO_TOKEN }}
+        run: |
+          if [[ -z "$GH_TOKEN" ]]; then
+            echo "::error::секрет WF_MACRO_TOKEN не задан (fine-grained PAT, contents: write на $MACRO_REPO)"
+            exit 1
+          fi
+          gh release create "v$VERSION" assets/* --repo "$MACRO_REPO" --title "v$VERSION" --notes-file notes/notes.md

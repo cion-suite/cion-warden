@@ -9,12 +9,15 @@ const updater = vi.hoisted(() => ({
 
 vi.mock('@app/updater/updater', () => updater);
 
+import { githubModule } from '@app/github/module';
+import { sourcesModule } from '@app/sources/module';
 import { updaterModule } from '@app/updater/module';
 
 describe('updaterModule', () => {
-    it('id и каналы - из updater.ts', () => {
+    it('id и каналы - из updater.ts, зависит от sources и github', () => {
         expect(updaterModule.id).toBe('updater');
         expect(updaterModule.handlers).toEqual([updater.updaterHandlers]);
+        expect(updaterModule.needs).toEqual([sourcesModule, githubModule]);
     });
 
     it('start и stop - запуск и остановка updater', async () => {
