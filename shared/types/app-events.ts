@@ -1,25 +1,23 @@
-import type { UpdaterInfo, UpdaterProgress } from './updater.js';
-import type { ScriptStatus } from './scripts.js';
+import type { UpdaterInfo, UpdaterProgress } from './updater';
+import type { ScriptStatus } from './scripts';
+import type { SourceSync } from './catalog';
 
-declare module '@cion-suite/core/events' {
+/** Имя: source:action (updater - обновления). */
+
+declare module '@cion-suite/core' {
     interface EventMap {
+        'updater:checked': void;
         'updater:available': UpdaterInfo;
-        'updater:not-available': void;
-        'updater:downloaded': UpdaterInfo;
-        'updater:error': { message: string };
         'updater:progress': UpdaterProgress;
-        'app:channel:changed': { isBeta: boolean };
-        'scripts:changed': { type: 'add' | 'change' | 'unlink'; filePath: string };
-        'script:status-changed': { id: string; status: ScriptStatus; errorMessage?: string };
-        'vault:source-synced': {
-            sourceId: string;
-            lastSyncedAt: number;
-            fromCache: boolean;
-        };
-        'vault:rate-limit': { remaining: number; reset: number };
-        'libs:changed': { sourceId: string; libId: string };
-        'binds:changed': { sourceId: string; presetId: string };
+        'updater:downloaded': UpdaterInfo;
+        'updater:failed': { message: string };
+        'source:changed': { sourceId: string; type: 'add' | 'update' | 'remove' };
+        'source:synced': SourceSync;
+        'github:limit:changed': { remaining: number; reset: number };
+        // libId / presetId '*' - затронуты все элементы источника
+        'lib:changed': { sourceId: string; libId: string };
+        'bind:changed': { sourceId: string; presetId: string };
+        'script:changed': { type: 'change' | 'unlink'; filePath: string };
+        'script:status:changed': { id: string; status: ScriptStatus; errorMessage?: string };
     }
 }
-
-export {};

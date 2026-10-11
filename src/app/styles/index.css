@@ -1,9 +1,9 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 @import "@fontsource-variable/inter";
-@import "@fontsource-variable/roboto";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -49,12 +49,12 @@
     --radius-2xl: calc(var(--radius) + 8px);
     --radius-3xl: calc(var(--radius) + 12px);
     --radius-4xl: calc(var(--radius) + 16px);
-    --font-heading: var(--font-sans);
-    --font-sans: 'Inter Variable', sans-serif;
+    --font-heading: 'Inter Variable', sans-serif;
+    --font-sans: 'Geist Variable', sans-serif;
 }
 
 :root {
-    --radius: 0.625rem;
+    --radius: 0.45rem;
     --background: oklch(1 0 0);
     --foreground: oklch(0.145 0 0);
     --card: oklch(1 0 0);
@@ -130,34 +130,6 @@
 
 .glass {
     @apply bg-background/80 backdrop-blur-sm border border-border/50;
-}
-
-@utility scroll-fade {
-    mask-image: linear-gradient(
-        to bottom,
-        transparent 0,
-        black var(--scroll-fade-top),
-        black calc(100% - var(--scroll-fade-bottom)),
-        transparent 100%
-    );
-    animation: scroll-fade-anim linear both;
-    animation-timeline: scroll(self);
-}
-
-@keyframes scroll-fade-anim {
-    0% {
-        --scroll-fade-top: 0px;
-        --scroll-fade-bottom: 10px;
-    }
-    5%,
-    95% {
-        --scroll-fade-top: 10px;
-        --scroll-fade-bottom: 10px;
-    }
-    100% {
-        --scroll-fade-top: 10px;
-        --scroll-fade-bottom: 0px;
-    }
 }
 
 @layer base {

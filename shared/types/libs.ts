@@ -1,12 +1,12 @@
 export type LibKind = 'file' | 'folder';
 
-export interface RemoteLibFileEntry {
+export interface LibFile {
     path: string;
     sha: string;
     downloadUrl: string | null;
 }
 
-export interface RemoteLibraryMeta {
+export interface Lib {
     id: string;
     name: string;
     kind: LibKind;
@@ -17,5 +17,11 @@ export interface RemoteLibraryMeta {
     isDownloaded: boolean;
     hasUpdate: boolean;
     webUrl?: string;
-    files: RemoteLibFileEntry[];
+    files: LibFile[];
+}
+
+/** Итог массовой загрузки libs:sync. */
+export interface LibSync {
+    ok: number;
+    failed: number;
 }

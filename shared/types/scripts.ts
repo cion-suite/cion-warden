@@ -23,7 +23,7 @@ export interface ScriptCfgValues {
     val: Record<string, string | number | boolean>;
 }
 
-export interface ScriptMeta {
+export interface Script {
     id: string;
     name: string;
     filePath: string;

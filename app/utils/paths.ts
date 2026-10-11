@@ -1,34 +1,61 @@
+// __dirname = build/out/main/, статика - через getAppPath().
+// Шим __dirname в конце бандла: paths.* лишь из функций (TDZ)
 import { app } from 'electron';
-import { dirname, join } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-// In dev mode electron-vite emits main to build/out/main/, so __dirname points
-// there, not to source. Packaged builds need __dirname for renderer assets;
-// dev builds resolve from app.getAppPath() (project root).
-const __dirname = dirname(fileURLToPath(import.meta.url));
+const resource = (packaged: string, dev: string): string => (app.isPackaged ? packaged : dev);
 
-function resolveBundledResource(relFromAppPath: string, packagedRel: string): string {
-    return app.isPackaged ? join(__dirname, packagedRel) : join(app.getAppPath(), relFromAppPath);
-}
+// Папка старого приложения (name из package.json): сменишь -
+// sources.json, vault и сторы vault / settings осиротеют.
+const userData = (): string => path.join(app.getPath('appData'), '@cion-suite', 'warden');
 
-function resolveAsset(filename: string): string {
-    return resolveBundledResource(
-        `public/assets/${filename}`,
-        `../renderer/assets/${filename}`
-    );
-}
-
-export function getIconPath(): string {
-    if (process.platform === 'linux') return resolveAsset('icon.png');
-    return resolveAsset(app.isPackaged ? 'icon.ico' : 'icon_dev.ico');
-}
-
-export function getIconFileUrl(): string {
-    return pathToFileURL(getIconPath()).href;
-}
-
-export function getSplashPath(): string {
-    return app.isPackaged
-        ? join(process.resourcesPath, 'splash.html')
-        : join(app.getAppPath(), 'app/splash.html');
-}
+export const paths = {
+    userData,
+    sources: () => path.join(userData(), 'sources.json'),
+    // global_vault/<sourceId>/{scripts,lib,presets}
+    vault: () => path.join(userData(), 'global_vault'),
+    source: (sourceId: string) => {
+        const base = path.join(userData(), 'global_vault', sourceId);
+        const scripts = path.join(base, 'scripts');
+        return {
+            base,
+            scripts,
+            cfg: path.join(scripts, 'cfg'),
+            lib: path.join(base, 'lib'),
+            presets: path.join(base, 'presets'),
+            manifest: path.join(base, '.manifest.json'),
+            cache: path.join(base, '.local-cache.json'),
+        };
+    },
+    fonts: {
+        index: () => path.join(userData(), 'installed-fonts.json'),
+        // Только win32: LOCALAPPDATA есть везде, где шрифты ставим
+        dir: () => path.join(process.env.LOCALAPPDATA ?? '', 'Microsoft', 'Windows', 'Fonts'),
+    },
+    splash: () => resource(
+        path.join(process.resourcesPath, 'splash.html'),
+        path.join(app.getAppPath(), 'app/splash.html'),
+    ),
+    preload: () => path.join(__dirname, '../preload/index.js'),
+    icon: () => {
+        const name = process.platform === 'linux'
+            ? 'icon.png'
+            : app.isPackaged ? 'icon.ico' : 'icon_dev.ico';
+        return resource(
+            path.join(__dirname, `../renderer/assets/${name}`),
+            path.join(app.getAppPath(), `public/assets/${name}`),
+        );
+    },
+    // Лог канала: docs/versions, в пакете resources/versions
+    changelog: (file: string) => resource(
+        path.join(process.resourcesPath, 'versions', file),
+        path.join(app.getAppPath(), 'docs/versions', file),
+    ),
+    page: (route = '') => {
+        const hash = route ? `#/${route}` : '';
+        const devUrl = process.env.ELECTRON_RENDERER_URL;
+        if (!app.isPackaged && devUrl) return `${devUrl}${hash}`;
+        return `${pathToFileURL(path.join(__dirname, '../renderer/index.html')).href}${hash}`;
+    },
+};

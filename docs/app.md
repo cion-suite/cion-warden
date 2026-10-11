@@ -1,394 +1,362 @@
-# Cion Warden — Design & Flow Plan
+# Cion Warden - дизайн и потоки
 
-## Overview
+## Обзор
 
-Менеджер скриптов. Sidebar всегда присутствует (collapsible icon mode). Пять вкладок: Scripts, Get Scripts, Libraries, Binds, Settings.
+Менеджер скриптов. Sidebar всегда присутствует (collapsible icon mode). Шесть разделов: Scripts, Get Scripts, Libraries, Binds, Changelog, Settings.
 
-Источники (Vault) — не отдельная вкладка. Управляются через кнопку `[🔌 Sources]` в тулбаре вкладок Get Scripts и Libraries; открывают общий `SourcesDialog` (modal).
+Источники - не отдельный раздел. Ими управляют через кнопку `[Sources]` в тулбарах Get Scripts, Libraries и Binds; она открывает общий диалог источников (modal).
+
+Устройство кода - `docs/architecture.md` (концерны main, сущности renderer), правила - `CLAUDE.md`, эталон раскладки `src/` - `docs/standard.md`.
 
 ---
 
-## Navigation (Sidebar)
+## Навигация (Sidebar)
 
-```
+```text
 Local
-  └─ Scripts          /scripts          FileCode2
+  Scripts          /scripts          FileCode2
 
 Sources
-  ├─ Get Scripts      /get-scripts      Download
-  └─ Libraries        /libraries        Library
+  Get Scripts      /get-scripts      Download
+  Libraries        /libraries        Library
 
 Misc
-  └─ Binds            /binds            Keyboard
+  Binds            /binds            Keyboard
 
-Footer
-  └─ Settings         /settings         Settings
+Footer (без заголовка группы)
+  Changelog        /changelog        ScrollText
+  Settings         /settings         Settings
 ```
 
-Конфиг навигации — `src/shared/config/nav.ts` (`NAV_BY_SECTION`). Роуты — `src/shared/config/routes.ts` (`ROUTES`). Sidebar — `src/widgets/app-sidebar/`.
+Таблица разделов (сайдбар, шапка и роутер читают одну) - `src/shell/sidebar/sections.ts`; маршруты - `src/app/AppRouter.tsx`; корневой путь ведёт на последний открытый раздел (`state.lastRoute`, по умолчанию раздел Scripts).
 
-Иконки + подписи. Активный item — accent. Группы — muted-заголовки, не кликабельны.
+Иконки + подписи. Активный item - accent. Группы - muted-заголовки, не кликабельны. В footer над меню раздела показывается блок обновления (`SidebarUpdate`).
 
 ---
 
-## Sources Management (Vault)
+## Источники (Sources)
 
-**Не вкладка** — общий `SourcesDialog` (modal), вызывается через `[🔌 Sources]` в тулбарах Get Scripts / Libraries. Источники — глобальный стейт, агрегируются обеими вкладками.
+**Не раздел** - общий диалог (`SourcesButton` -> `SourcesDialog`, часть `manage` сущности `source`), вызывается из тулбаров Get Scripts / Libraries / Binds. Источники - глобальный список, агрегируется всеми тремя разделами.
 
-### Source Schema (Git Repository)
+### Схема источника (Git-репозиторий)
 
-- `url` (e.g. `https://github.com/user/repo`)
-- `branch` (default: `main`)
-- `isPrivate` toggle → Personal Access Token хранится через `@cion-suite/core/storage` (`createSecureStorage`) по `sourceId`. Никогда не персистится в JSON.
-- `hasToken` — computed-флаг, отдаётся renderer'у при `sources:list` из secure-store, без значения токена.
-- Ожидаемая структура репо:
+- `url` (например `https://github.com/user/repo`); поддерживается только GitHub.
+- `branch` (по умолчанию `main`).
+- `name` - выводится из `url` (`repo.name`), вручную не задаётся.
+- `isPrivate` - переключатель; Personal Access Token хранится в `vault` ядра (`vault.get/set/delete`, ключ `source:token:<sourceId>`). В списке источников на диске его нет, renderer его не получает.
+- `tokenMask` - маска токена или `null` (токена нет), отдаётся renderer'у в `sources:list`; сам токен в renderer не уходит.
+- Ожидаемая структура репозитория:
+
+  ```text
+  scripts/          скрипты (.ahk)
+  scripts/cfg/      JSON-конфиги (имя совпадает со скриптом)
+  lib/              библиотеки (файл или папка)
+  presets/          пресеты биндов (JSON)
+  assets/fonts/     шрифты источника (+ _fonts.json с описанием)
   ```
-  scripts/        ← .ahk / .py / etc.
-  scripts/cfg/    ← JSON-конфиги (имя совпадает со скриптом)
-  lib/            ← библиотеки
-  ```
 
-### Dialog Layout (`SourcesDialog`)
+### Раскладка диалога (`SourcesDialog`)
 
-Split-panel modal (`sm:max-w-2xl`, fixed `h-[min(520px,calc(100dvh-2rem))]`):
+Split-panel modal (`sm:max-w-3xl`, высота `min(520px, 100dvh - 2rem)`):
 
-```
-┌─────────────────────────────────────────────────────┐
-│  Sources                                            │  (sr-only title)
-├──────────────┬──────────────────────────────────────┤
-│  Sources     │  selected.name                       │
-├──────────────┼──────────────────────────────────────┤
-│  • repo-a    │  url     [_____________________]     │
-│    GIT · 🔒  │  branch  [_____________________]     │
-│  • repo-b    │  private [○————]                     │
-│    GIT       │  token   [••••••••••••][✎]           │  (если private)
-│  ┌──────────┐│                                      │
-│  │ NEW      ││                                      │
-│  └──────────┘│                                      │
-│              │                                      │
-├──────────────┼──────────────────────────────────────┤
-│  [+ Add]     │                          [Save]      │
-└──────────────┴──────────────────────────────────────┘
+```text
++-----------------------------------------------------+
+|  Sources                                            |  (sr-only title)
++--------------+--------------------------------------+
+|  Sources     |  selected.name                       |
++--------------+--------------------------------------+
+|  * repo-a    |  url     [_____________________]     |
+|    GIT, lock |  branch  [_____________________]     |
+|  * repo-b    |  private [o----]                     |
+|    GIT       |  token   [**********][edit]          |  (если private)
+|              |                                      |
++--------------+--------------------------------------+
+|  [+ Add]     |                [Reinstall fonts][Save]|
++--------------+--------------------------------------+
 ```
 
-- **Left panel:** список источников. Каждый item — название + бейдж типа (`GIT`/`EXTERNAL`) + lock-иконка для private. Hover → trash-кнопка справа.
-- **Right panel:**
-  - Существующий источник → `GitSettings` / `ExternalSettings` (форма + Save).
-  - `[+ Add]` → `NewSourcePanel` с табами `Git` / `External`, форма соответствующего типа.
-- **Token UX:** при `hasToken === true` поле `token` блокируется, показывается mask из `sources:get-token-mask`. Карандаш разлочивает поле для ввода нового значения.
-- **Empty selection:** `"Select a source"` placeholder.
+- **Левая панель:** список источников. Каждый item - название + бейдж типа (`GIT`) + lock-иконка для private. Hover -> trash-кнопка справа.
+- **Правая панель:**
+  - Существующий источник -> `SourceSettings` (форма + Save + `Reinstall fonts`).
+  - `[+ Add]` -> `NewSourcePanel` (форма нового источника; имя показывается как выводимое из URL).
+- **Токен:** при `tokenMask !== null` поле токена блокируется и показывает маску. Карандаш разлочивает поле для нового значения. Токен пишется отдельным вызовом `sources:token:set` после `sources:add` / `sources:update`; при снятии `isPrivate` main удаляет токен сам.
+- **Reinstall fonts:** `fonts:install(sourceId)`, итог тостом (`ok`, `skipped`, `failed`).
+- **Пустой выбор:** placeholder "Select a source".
+- Первый запуск: main создаёт источник по умолчанию, если списка источников ещё нет (seed).
+
+### Синхронизация и GitHub
+
+- Кнопка refresh на страницах Get Scripts / Libraries / Binds - `catalog:sync()` по всем источникам: обновляется manifest (дерево репозитория, sha файлов), после чего списки перечитываются.
+- Ошибки GitHub показываются фразой по коду: токен недействителен (`unauthorized`), у токена нет доступа (`forbidden`), репозиторий не найден (`not_found` со статусом 404); прочее - общая фраза и текст main.
+- Лимит GitHub API по каждому токену - карточка GitHub API в Settings (`github:limit:get`), обновляется после каждой синхронизации (`github:limit:changed`).
+- После успешной синхронизации источника шрифты из `assets/fonts/` устанавливаются в профиль пользователя (только Windows, реестр HKCU); при удалении источника шрифты снимаются.
 
 ---
 
-## Page: Scripts
+## Страница: Scripts
 
-**Суть:** локальные скрипты из watched-папки. Run/Stop, конфиг, удаление.
+**Суть:** локальные скрипты из `global_vault/<sourceId>/scripts`. Run/Stop, конфиг, удаление.
 
-### Layout
+### Раскладка
 
-Page (`src/pages/scripts/index.tsx`) монтирует `<ScriptList>`. Поисковая строка инжектится в navbar через `useSetNavbarSlot`.
+Экран `ScriptsPage` (`src/entities/script/list`). Поисковая строка инжектится в navbar (`useNavbarSearch`). Список - `ListPanel` с прокруткой под тулбаром.
 
+```text
++-------------------------------------------------------+
+|  [navbar: ........................ [search]    ]       |
++-------------------------------------------------------+
+|  [Stop All]                                    [R]    |
++-------------------------------------------------------+
+|  script-one                                           |
+|  Modified: 04/05 22:38     [...] [cfg] [> Run]        |
++-------------------------------------------------------+
+|  script-two                              (running)    |
+|  Modified: 04/05 22:38     [...] [cfg] [# Stop]       |
++-------------------------------------------------------+
 ```
-┌───────────────────────────────────────────────────────┐
-│  [navbar: ........................ [search]    ]      │
-├───────────────────────────────────────────────────────┤
-│  [Stop All]                                  [↻]      │
-├───────────────────────────────────────────────────────┤
-│  script-one                                           │
-│  Modified: 04/05 22:38     [⋯] [⚙] [▷ Run]            │
-├───────────────────────────────────────────────────────┤
-│  script-two                            (running)      │
-│  Modified: 04/05 22:38     [⋯] [⚙] [□ Stop]           │
-└───────────────────────────────────────────────────────┘
-```
 
-### Toolbar (внутри page)
+### Тулбар
 
-- `[Stop All]` — `outline`, disabled если `!hasAnyRunning`. Дёргает `scripts:stop-all` + `probeExternal`.
-- `[↻]` — `ghost icon-sm`. Refresh + `probeExternal`.
+- `[Stop All]` - `outline`, disabled если нет запущенных (`scripts:processes:get`). Вызывает `scripts:processes:clear` (убивает все процессы AutoHotkey) и перечитывает признак.
+- `[R]` - refresh: `scripts:list` + `scripts:processes:get`.
 
-### Row (`ScriptRow`)
+### Строка (`ScriptRow`)
 
-- **Left:** `name` (semibold truncate) + `Modified: MM/DD HH:MM` (если есть `modifiedAt`).
-- **Right (group):**
-  - `[⋯]` dropdown:
-    - `Open in Explorer` → `scripts:open-in-explorer`
-    - `Delete` (destructive) → confirmation Dialog → `scripts:delete`
-  - `[⚙]` — `ghost icon-sm`. Disabled если `!script.configPath`. Открывает `ScriptConfigDialog`.
-  - `[▷ Run] / [□ Stop]` — одна кнопка, меняется по `script.status === 'running'`. Run = `default`, Stop = `secondary`.
-- **State indicator:** `border-primary/30` при `isRunning`.
+- **Слева:** `name` (semibold, truncate) + `Modified: MM/DD HH:MM` (если есть `modifiedAt`).
+- **Справа (группа):**
+  - `[...]` dropdown:
+    - `Open in Explorer` -> `scripts:folder:open`
+    - `Delete` (destructive) -> confirmation Dialog -> `scripts:delete`
+  - `[cfg]` - ghost icon. Disabled если нет `configPath`. Открывает `ScriptConfigDialog`.
+  - `[> Run] / [# Stop]` - одна кнопка, зависит от `script.status === 'running'`. Run = `default`, Stop = `secondary` (`scripts:processes:remove`).
+- **Индикатор состояния:** `border-primary/30` при running; при проверке зависимостей - спиннер и подпись.
 
-### Script Config Dialog (`ScriptConfigDialog`)
+### Запуск и зависимости (`deps`)
+
+Перед `scripts:run` renderer зовёт `scripts:deps:get(id)`: main разбирает `#Include` скрипта (`ahk.includes`) и ищет недостающие lib и пресеты в manifest источника. Если чего-то не хватает, показывается `MissingLibsDialog` (список, прогресс): подтверждение последовательно ставит `libs:install` / `binds:install`, затем скрипт запускается; отказ части установок - тост с числом ошибок, запуск не происходит.
+
+### Диалог конфига (`ScriptConfigDialog`, часть `values`)
 
 Modal (`max-w-sm`) с двумя табами:
 
-- **Hotkeys** (`hk` из `ScriptCfgFile`): label + опциональный `[?]` tooltip + `<KeyBindInput>` (chip с режимом записи клавиши).
-- **Values** (`val`): label + tooltip + input по типу (`boolean` → Switch, `number` → numeric Input w24, `string` → text Input w24).
+- **Hotkeys** (`hk` из `ScriptCfgFile`): label + опциональный `[?]` tooltip + `KeyBindInput` (chip с режимом записи клавиши или кнопки мыши).
+- **Values** (`val`): label + tooltip + input по типу (`boolean` - Switch, `number` - numeric Input, `string` - text Input).
 
-Default-таб — `hotkeys` если есть `hk`-записи, иначе `values`. Disabled-таб если соответствующих записей нет.
+Default-таб - `hotkeys`, если есть `hk`-записи, иначе `values`. Disabled-таб, если соответствующих записей нет.
 
-Сохранение: `scripts:config-save-values(configPath, values)`. Загрузка: `scripts:config-get-values(configPath)`, мерж с дефолтами из `script.config`.
+Сохранение: `scripts:config:save(configPath, values)` (файл `<cfg>.values.json`). Загрузка: `scripts:config:get(configPath)` при каждом открытии, мерж с дефолтами из `script.config`.
 
-### Directory Watching
+### Наблюдение за каталогом
 
-- Main: `chokidar.watch(scriptsDir)` → events `add` / `change` / `unlink`.
-- `appEvents.emit('scripts:changed', { type, filePath })`.
-- Renderer: `useScripts` слушает `scripts:changed` → refresh + `probeExternal`.
-- Renderer: `useAppEvent('script:status-changed', ...)` → обновляет статус строки.
-- IPC `scripts:list` при монтировании.
+- Main: `fs.watch(global_vault, { recursive: true })`, дебаунс 150 мс; событие `script:changed { type: 'change' | 'unlink', filePath }`.
+- Renderer: `useQuerySync` сбрасывает `scripts:list`, `scripts:processes:get`, `catalog:scripts:list`.
+- Статусы: `script:status:changed { id, status, errorMessage? }` обновляет строку в кэше без перечитывания списка.
 
-### Slices
+### Сущность
 
-- `entities/script/` — `useScripts()` (list + hasAnyRunning + probeExternal).
-- `features/script-runner/` — `useScriptRunner()` (run/stop/stopAll).
-- `features/script-config/` — `ScriptConfigDialog`.
-- `widgets/script-list/` — `ScriptList` + `ScriptRow`.
+- `src/entities/script/list` - `ScriptsPage`, `ScriptRow`, `useScripts` (список + признак запущенных).
+- `src/entities/script/values` - диалог хоткеев и значений.
+- `src/entities/script/deps` - проверка и установка недостающего перед запуском.
 
 ---
 
-## Page: Get Scripts
+## Страница: Get Scripts
 
 **Суть:** агрегат удалённых скриптов из всех источников. Download / Update / показ статуса.
 
-### Layout
+### Раскладка
 
-Page (`src/pages/get-scripts/index.tsx`) монтирует `<RemoteScriptList>` + `<SourcesDialog>`. Поиск — в navbar slot.
+Экран `GetScriptsPage` (`src/entities/script/catalog`) + `SourcesButton`. Поиск - в navbar.
 
+```text
++-------------------------------------------------------+
+|  [navbar: ........................ [search]    ]       |
++-------------------------------------------------------+
+|  [Sources]                                     [R]    |
++-------------------------------------------------------+
+|  script-one                                           |
+|  user/my-repo                            [v Get]      |
++-------------------------------------------------------+
+|  script-two                                           |
+|  user/my-repo            [Update available] [v Update]|
++-------------------------------------------------------+
+|  script-three                                         |
+|  user/my-repo                            [Up to date] |
++-------------------------------------------------------+
 ```
-┌───────────────────────────────────────────────────────┐
-│  [navbar: ........................ [search]    ]      │
-├───────────────────────────────────────────────────────┤
-│  [🔌 Sources]                                  [↻]    │
-├───────────────────────────────────────────────────────┤
-│  script-one                                           │
-│  user/my-repo                            [↓ Get]      │
-├───────────────────────────────────────────────────────┤
-│  script-two                                           │
-│  user/my-repo            [Update available] [↓ Update]│
-├───────────────────────────────────────────────────────┤
-│  script-three                                         │
-│  user/my-repo                            [Up to date] │
-└───────────────────────────────────────────────────────┘
-```
 
-### Toolbar
+### Тулбар
 
-- `[🔌 Sources]` — `outline`. Открывает `SourcesDialog`.
-- `[↻]` — `ghost icon-sm`. Запускает `handleSync`: параллельный `get-scripts:sync-source` по всем git-источникам через `Promise.allSettled`, затем `refresh()`. Тосты успех/ошибка (известные коды — `sources.tokenInvalid`, `sources.tokenNoAccess`, `sources.repoNotFound`).
+- `[Sources]` - `outline`, открывает диалог источников.
+- `[R]` - `catalog:sync()` по всем источникам, затем перечитывание списков; тост "готово" при непустом результате, ошибки GitHub - по коду (см. выше).
 
-### Row (`RemoteScriptRow`)
+### Строка (`CatalogScriptRow`)
 
-- **Left:** `name` (semibold) + `sourceName` (muted).
-- **Right (group):**
-  - Бейдж `Update available` (`destructive` variant) если `hasUpdate`.
-  - Action button:
-    - `!isDownloaded` → `[↓ Get]` (`default`).
-    - `isDownloaded && hasUpdate` → `[↓ Update]` (`outline`).
-    - `isDownloaded && !hasUpdate` → `[Up to date]` (`ghost`, disabled).
+- **Слева:** `name` (semibold) + `sourceName` (muted).
+- **Справа (группа):**
+  - Бейдж `Update available` (`destructive`), если `hasUpdate`.
+  - Кнопка действия:
+    - `!isDownloaded` -> `[v Get]` (`default`)
+    - `isDownloaded && hasUpdate` -> `[v Update]` (`outline`)
+    - `isDownloaded && !hasUpdate` -> `[Up to date]` (`ghost`, disabled)
 
-### Download Flow
+### Поток скачивания
 
-`window.app.getScripts.download(sourceId, fileName)` качает скрипт + соответствующий `cfg/<name>.json` (если присутствует в источнике) в локальные `scriptsDir` / `scriptsDir/cfg/`. Renderer оптимистично патчит строку: `{ isDownloaded: true, hasUpdate: false, localSha: sha }`. Тост успеха.
+`catalog:scripts:install(sourceId, fileName)` качает скрипт и соответствующий `cfg/<name>.json` (если есть в источнике) в `global_vault/<sourceId>/scripts` и `scripts/cfg`. Main событие не эмитит; renderer после успеха сбрасывает `catalog:scripts:list` и `scripts:list` (позже придёт `script:changed` от watcher). Тост успеха.
 
-### Sync Semantics
+### Семантика синхронизации
 
-- `sources:list` — текущие источники.
-- `get-scripts:list` — последний агрегат всех источников из persisted cache.
-- `get-scripts:list-source(sourceId)` — кэш одного источника.
-- `get-scripts:sync-source(sourceId)` — pull свежего листинга (GitHub API) + сравнение `sha` ↔ `localSha`.
-
-### Slices
-
-- `entities/remote-script/` — `useRemoteScripts()`.
-- `entities/vault-source/` — `useVaultSources()`.
-- `features/sources-manage/` — `SourcesDialog`.
-- `widgets/remote-list/` — `RemoteScriptList` + `RemoteScriptRow`.
+- `sources:list` - текущие источники.
+- `catalog:scripts:list()` - агрегат всех источников по сохранённому manifest; `catalog:scripts:list(sourceId)` - один источник.
+- `catalog:sync(sourceId?)` - свежий листинг (GitHub API, etag, TTL 30 с) и пересчёт `sha` <-> `localSha`.
 
 ---
 
-## Page: Libraries
+## Страница: Libraries
 
-**Суть:** агрегат библиотек из всех источников. Download / Update / Delete локальных копий. Зеркалит паттерн Get Scripts с дополнениями: bulk-download и `[⋯]` row-menu.
+**Суть:** агрегат библиотек из всех источников. Download / Update / Delete локальных копий, bulk-download, `[...]` row-menu.
 
-> **Status:** spec, не реализовано. Текущая страница — empty skeleton (`src/pages/libraries/index.tsx`).
+### Раскладка
 
-### Layout
+Экран `LibrariesPage` (`src/entities/library/list`).
 
+```text
++-------------------------------------------------------+
+|  [navbar: ........................ [search]    ]       |
++-------------------------------------------------------+
+|  [Sources]            [v Download All]         [R]    |
++-------------------------------------------------------+
+|  FindText                                             |
+|  user/my-repo                            [v Download] |
++-------------------------------------------------------+
+|  headers                                              |
+|  user/my-repo            [Update available] [v Update]|
++-------------------------------------------------------+
+|  json                                                 |
+|  user/my-repo                       [...] [v Update]  |
++-------------------------------------------------------+
+|  key_decode                                           |
+|  user/my-repo                       [...] [ok Latest] |
++-------------------------------------------------------+
 ```
-┌───────────────────────────────────────────────────────┐
-│  [navbar: ........................ [search]    ]      │
-├───────────────────────────────────────────────────────┤
-│  [🔌 Sources]            [↓ Download All]      [↻]    │
-├───────────────────────────────────────────────────────┤
-│  FindText                                             │
-│  user/my-repo                            [↓ Download] │
-├───────────────────────────────────────────────────────┤
-│  headers                                              │
-│  user/my-repo            [Update available] [↓ Update]│
-├───────────────────────────────────────────────────────┤
-│  json                                                 │
-│  user/my-repo                       [⋯] [↓ Update]    │
-├───────────────────────────────────────────────────────┤
-│  key_decode                                           │
-│  user/my-repo                       [⋯] [✓ Latest]    │
-└───────────────────────────────────────────────────────┘
-```
 
-### Toolbar
+### Тулбар
 
-- `[🔌 Sources]` — общий `SourcesDialog` (reuse из get-scripts).
-- `[↓ Download All]` — `outline`. Качает все ещё-не-скачанные библиотеки последовательно. Прогресс через тост + `libs:bulk-progress` event (опционально).
-- `[↻]` — sync source listing (как get-scripts).
+- `[Sources]` - общий диалог источников.
+- `[v Download All]` - `outline`; `libs:sync()` качает lib всех источников; disabled, если нечего скачивать или идёт операция. Итог тостом (`ok` / `failed`).
+- `[R]` - `catalog:sync()`, как в Get Scripts.
 
-### Row (`RemoteLibraryRow`)
+### Строка (`LibraryRow`)
 
-- **Left:** `name` (semibold) + `sourceName` (muted).
-- **Right (group):**
-  - `Update available` бейдж (если `hasUpdate`).
-  - `[⋯]` dropdown (только если `isDownloaded`):
-    - `Open local folder` → `libs:open-local`
-    - `Open in browser` → `libs:open-web` (если `webUrl`)
-    - `Delete local` (destructive, confirmation) → `libs:delete`
-  - Action button:
-    - `!isDownloaded` → `[↓ Download]` (`default`)
-    - `isDownloaded && hasUpdate` → `[↓ Update]` (`outline`)
-    - `isDownloaded && !hasUpdate` → `[✓ Latest]` (`ghost`, disabled)
+- **Слева:** `name` (semibold) + `sourceName` (muted).
+- **Справа (группа):**
+  - Бейдж `Update available`, если `hasUpdate`.
+  - `[...]` dropdown (только если `isDownloaded`):
+    - `Open local folder` -> `libs:folder:open`
+    - `Open in browser` -> `libs:web:open` (если есть `webUrl`)
+    - `Delete local` (destructive, confirmation) -> `libs:delete`
+  - Кнопка действия:
+    - `!isDownloaded` -> `[v Download]` (`default`)
+    - `isDownloaded && hasUpdate` -> `[v Update]` (`outline`)
+    - `isDownloaded && !hasUpdate` -> `[ok Latest]` (`ghost`, disabled)
 
-### Slices (планируемые)
-
-- `entities/remote-library/` — `useRemoteLibraries()`.
-- `features/lib-manage/` — download/update/delete actions.
-- `widgets/remote-list/` — добавить `RemoteLibraryList` / `RemoteLibraryRow` либо параметризовать существующий remote-list (общий `RemoteItemRow`).
+Операции над lib и пресетами (install / remove / openFolder / sync, тосты, занятые строки, инвалидация) общие для Libraries и Binds: модуль `src/kit/catalog-actions`, различия - конфигом.
 
 ---
 
-## Page: Binds
+## Страница: Binds
 
-> **Status:** skeleton (`src/pages/binds/index.tsx`). Спецификация ниже — план; реализация после Libraries.
+**Суть:** глобальные пресеты с биндами и значениями для скриптов. Пресеты - JSON-файлы источников (`presets/`), копии - в `global_vault/<sourceId>/presets`.
 
-**Суть:** глобальные пресеты с биндами и значениями для скриптов. Хранятся в `presetsDir`.
+### Два режима
 
-### Два режима в зависимости от количества пресетов
+#### Режим A: один пресет и он скачан
 
-#### Режим A: 1 пресет (или пресетов нет)
+Сразу показывает форму пресета (без сетки).
 
-Сразу показывает форму пресета. Если пресетов нет — empty state с `[+ Create Preset]`.
+#### Режим B: иначе
 
-```
-┌───────────────────────────────────────────────────────┐
-│  Binds                              [🔌 Sources] [↺]  │
-├───────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────┐  │
-│  │  Базовые бинды                                  │  │
-│  │  ─────────────────────────────────────────────  │  │
-│  │  Прыжок-уклон          [  Space  ]              │  │
-│  │  Подбор предметов       [  X  ]                 │  │
-│  │  Активация ульты        [  4  ]                 │  │
-│  │  Парейровать атаку      [  E  ]                 │  │
-│  │                                  [↺ Сбросить]  │  │
-│  └─────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────┘
+Сетка карточек пресетов (`BindCard`) с тулбаром `[Sources]`, `[v Download All]` (`binds:sync()`), refresh. Карточка: имя; у скачанного - меню (Update при `hasUpdate`, open folder, delete), у нескачанного - кнопка Download. Пустой список - empty state.
+
+```text
++-------------------------------------------------------+
+|  Binds                          [Sources] [v Download]|
++-------------------------------------------------------+
+|  +--------------+  +--------------+                   |
+|  |  keybinds    |  |  hotkeys     |                   |
+|  |  my-repo     |  |  my-repo     |                   |
+|  +--------------+  +--------------+                   |
++-------------------------------------------------------+
 ```
 
-#### Режим B: 2+ пресетов
+Клик по скачанной карточке -> форма пресета; назад - через крошку в navbar (`Binds / name`).
 
-Сначала сетка карточек:
-
-```
-┌───────────────────────────────────────────────────────┐
-│  Binds                             [🔌 Sources]        │
-├───────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐                   │
-│  │  keybinds    │  │  hotkeys     │                   │
-│  │  6 entries   │  │  4 entries   │                   │
-│  └──────────────┘  └──────────────┘                   │
-└───────────────────────────────────────────────────────┘
-```
-
-Клик по карточке → навигация на страницу пресета:
-
-```
-┌───────────────────────────────────────────────────────┐
-│  ← Binds / keybinds                                   │
-├───────────────────────────────────────────────────────┤
-│  ┌─────────────────────────────────────────────────┐  │
-│  │  keybinds                                       │  │
-│  │  ─────────────────────────────────────────────  │  │
-│  │  Attack         [  F1  ]                        │  │
-│  │  Defend         [  F2  ]                        │  │
-│  │                                  [↺ Сбросить]  │  │
-│  └─────────────────────────────────────────────────┘  │
-└───────────────────────────────────────────────────────┘
+```text
++-------------------------------------------------------+
+|  Binds / keybinds                                     |
++-------------------------------------------------------+
+|  +-------------------------------------------------+  |
+|  |  keybinds                                       |  |
+|  |  Attack         [  F1  ]                        |  |
+|  |  Defend         [  F2  ]                        |  |
+|  |  Delay (ms)     [ 1000 ]                        |  |
+|  |                       [Reset]  [Save]          |  |
+|  +-------------------------------------------------+  |
++-------------------------------------------------------+
 ```
 
-Назад — через breadcrumb `← Binds / name` или стрелку.
+### Форма пресета (часть `form`)
 
-### Key Chip Interaction
+- Секции и поля выводятся из JSON пресета: ключи верхнего уровня - секции, внутри пары `поле: значение`; тип поля - по значению по умолчанию (`boolean` - Switch, `number` - numeric Input, строка - hotkey `KeyBindInput`). Ключи с `$` пропускаются.
+- Клик по `[F1]` -> chip в режиме "нажми клавишу" -> клавиша или кнопка мыши записываются в черновик.
+- Изменения копятся в форме; `[Save]` (`binds:values:save`) пишет значения, которые отличаются от значений по умолчанию, в `<имя>.values.json` (вложенный формат); `[Reset]` (`binds:values:reset`) удаляет файл значений.
+- Схема - `binds:schema:get` (`null`, если пресета нет на диске или в нём нет полей - показывается подсказка), значения - `binds:values:get`.
 
-Клик на `[Space]` → chip переходит в режим `[press key...]` → пользователь нажимает клавишу → chip обновляется → автосохранение.
+### Формат значений
 
-### Preset Schema
+Ключ значения в renderer - плоский `<section>.<field>`, на диске - вложенный объект `{ section: { field: value } }`. Допустимы только примитивы (`string | number | boolean`).
 
-Пресет — JSON с секциями:
+---
 
-```json
-{
-  "title": "Базовые бинды",
-  "fields": [
-    { "key": "jump", "label": "Прыжок-уклон", "type": "hotkey", "default": "Space" },
-    { "key": "pickup", "label": "Подбор предметов", "type": "hotkey", "default": "X" },
-    { "key": "delay", "label": "Pre-cast delay (ms)", "type": "number", "default": 1000 }
-  ]
-}
-```
+## Страница: Changelog
 
-Значения хранятся отдельно (user values) рядом со схемой или в отдельном файле.
+Раздел "Что нового" (`#/changelog`, `src/shell/update`): карточки версий из `docs/versions/<канал>.md` (`updater:changelog:get`), текущая версия подсвечена. После обновления один раз открывается диалог с разделами между прошлой показанной и текущей версией. Устройство - `docs/architecture.md`, раздел "Версии и лог".
 
-### Планируемые IPC
+---
 
-```
-presets:list          () → PresetInfo[]          // { name, fieldCount }
-presets:get-schema    (name) → PresetSchema
-presets:get-values    (name) → PresetValues
-presets:set-value     (name, key, value) → void
-presets:reset         (name) → void
-presets:create        (name) → void
-presets:delete        (name) → void
-```
+## Страница: Settings
 
-### Планируемые типы
+Экран `SettingsPage` (`src/shell/settings`), стек карточек:
+
+- **Appearance** - тема (`light` / `dark` / `system`, по умолчанию `dark`), `settings.theme`.
+- **Language** - язык интерфейса (`en` / `ru`), `settings.locale`.
+- **GitHub API** - лимит запросов по каждому сохранённому токену и анонимный (`github:limit:get`), прогресс-бар, время сброса; ручной refresh. Сбой пробы одного токена - строка с ошибкой, не отказ карточки.
+- **Updates** - версия приложения, канал (latest / beta, `settings.updaterBeta`), проверка обновлений, загрузка и установка. Ручная проверка ограничена: не чаще раза в 5 минут и 4 раз в час.
+
+Планируется (в коде нет): пути папок скриптов и библиотек (browse-кнопки), кнопка `Manage Sources`.
+
+---
+
+## Модель данных
+
+Все интерфейсы - в `shared/types/` (видны main и renderer через `@shared/types`); источник правды - файлы, ниже только форма.
 
 ```ts
-// shared/types/presets.ts
-export interface PresetSchema {
-    title: string;
-    fields: ConfigField[];
-}
-
-export interface PresetValues {
-    [key: string]: unknown;
+// shared/types/sources.ts
+export interface Source {
+    id: string;
+    type: 'git';
+    name: string;
+    url: string;
+    branch: string;
+    isPrivate: boolean;
+    tokenMask: string | null; // маска токена, сам токен в renderer не уходит
 }
 ```
-
----
-
-## Data Model
-
-Все интерфейсы — в `shared/types/` (видны и main, и renderer через alias `@shared/types`).
 
 ```ts
 // shared/types/scripts.ts
-export interface HkEntry {
-    key: string;
-    description: string;
-    tooltip?: string;
-}
-
-export interface ValEntry {
-    val: string | number | boolean;
-    description: string;
-    tooltip?: string;
-}
+export type ScriptStatus = 'idle' | 'running' | 'error';
 
 export interface ScriptCfgFile {
     $version?: number;
@@ -396,15 +364,13 @@ export interface ScriptCfgFile {
     val?: Record<string, ValEntry>;
 }
 
-export type ScriptStatus = 'idle' | 'running' | 'error';
-
 export interface ScriptCfgValues {
     hk: Record<string, string>;
     val: Record<string, string | number | boolean>;
 }
 
-export interface ScriptMeta {
-    id: string;
+export interface Script {
+    id: string; // sha1(путь).slice(0, 16)
     name: string;
     filePath: string;
     configPath?: string;
@@ -416,8 +382,8 @@ export interface ScriptMeta {
 ```
 
 ```ts
-// shared/types/get-scripts.ts
-export interface RemoteScriptMeta {
+// shared/types/catalog.ts
+export interface CatalogScript {
     id: string;
     name: string;
     fileName: string;
@@ -429,199 +395,141 @@ export interface RemoteScriptMeta {
     hasUpdate: boolean;
     downloadUrl?: string;
 }
-```
 
-```ts
-// shared/types/vault.ts
-export type VaultSourceType = 'git';
-
-export interface GitVaultSource {
-    id: string;
-    type: 'git';
-    name: string;
-    url: string;
-    branch: string;
-    isPrivate: boolean;
-    hasToken?: boolean; // computed at listSources, never persisted
-}
-
-export type VaultSource = GitVaultSource;
-```
-
-```ts
-// shared/types/libs.ts  (планируется)
-export interface RemoteLibraryMeta {
-    id: string;
-    name: string;
-    fileName: string;
+export interface SourceSync {
     sourceId: string;
-    sourceName: string;
-    sha?: string;
-    localSha?: string;
-    isDownloaded: boolean;
-    hasUpdate: boolean;
-    downloadUrl?: string;
-    webUrl?: string;
-    localPath?: string;
+    lastSyncedAt: number;
+    fromCache: boolean; // TTL-попадание или 304
 }
 ```
 
----
-
-## IPC Contracts
-
-Бридж — `AppBridge` в `shared/types/ipc.ts`, экспонируется через `contextBridge` в `app/preload.ts`. Регистрация хендлеров — `registerHandlers(map)` из `@cion-suite/core/ipc`.
-
-### Текущие каналы
-
-```
-// scripts
-scripts:list                () → ScriptMeta[]
-scripts:probe-external      () → { anyRunning: boolean }
-scripts:run                 (id) → void
-scripts:stop                (id) → void
-scripts:stop-all            () → void
-scripts:delete              (filePath) → void
-scripts:open-in-explorer    (filePath) → void
-scripts:config-get-values   (configPath) → Partial<ScriptCfgValues>
-scripts:config-save-values  (configPath, values) → void
-
-// sources (vault)
-sources:list                () → VaultSource[]            // git items имеют hasToken
-sources:add                 (Omit<VaultSource,'id'>) → VaultSource
-sources:remove              (id) → void
-sources:update              (id, patch) → VaultSource
-sources:set-token           (id, token) → void
-sources:remove-token        (id) → void
-sources:test-token          (id) → { ok:true } | { ok:false; status; message }
-sources:get-token-mask      (id) → string | null
-
-// get-scripts
-get-scripts:list            () → RemoteScriptMeta[]
-get-scripts:list-source     (sourceId) → { scripts; lastSyncedAt? }
-get-scripts:sync-source     (sourceId) → { scripts; lastSyncedAt }
-get-scripts:download        (sourceId, fileName) → void
-
-// system + updater (для контекста)
-system:renderer-ready       () → void
-errors:report               (ErrorReport) → void
-updater:check-for-updates   () → UpdaterIpcResult
-updater:quit-and-install    () → void
-```
-
-### Планируемые (Libraries)
-
-```
-libs:list                   () → RemoteLibraryMeta[]
-libs:list-source            (sourceId) → { libs; lastSyncedAt? }
-libs:sync-source            (sourceId) → { libs; lastSyncedAt }
-libs:download               (sourceId, fileName) → void
-libs:download-all           () → void                     // или возвращать summary
-libs:delete                 (id) → void
-libs:open-local             (id) → void
-libs:open-web               (id) → void
-```
+`Lib` (`libs.ts`: `kind: 'file' | 'folder'`, `files`, `webUrl`), `Bind` и `PresetSchema` / `PresetValues` (`binds.ts`), `ScriptDeps` (`script-deps.ts`: `missing`, `unknown`), `GithubLimit` и `GithubRepo` (`github.ts`), `Font` и `FontInstall` (`fonts.ts`) - по тем же правилам.
 
 ---
 
-## App Events
+## IPC-контракты
 
-Единый канал `app:event`. Augmentation `BaseAppEventMap` — `shared/types/app-events.ts`. Main: `appEvents.emit(name, payload)` / `emitTo(win, ...)`. Renderer: `useAppEvent(name, handler)`. **Никогда** `win.webContents.send()`.
+Имя канала = путь в `window` (`'scripts:processes:get'` -> `window.scripts.processes.get()`); канал объявляется один раз в `shared/types/ipc-channels.ts`, обработчики - карты `handlers` концернов `app/<концерн>/handlers.ts` (бросают ошибки, аргументы описаны zod-схемами `shared/schema.ts`). Главный список с типами - `IpcChannelMap`.
 
-```ts
-declare module '@cion-suite/core/ipc' {
-    interface BaseAppEventMap {
-        // updater
-        'updater:available': UpdaterInfo;
-        'updater:not-available': void;
-        'updater:downloaded': UpdaterInfo;
-        'updater:error': { message: string };
-        'updater:progress': UpdaterProgress;
-        'app:channel:changed': { isBeta: boolean };
+```text
+// scripts (локальные)
+scripts:list                  ()                    -> Script[]
+scripts:run                   (id)                  -> void
+scripts:delete                (filePath)            -> void
+scripts:processes:get         ()                    -> boolean          // есть ли запущенные
+scripts:processes:remove      (id)                  -> void             // остановить скрипт
+scripts:processes:clear       ()                    -> void             // остановить все
+scripts:folder:open           (filePath)            -> void
+scripts:config:get            (configPath)          -> Partial<ScriptCfgValues>
+scripts:config:save           (configPath, values)  -> void
+scripts:deps:get              (id)                  -> ScriptDeps
 
-        // scripts
-        'scripts:changed': { type: 'add' | 'change' | 'unlink'; filePath: string };
-        'script:status-changed': { id: string; status: ScriptStatus; errorMessage?: string };
+// sources
+sources:list                  ()                    -> Source[]
+sources:add                   (options)             -> Source
+sources:update                (sourceId, options)   -> Source
+sources:remove                (sourceId)            -> void
+sources:token:set             (sourceId, token)     -> void
+sources:token:remove          (sourceId)            -> void
 
-        // планируется: 'libs:changed', 'libs:bulk-progress'
-    }
-}
+// github
+github:limit:get              ()                    -> GithubLimit
+github:repo:get               (sourceId)            -> GithubRepo       // репозиторий глазами токена
+
+// catalog (удалённые скрипты и синхронизация)
+catalog:sync                  (sourceId?)           -> SourceSync[]
+catalog:scripts:list          (sourceId?)           -> CatalogScript[]
+catalog:scripts:install       (sourceId, fileName)  -> void
+
+// libs
+libs:list                     (sourceId?)           -> Lib[]
+libs:install                  (sourceId, libId)     -> void
+libs:sync                     (sourceId?)           -> LibSync          // { ok, failed }
+libs:delete                   (sourceId, libId)     -> void
+libs:folder:open              (sourceId, libId)     -> void
+libs:web:open                 (sourceId, libId)     -> void
+
+// binds (пресеты)
+binds:list                    (sourceId?)           -> Bind[]
+binds:install                 (sourceId, presetId)  -> void
+binds:sync                    (sourceId?)           -> BindSync
+binds:delete                  (sourceId, presetId)  -> void
+binds:folder:open             (sourceId, presetId)  -> void
+binds:schema:get              (sourceId, presetId)  -> PresetSchema | null
+binds:values:get              (sourceId, presetId)  -> PresetValues
+binds:values:save             (sourceId, presetId, values) -> void
+binds:values:reset            (sourceId, presetId)  -> void
+
+// fonts (Windows)
+fonts:list                    ()                    -> Font[]
+fonts:install                 (sourceId)            -> FontInstall
+fonts:remove                  (sourceId)            -> void
+
+// updater
+updater:refresh               ()                    -> void
+updater:install               ()                    -> void
+updater:changelog:get         ()                    -> string | null
 ```
+
+Значение main -> renderer (синхронно): `window.app.env` (`IpcValueMap['app:env']`: `isDev`, `username`, `version`).
 
 ---
 
-## FSD Placement
+## События
 
-### Текущая структура
+Единый канал ядра. Main: `events.emit(name, payload)` (всем окнам). Renderer: `useEvent(name, handler)` / `events.on`. Типы - `EventMap` в `shared/types/app-events.ts`. **Никогда** `win.webContents.send()`.
 
+```text
+source:changed          { sourceId, type: 'add' | 'update' | 'remove' }
+source:synced           SourceSync
+github:limit:changed    { remaining, reset }
+lib:changed             { sourceId, libId }            // libId '*' - все lib источника
+bind:changed            { sourceId, presetId }         // presetId '*' - все пресеты источника
+script:changed          { type: 'change' | 'unlink', filePath }
+script:status:changed   { id, status, errorMessage? }
+updater:checked         void                           // новее версии нет
+updater:available       UpdaterInfo
+updater:progress        UpdaterProgress
+updater:downloaded      UpdaterInfo
+updater:failed          { message }
 ```
+
+Кэш react-query сбрасывает `useQuerySync` (таблица - `docs/architecture.md`, раздел "Данные и инвалидация").
+
+---
+
+## Размещение в коде
+
+### Renderer (`src/`)
+
+```text
 src/
-├── pages/
-│   ├── scripts/          ← ScriptsPage (реализовано)
-│   ├── get-scripts/      ← GetScriptsPage (реализовано)
-│   ├── libraries/        ← skeleton
-│   ├── binds/            ← skeleton
-│   └── settings/         ← appearance + updater
-│
-├── widgets/
-│   ├── app-layout/
-│   ├── app-navbar/
-│   ├── app-sidebar/      ← Local / Sources / Misc + footer
-│   ├── script-list/      ← ScriptList + ScriptRow
-│   └── remote-list/      ← RemoteScriptList + RemoteScriptRow
-│
-├── features/
-│   ├── script-runner/    ← useScriptRunner (run/stop/stopAll)
-│   ├── script-config/    ← ScriptConfigDialog
-│   └── sources-manage/   ← SourcesDialog (git, token UX)
-│
-├── entities/
-│   ├── script/           ← useScripts
-│   ├── remote-script/    ← useRemoteScripts
-│   └── vault-source/     ← useVaultSources
-│
-└── shared/
-    ├── config/           ← nav.ts, routes.ts
-    ├── i18n/             ← useT, locales
-    ├── lib/              ← navbar-slot, toast, hooks, utils, local-storage, updater
-    └── ui/               ← shadcn primitives + key-bind-input
+|-- app/                     AppRouter, AppProvider, стили
+|-- shell/                   layout, navbar, sidebar, command, settings, update
+|-- entities/
+|   |-- source/   manage/ (SourcesButton, диалог), sync/ (useSourcesSync)
+|   |-- script/   list/ (ScriptsPage), catalog/ (GetScriptsPage), values/, deps/
+|   |-- library/  list/ (LibrariesPage)
+|   `-- bind/     grid/ (BindsPage), form/ (PresetForm)
+|-- kit/catalog-actions/     install / remove / openFolder / sync для library и bind
+|-- ui/                      shadcn, ListPanel, ListRow, ConfirmDialog, KeyBindInput, toast, ...
+`-- lib/                     state, i18n, hooks (useQuerySync, useInvalidate, useBusy), navbar, github-error
 ```
 
-### Планируемые добавления для Libraries
+### Main (`app/`)
 
-```
-src/
-├── pages/libraries/      ← реализовать LibrariesPage
-├── widgets/remote-list/  ← добавить RemoteLibraryList + RemoteLibraryRow
-│                          (либо обобщить в RemoteItemList/Row)
-├── features/lib-manage/  ← download/update/delete/openLocal/openWeb
-└── entities/remote-library/ ← useRemoteLibraries
-```
-
-`shared/types/libs.ts` — новый файл.
+Концерны `shell`, `sources`, `github`, `catalog`, `fonts`, `libs`, `binds`, `scripts`, `updater`; описание, `needs` и владение каналами - `docs/architecture.md`, раздел Backend.
 
 ---
 
-## Settings — план
+## Проверка
 
-Сейчас Settings содержит только Appearance (theme/locale) + Updates. Планируется добавить:
-
-- **Paths** — Scripts folder / Libraries folder (browse-кнопки, persist через `@cion-suite/core/settings`).
-- **Sources** — кнопка `Manage Sources` (дублирует вход из тулбаров вкладок).
-
-Defaults через `app.getPath('userData')`:
-- `<userData>/scripts/`
-- `<userData>/lib/`
-
----
-
-## Verification
-
-- `pnpm dev` → 5 вкладок открываются без ошибок.
-- Scripts: добавление файла в watched-папку → строка появляется без refresh; удаление → исчезает.
-- Run/Stop: кнопка переключается, при ошибке скрипт получает `status: 'error'` + `errorMessage`.
-- `StopAll` disabled до `hasAnyRunning`.
-- Config dialog: открывается только при наличии `configPath`; hk-chip перехватывает нажатие; Save вызывает `scripts:config-save-values`.
-- SourcesDialog: add git (private + token) → `sources:add` + `sources:set-token`; mask виден после reopen; Edit unlock → новый токен сохраняется.
-- Get Scripts: refresh → `sync-source` по всем git-источникам; ошибки токена/доступа дают правильный i18n-ключ; Download → строка переходит в `up-to-date`.
-- `pnpm typecheck` → 0 ошибок; `pnpm lint` → 0 FSD violations.
+- `pnpm dev` -> шесть разделов открываются без ошибок.
+- Scripts: добавление файла в папку источника -> строка появляется без refresh; удаление -> исчезает.
+- Run/Stop: кнопка переключается; при ошибке скрипт получает `status: 'error'` + `errorMessage`; недостающие lib предлагаются к установке перед запуском.
+- `Stop All` disabled, пока нет запущенных.
+- Диалог конфига: открывается только при наличии `configPath`; hk-chip перехватывает нажатие; Save вызывает `scripts:config:save`.
+- Диалог источников: add git (private + token) -> `sources:add` + `sources:token:set`; маска видна после reopen; разлоченный токен сохраняется заново.
+- Get Scripts / Libraries / Binds: refresh -> `catalog:sync` по всем источникам; ошибки токена и доступа дают правильную фразу; Download -> строка переходит в "Up to date" / "Latest".
+- Binds: Save пишет `<имя>.values.json`, Reset его удаляет.
+- `pnpm typecheck` -> 0 ошибок; `pnpm lint` -> 0 нарушений boundaries; `pnpm test` зелёный.

@@ -1,44 +1,30 @@
 ---
-description: Pre-flight checklist — typecheck, lint, FSD boundaries audit, build
-allowed-tools: Bash, Read, Glob, Grep
+description: Pre-flight перед merge - typecheck, lint, тесты, механический скан ветки, циклы импортов, build
+argument-hint: "[range] [--no-build]"
+allowed-tools: Bash, Read
 ---
 
-# /ship — Pre-flight Checks
+# /ship - pre-flight перед merge
 
-Запускает все проверки перед merge / commit / publish. Останавливается на первой ошибке.
+```bash
+node .claude/scripts/ship.mjs $ARGUMENTS
+```
 
-## Checklist
+Один вызов Bash с `timeout: 600000`. Аргументы: `[range] [--no-build]`; range по умолчанию `main...HEAD`, на `main` - `origin/main..HEAD`.
 
-1. **Typecheck.** `pnpm typecheck` (front + back). Errors блокируют.
-2. **Lint.** `pnpm lint`. 0 errors. Warnings — baseline.
-3. **FSD boundaries audit** (дублирует ESLint, быстрый grep-санитизатор; `CLAUDE.md §1, §2`):
-   ```bash
-   # features/X ↔ features/Y запрещён (§1)
-   for f in src/features/*/; do
-     feat=$(basename "$f")
-     grep -rn "from '@/features/" "$f" 2>/dev/null | grep -v "@/features/$feat" \
-       && { echo "Cross-feature violation in $feat"; exit 1; } || true
-   done
+Скрипт параллельно гонит `typecheck`, `lint`, `test`, `diff-scan --totals`, `graph cycles`; всё чисто - `build`. Полный вывод - `.claude/cache/ship/*.log`.
 
-   # app не импортирует features/entities напрямую (§2)
-   grep -rn "from '@/features/\|from '@/entities/" src/app 2>/dev/null \
-     && { echo "app→features/entities direct import"; exit 1; } || true
+## Итог
 
-   # webContents.send мимо appEvents (§5)
-   grep -rn "webContents\.send" app/ 2>/dev/null \
-     && { echo "Direct webContents.send — use appEvents.emit (§5)"; exit 1; } || true
-   ```
-4. **Build.** `pnpm build`. Verify clean completion.
+Таблица скрипта и есть отчёт - отдай её пользователю как есть. Проверки руками не повторяй.
 
-## Summary
+`-> ISSUES FOUND` (exit 1) при: ошибке typecheck / lint / test, провале build или самих скриптов скана / циклов, любом `CONFIRMED`, `NEW > 0` (цикл импортов внесли ветка или рабочая копия).
+Не блокируют: `CHECK` - вход для `/isgood`; warnings lint - baseline; `TOUCHED` при `NEW=0` - старый цикл, который ветка лишь задела: это бэклог, не работа merge; `CYCLES` - все циклы репозитория.
 
-Report per-check: PASS / FAIL.
+Под каждым провалом - до 20 значимых строк и путь к логу. Лог открывай, только если их не хватило: `grep` / `Read` с `offset`, не целиком.
 
-Overall:
-- **READY TO MERGE** — все 4 проверки PASS.
-- **ISSUES FOUND** — есть FAIL. Список конкретных проблем.
+Уборка: READY - кеш удалил скрипт; ISSUES - после разбора `rm -rf .claude/cache/ship`.
 
-## Notes
+Аудита границ сущностей и слоёв здесь нет: его делает `lint` (`boundaries/dependencies`).
 
-- `/ship` ≠ `/isgood`. `/isgood` — adversarial code review (Critical Rules + Clean Code + scope). `/ship` — механические gates (typecheck / lint / build / FSD audit).
-- Перед merge запускай оба: сначала `/isgood`, после фиксов — `/ship`.
+Не делает: семантическое ревью - `/isgood`, commit-сообщение - `/notes`, сборку инсталлятора - `pnpm dist` / `pnpm dist:beta`.

@@ -5,9 +5,17 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
         <meta
             http-equiv="Content-Security-Policy"
-            content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+            content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws://localhost:* http://localhost:*;"
         />
         <title>Cion Warden</title>
+        <!-- Тема на <html> до первого paint: иначе CSS body красится светлым
+             (default --background) до монтирования React = вспышка.
+             prefers-color-scheme следует теме приложения: main задаёт nativeTheme. -->
+        <script>
+            document.documentElement.classList.add(
+                matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+            );
+        </script>
     </head>
     <body>
         <div id="root"></div>

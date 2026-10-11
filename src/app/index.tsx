@@ -1,28 +1,19 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
-import { initI18n } from '@/shared/i18n';
-import { STORAGE } from '@/shared/config/storage-keys';
-
-import { App } from './App.js';
-import { AppProvider } from './providers';
+import App from './App';
+import { AppProvider } from './AppProvider';
+import { initI18n } from '@/lib/i18n';
+import { migrateLegacyState } from '@/lib/state';
+import { uiTheme } from '@/ui/theme';
 import './styles/index.css';
-import '../entities/index.js';
-import '../features/index.js';
-import '../widgets/index.js';
 
-initI18n(STORAGE.lang.get());
+// До initI18n: миграция пишет язык в settings
+migrateLegacyState();
+initI18n();
+uiTheme.follow();
 
-const savedRoute = STORAGE.lastRoute.get();
-const currentHash = window.location.hash.replace(/^#/, '');
-if (savedRoute !== '/' && (!currentHash || currentHash === '/')) {
-    window.location.hash = savedRoute;
-}
-
-const container = document.getElementById('root');
-if (!container) throw new Error('root element missing');
-
-createRoot(container).render(
+createRoot(document.getElementById('root')!).render(
     <StrictMode>
         <AppProvider>
             <App />

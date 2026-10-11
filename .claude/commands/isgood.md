@@ -1,149 +1,112 @@
 ---
-description: Adversarial review diff'а с fix-loop, паттерн-сканером и семантик-агентом
-allowed-tools: Bash, Read, Edit, Write, Glob, Grep, Agent
+description: Adversarial review диффа - механический скан, haiku-триаж, opus-семантика, fix-loop
+argument-hint: "[git-diff-args]"
+allowed-tools: Bash, Read, Grep, Edit, Agent
 ---
 
-# /isgood — Adversarial Review с Fix-Loop
+# /isgood - adversarial review диффа
 
-Структурированный adversarial-ревью `git diff HEAD`. **Не пропускай фазы. Не выдавай вердикт без evidence.**
+Паттерны ищет скрипт, вердикт выносит модель. **Не пропускай фазы. Нет вердикта без evidence.**
 
-## Phase 0 — Load context
+## Phase 0 - Скан и маршрут
 
-1. Real diff:
-   ```bash
-   mkdir -p .claude/cache
-   git diff HEAD > .claude/cache/isgood-diff.patch
-   git status --short
-   wc -l .claude/cache/isgood-diff.patch
-   ```
-   Пустой diff → 🟢 и выход.
+```bash
+node .claude/scripts/diff-scan.mjs $ARGUMENTS
+```
 
-2. Загрузи в контекст: `CLAUDE.md` — Critical Rules (§1–§10), Clean Code, Pitfalls.
+Без аргументов - незакоммиченное вместе с untracked. stdout: строка `FILES CODE ADDED CODE_ADDED CONFIRMED CHECK ROUTE T PLAN`,
+блоки CONFIRMED, при `T=parent` - блоки CHECK, при <= 20 файлах - таблица `ФАЙЛЫ` (`путь статус +/- вид [s1|s2] [t<i>]`).
+Блок находки: `file:line sev §id правило` + контекст +-2 строки, `>` - строка находки.
+Файлов > 20 - таблица: `sed -n '/^## Файлы/,$p' .claude/cache/isgood/report.md`.
 
-3. Определи исходную задачу пользователя (последний user-запрос).
+- `EMPTY` -> 🟢, стоп.
+- `PLAN=touched` -> сверь, что шаги фазы плана не пропущены (typecheck -> `pnpm lint` -> `pnpm test` -> `/isgood` -> `/notes`).
 
-4. **Skip-fast.** Если diff ≤ 50 строк И ≤ 2 файла И нет правок в `src/features/`, `src/widgets/`, `src/entities/`, `src/pages/`, `app/handlers/`, `app/services/`, `app/preload.ts`, `app/main.ts` — родитель сам прогоняет правила без агентов.
+**Исходная задача** - запрос(ы), под которые делался дифф. В дереве бывают правки нескольких задач: чужие файлы
+вынеси пересканом `... -- . ':(exclude)<путь>'` (в тот же `--`, если он уже есть в аргументах); файл со смешанными
+правками - в список "вне scope". Иначе C1 придёт ложным на каждый чужой файл.
 
-5. Большой diff (>500 строк) — батчи по файлам.
+## Критерии семантики - одни для родителя (`inline`) и для агента S
 
-## Phase 1 — HARD CHECK (2 параллельных агента)
+```
+Механика (§3.x) уже проверена скриптом - не повторяй. Оценивай intent.
+C1 🔴 Scope-creep - правки вне задачи: переименования "попутно", форматирование, рефакторинг чужой функции, чужие фичи.
+C2 🟡 KISS - guard / fallback / try-catch / default для сценария, невозможного по типам или по вызывающей стороне. Аргументируй, почему невозможен.
+C3 🟡 DRY - ручная логика поверх существующей утилиты. Прежде чем флагать - `node .claude/scripts/map.mjs <имя> [имя...]` (кандидаты пачкой); пусто -> Grep по домам из CLAUDE.md -> DRY. Без `existing: <path>` не флагать.
+C4 🟡 TODO/tech-debt мимо задачи - "нашёл, отметь, не фикси".
+Вывод: `- [🔴|🟡] §C<N> <имя> - <file>:<line> - <цитата>` (C3 - с `- existing: <path>`). Фиксы не предлагать. Находок нет -> `CLEAN` + одной строкой, что проверено.
+```
 
-Оба `Agent`-вызова в **одном tool-calls блоке**.
+## Phase 1 - Разбор по маршруту
 
-Общие требования:
-- diff читать из `.claude/cache/isgood-diff.patch`,
-- evidence: `file:line` + цитата,
-- фиксы не предлагать (Phase 3),
-- ≤ 300 слов,
-- нет находок → `CLEAN`,
-- формат: `- [🔴|🟡] §<X> <имя> — <file:line> — <цитата>`.
+Все `Agent`-вызовы - в **одном** tool-блоке, иначе пойдут последовательно.
 
-### Agent A — Pattern Scanner
+- **CONFIRMED** - готовые находки, агента на них не тратить.
+- **`T=parent`** -> родитель триажит по блокам stdout; Read - только если +-2 строк мало (контракт канала для §3.3): `<file>:<line> <VIOLATION|OK> - <причина>`.
+  Спорный критерий - `.claude/agents/triage.md`. **`T=<n>`** -> n агентов T, по одному на `t<i>.md`.
+- **`ROUTE=none`** -> кода в диффе нет: код не читать, C1 по таблице ФАЙЛЫ (файлы вне задачи) - родитель. **`inline`** -> родитель: Read `.claude/cache/isgood/code.patch`
+  + критерии выше. **`S`** -> агент S на `code.patch`. **`S2`** -> два агента S: `s1.patch` и `s2.patch`.
+
+```
+subagent_type: triage
+description: Triage CHECK t<i>
+prompt: |
+  Read .claude/cache/isgood/t<i>.md
+  Блок = кандидат `<file>:<line> <sev> §<id> <правило>` + контекст (`>` - строка находки).
+  Вывод строго по строке на кандидата: `<file>:<line> <VIOLATION|OK> - <причина <= 10 слов>`. Ничего сверх этих строк.
+```
 
 ```
 subagent_type: code-reviewer
-description: Pattern scan (CLAUDE.md Critical Rules + Clean Code + Pitfalls)
+model: opus
+description: Semantic review <code|s1|s2>
 prompt: |
-  Read .claude/cache/isgood-diff.patch
-
-  Critical Rules (все 🔴):
-  §1  FSD direction — соседи на одном слое не импортируют друг друга;
-      features/X → features/Y запрещено (cross-feature только через
-      runtime-registry src/shared/lib/registry/).
-  §2  app не импортирует @/features/** / @/entities/** напрямую —
-      только через @/pages/<page>/, @/widgets/<w>/, registry.
-  §3  Hooks к context — в src/shared/lib/<domain>/. Context+hook
-      в shared, Provider в src/app/providers/ импортирует
-      context из shared.
-  §4  IPC только ipcMain.handle + ipcRenderer.invoke через contextBridge.
-      Никакого Node API в renderer. Регистрация — registerHandlers(map)
-      из @cion-suite/core/ipc.
-  §5  События — appEvents.emit / emitTo(win, ...) / useAppEvent(name).
-      Никогда win.webContents.send. Расширение типов — augmentation
-      BaseAppEventMap в shared/types/app-events.ts.
-  §6  Placement типов: shared/types (main+renderer) / app/types
-      (main-only) / src/shared/types (renderer-only cross-slice) /
-      src/features/<f>/types / src/entities/<e>/model.
-      Никогда inline в компонентах. import type обязателен.
-  §7  Cion Suite только через пакеты — credentials через
-      @cion-suite/core/storage (createSecureStorage),
-      settings через @cion-suite/core/settings + Zod,
-      logger через @cion-suite/core/log,
-      window через @cion-suite/core/window (createWindow +
-      requestSingleInstance). Plaintext credentials запрещены.
-  §8  UI — только через skill /shadcn. src/shared/ui/shadcn/**
-      не редактируется руками (только npx shadcn add <comp>).
-  §9  🟡 Tailwind v4 — CSS-first. Theme через @theme inline в
-      src/app/styles/index.css. Запрещено tailwind.config.js / @config.
-  §10 🟡 React 19 + Compiler. Ручные useMemo / useCallback не нужны.
-
-  Clean Code:
-  CC.DRY  🟡 hand-rolled дублирующее существующее (shared/lib,
-          shared/ui, @cion-suite/core/*, app/utils).
-  CC.KISS 🟡 guard'ы / fallback'и для невозможных сценариев;
-          валидация не на границах.
-  CC.COM  🟡 комментарии с нарративом («added for X», «fix #123»).
-  CC.IPC  🔴 IPC-валидация на falsy вместо `== null || typeof !==`
-          (`if (!id)` отвергает 0).
-
-  Pitfalls (🟡):
-  P.DIR   __dirname в app/ для путей к ресурсам — должно через
-          app/utils/paths.ts.
-  P.AUG   BaseAppEventMap augmentation не в shared/types/app-events.ts.
-  P.JSX   `: JSX.Element` в React 19 (TS2503) — inference / ReactElement.
-
-  Output: `- [🔴|🟡] §<X> <имя> — <file:line> — <цитата>`.
-  Нет находок → `CLEAN`.
+  Read .claude/cache/isgood/<code|s1|s2>.patch - код диффа без документации и lock-файлов;
+  удалённый файл свёрнут в строку "файл удалён целиком".
+  Исходная задача: <<< <запрос(ы)> >>>
+  Вне scope - не флагать C1: <<< <файлы | нет> >>>
+  <блок "Критерии семантики" дословно>
+  <= 300 слов.
 ```
 
-### Agent B — Semantic Review
+Итог = CONFIRMED + VIOLATION триажа + находки семантики.
 
-```
-subagent_type: code-reviewer
-description: Semantic review — scope, KISS, DRY
-prompt: |
-  Read .claude/cache/isgood-diff.patch
+## Phase 2 - Контекстный разбор (родитель, <= 5 предложений)
 
-  Исходная задача пользователя:
-  <<<
-  <вставить запрос>
-  >>>
+Пропустить, если находок нет и `CODE_ADDED < 200`. Проблема реальная или исходный код - намеренный workaround?
+Фикс лечит корень или симптом? Где ещё в коде та же ошибка, не зацепленная диффом? Что сломается вне чеклиста?
 
-  C1 🔴 Scope-creep — правки вне задачи: переименования «попутно»,
-        форматирование, рефакторинг чужого кода.
-  C2 🟡 KISS / over-engineering — guard'ы / fallback'и для сценариев,
-        которые по типам невозможны.
-  C3 🟡 DRY — дублирование. Прежде чем флагать — Grep по
-        src/shared/lib, src/shared/ui, @cion-suite/core/*, app/utils.
-        Формат: `... existing: <path>`.
-  C4 🟡 TODO/tech-debt мимо задачи.
+## Phase 3 - Вердикт
 
-  Output: `- [🔴|🟡] §C<N> <имя> — <file:line> — <цитата>`.
-  Нет находок → `CLEAN`.
-```
+🔴 **BLOCK** - есть хоть один 🔴, коммит запрещён -> Phase 4. 🟡 **ADVISE** - только 🟡, каждый в TODO. 🟢 **PASS** - пусто.
+`CLEAN` без конкретики - родитель перепроверяет сам.
 
-## Phase 2 — Verdict
-
-- 🔴 **BLOCK** — есть хоть один 🔴 → Phase 3.
-- 🟡 **ADVISE** — только 🟡. Каждый 🟡 в TODO.
-- 🟢 **PASS** — пусто.
-
-## Phase 3 — Fix loop
+## Phase 4 - Fix loop
 
 Пока есть 🔴:
-1. На каждый 🔴 — минимальный фикс.
-2. Пересобери diff: `git diff HEAD > .claude/cache/isgood-diff.patch`.
-3. Перезапусти агента по принадлежности правила (Critical Rules / Clean Code / Pitfalls → A; §C → B; новый файл → оба).
-4. До 🔴 = 0. 3 итерации без прогресса → стоп.
+1. Минимальный фикс на месте, без правок сверх фикса.
+2. Перескан тем же вызовом (бесплатно): CONFIRMED и CHECK пересчитаны.
+3. Перезапуск по принадлежности находки: §3.x - новые CHECK исправленных файлов триажит родитель или T
+   их группы; §C - агент S того среза, где правка (`s1`/`s2` - по таблице), `inline` - проход сам. Новый файл вне scope - оба.
+4. Три итерации без прогресса -> стоп, доложи, какое правило застряло и почему.
 
-## Финальный отчёт
+## Phase 5 - Холодный взгляд
+
+"Senior откроет дифф утром - подпишет без вопросов?" Нет -> Phase 4 + что именно заставит остановиться. Да -> отчёт.
+
+## Отчёт + уборка
 
 ```
 Verdict: 🟢|🟡
-Fixed (🔴 → ok):
-  - §X <правило> — <file:line>
+Fixed (🔴 -> ok):
+  - §<N> <правило> - <file:line>
 Remaining 🟡 (TODO):
-  - §X <правило> — <file:line>
+  - §<N> <правило> - <file:line>
+Context notes:
+  - <что Phase 2 поймала сверх формальных правил>
 ```
 
-🟢 → можно `/notes` + commit.
+`rm -rf .claude/cache/isgood` - в любом исходе, включая прерывание. 🟢 -> `/notes` + commit.
+
+Не проверяется здесь: импорт через границу сущности или слоя (`pnpm lint`), IPC-канал и событие в `EventMap` (компилятор) - это `/ship`.
+Команда не пишет commit (`/notes`), не ревьюит план (`/isplan`), код трогает только в Phase 4.

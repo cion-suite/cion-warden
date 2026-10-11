@@ -1,30 +1,17 @@
-export type { UpdaterInfo, UpdaterProgress } from './updater.js';
+export type { UpdaterInfo, UpdaterProgress } from './updater';
+export type { Source, SourceType, AddSourceOptions, UpdateSourceOptions } from './sources';
+export type { Script, ScriptCfgFile, ScriptCfgValues, ScriptStatus, HkEntry, ValEntry } from './scripts';
+export type { ScriptDeps, MissingItem, MissingLib, MissingPreset } from './script-deps';
+export type { CatalogScript, SourceSync } from './catalog';
+export type { Lib, LibFile, LibKind, LibSync } from './libs';
 export type {
-    AppBridge,
-    UpdaterIpcResult,
-    UpdaterChannelInfo,
-    ErrorReport,
-} from './ipc.js';
-export type { ScriptMeta, ScriptCfgFile, HkEntry, ValEntry } from './scripts.js';
-export type { VaultSource, GitVaultSource, VaultSourceType } from './vault.js';
-export type { RemoteScriptMeta } from './get-scripts.js';
-export type { RemoteLibraryMeta, RemoteLibFileEntry, LibKind } from './libs.js';
-export type {
-    RemotePresetMeta,
+    Bind,
+    BindSync,
     PresetSchema,
+    PresetSection,
     PresetField,
     PresetFieldType,
     PresetValues,
-} from './binds.js';
-export type { VaultSyncResult, VaultSourceListResult } from './vault-sync.js';
-export type {
-    GithubRateLimitEntry,
-    GithubRateLimitResource,
-    GithubRateLimitResult,
-} from './github.js';
-export type {
-    FontsSidecar,
-    FontsSidecarEntry,
-    InstalledFont,
-    FontInstallSummary,
-} from './assets.js';
+} from './binds';
+export type { GithubLimit, GithubLimitEntry, GithubLimitResource, GithubRepo, GithubRepoRef } from './github';
+export type { Font, FontInstall } from './fonts';

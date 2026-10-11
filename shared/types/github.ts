@@ -1,21 +1,34 @@
-export interface GithubRateLimitResource {
+export interface GithubLimitResource {
     limit: number;
     used: number;
     remaining: number;
     reset: number;
 }
 
-export interface GithubRateLimitEntry {
-    /** Null for anonymous probe. */
+/** Одна проба; сбой пробы - данные строки, не отказ канала. */
+export interface GithubLimitEntry {
+    /** null - анонимная проба. */
     sourceId: string | null;
     sourceName: string;
     ok: boolean;
     error?: string;
-    core?: GithubRateLimitResource;
-    search?: GithubRateLimitResource;
+    core?: GithubLimitResource;
+    search?: GithubLimitResource;
 }
 
-export interface GithubRateLimitResult {
+export interface GithubLimit {
     fetchedAt: number;
-    entries: GithubRateLimitEntry[];
+    entries: GithubLimitEntry[];
+}
+
+/** Разобранная ссылка на репозиторий. */
+export interface GithubRepoRef {
+    owner: string;
+    repo: string;
+}
+
+/** Репозиторий источника глазами его токена (github:repo:get). */
+export interface GithubRepo {
+    fullName: string;
+    isPrivate: boolean;
 }

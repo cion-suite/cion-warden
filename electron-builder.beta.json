@@ -1,0 +1,15 @@
+{
+    "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+    "extends": "./electron-builder.json",
+    "generateUpdatesFilesForAllChannels": true,
+    "directories": {
+        "output": "build/dist-beta"
+    },
+    "publish": [
+        {
+            "provider": "generic",
+            "url": "https://example.com/updates/beta/",
+            "channel": "beta"
+        }
+    ]
+}

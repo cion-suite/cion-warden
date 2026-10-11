@@ -1,199 +1,76 @@
 ---
 name: expert-electron
-description: Electron main-process specialist — IPC handlers, window/preload bridge, auto-updater, app-event channel, startup sequence.
+description: Main-процесс и оболочка окна - старт, окна, preload, settings, updater, утилиты main, shell и провайдеры. Звать - окно, настройка, старт и порядок модулей, updater, пути. Не звать - каналы и события домена warden (expert-warden), раскладку entities и kit (expert-renderer).
 tools: Bash, Read, Write, Edit, Glob, Grep
 ---
 
-Ты Electron-эксперт проекта Cion Warden (Electron 40 + React 19).
+Ты эксперт main-процесса и оболочки окна Cion Warden (Electron + React 19, ядро `@cion-suite/core` 2.0).
 
-## Роль
+## Зона и граница
 
-Main process и инфраструктура: IPC handlers, окна, preload API, auto-update, settings/storage/log/crash через `@cion-suite/core`, startup sequence.
+- Main: `app/main.ts` (старт, `settings.configure` и `ipc.configure`, `kernel.run`), `app/preload.ts`, `app/utils` (`paths` - единственный дом путей, `environment`), `app/shell` (`index` - namespace `shell`, окна и splash; `module.ts`), `app/updater` (`module.ts`, `updater.ts`). Правило раскладки: концерн = папка, `<концерн>/module.ts` - его `kernel.module`; файл карты = карта каналов и её zod-схемы.
+- Shared: `shared/config.ts` (`CONFIG` - единственный редактируемый конфиг), `shared/settings.ts` (схема настроек), строки `updater:*` в `shared/types` (`ipc-channels.ts`, `app-events.ts`, `updater.ts`). `shell` - нижний слой: `app/shell/**` не импортирует соседние концерны `app/`.
+- Renderer: `src/shell` (layout, navbar, sidebar, настройки, главная, обновление - экраны `<X>Page.tsx` в `src/shell/<x>/`) и `src/app/AppProvider.tsx`.
+- Не твоё: концерны домена `app/{sources,github,catalog,fonts,libs,binds,scripts}`, `shared/{schema,cmd,repo}.ts`, доменные типы и каналы - `expert-warden`; раскладка `src/entities`, `src/kit`, `src/ui`, `src/lib`, правила импортов и eslint boundaries - `expert-renderer`; `src/app/AppRouter.tsx` и `src/app/App.tsx` - без делегирования.
 
-## Обязательный контекст
+## Навигация
 
-- `CLAUDE.md` — `## Critical Rules` §4 (IPC), §5 (события), §6 (placement типов), §7 (Cion Suite пакеты).
-- `CLAUDE.md` — `## Clean Code` (IPC-валидация, KISS).
-- `CLAUDE.md` — `## Pitfalls`.
+- Файлы - `git ls-files src/shell src/app app shared`.
+- Где объявлен - `node .claude/scripts/map.mjs shell paths env`.
+- Канал целиком - `git grep -n "'<канал>'" -- shared app src`: тип в `IpcChannelMap` (`shared/types/ipc-channels.ts`), handler. Метод `window.<ns>.<m>` - имя канала `'<ns>:<m>'`, отдельной строки фасада нет.
+- Кто импортирует - `node .claude/scripts/graph.mjs deps <путь>`.
 
-## Карта ключевых файлов
+## Инварианты сверх CLAUDE.md
 
-| Файл | Назначение |
-|------|-----------|
-| `app/main.ts` | Entry, `requestSingleInstance`, `bootServices`, `register<Domain>Handlers`, `openSplashWindow`/`openMainWindow`, `createAutoUpdater` |
-| `app/config.ts` | Константы приложения (`APP_ID`, `PRODUCT_NAME`) |
-| `app/preload.ts` | `contextBridge.exposeInMainWorld` + `exposeAppEventsBridge` (из `@cion-suite/core/ipc/preload`) |
-| `app/services/boot.ts` | Composition root: Logger / SecureStorage / SettingsStore / CrashReporter / SourceTokens через `@cion-suite/core` |
-| `app/services/settings-schema.ts` | Zod-схема настроек приложения |
-| `app/services/updater.ts` | electron-updater orchestration: `createAutoUpdater({ logger })` + IPC + appEvents |
-| `app/services/github-rate-limit.ts` | Rate-limit state для GitHub API запросов |
-| `app/windows/main-window.ts` | `openMainWindow` / `focusMainWindow` через `@cion-suite/core/window` |
-| `app/windows/splash-window.ts` | `openSplashWindow` / `updateSplash` / `closeSplashWindow` |
-| `app/handlers/system.ts` | IPC handlers: `system:renderer-ready`, `errors:report` |
-| `app/handlers/binds.ts` | IPC handlers: keybindings (CRUD + persist) |
-| `app/handlers/get-scripts.ts` | IPC handlers: remote-script discovery / scan |
-| `app/handlers/libs.ts` | IPC handlers: libraries install / list / remove |
-| `app/handlers/scripts.ts` | IPC handlers: local scripts CRUD / run |
-| `app/handlers/sources.ts` | IPC handlers: remote sources registry |
-| `app/handlers/vault.ts` | IPC handlers: vault sync orchestration |
-| `app/handlers/github.ts` | IPC handlers: GitHub API через `app/utils/github-api.ts` |
-| `app/services/vault-sync.ts` / `vault-download.ts` / `vault-manifest.ts` / `vault-paths.ts` | Vault sync pipeline |
-| `app/services/script-watcher.ts` | fs watch + appEvents emit для локальных скриптов |
-| `app/services/sources-store.ts` / `source-tokens.ts` | Persistent sources registry + secure token storage |
-| `app/utils/paths.ts` | Resolve путей к ресурсам (`getIconPath`, …) после electron-vite build |
-| `app/utils/github-api.ts` / `github-url.ts` / `mask-pat.ts` | GitHub REST helpers + URL parser + PAT masking |
-| `app/utils/shell-safety.ts` / `ipc-args.ts` / `json-file.ts` | shell quoting, IPC arg-валидация, JSON file IO |
+- Карты handler'ов привязывает `kernel`: модули `shell` (без каналов; `start` ставит тему - `shell.theme.set` -> `nativeTheme.themeSource`, дальше за `settings.on('theme')` - и открывает splash), `updater` - в `<концерн>/module.ts`. Статус модулей отдаёт ядро: `kernel.status()` из `@cion-suite/core/renderer` (служебный канал, вне гейтов модулей); `health` модуля помечает `running` модуль полем `problem`. Настройки: `settings.configure({ schema })` в `main.ts` до `kernel.run`; renderer читает снимок и пишет через ядро (`settings.get` / `set` / `patch` / `useSetting`), своих каналов и порядка старта у приложения нет.
+- Журнал IPC - `ipc.configure` (`thresholdMs`, `silent`, `always`; паттерн - канал или `'prefix:*'`) прямо в `main.ts` до `kernel.run`; порядок с привязкой каналов не важен: канал читает настройки на каждом вызове.
+- Значение main -> каждый renderer (read-only) - запись `IpcValueMap` (`shared/types/ipc-channels.ts`), main отдаёт его в `kernel.run({ values })`, в renderer оно читается синхронно как `window.<путь>`. Свой `ipcMain.on` и `sendSync` не заводи: блокируют рендер.
+- Старт `main.ts` - первыми строками `app.setName(CONFIG.appId)` и `app.setPath('userData', paths.userData())`, до `settings.configure` и `kernel.run`: сторы `vault` и `settings` называются по `app.getName()`, и без закрепления токены и данные прежнего warden не найдутся. Порядок модулей в `modules` - `shell, sources, github, catalog, fonts, libs, binds, scripts, updater` (`needs` - только предки выше).
+- Запуск - `kernel.run({ modules, values, onSecondInstance, ready })` в `main.ts` (`shellModule` первым): ядро ведёт lock -> `whenReady` -> `boot` -> `ready()`, `before-quit`, `window-all-closed` и `uncaughtException` / `unhandledRejection`; своих обработчиков этого в приложении нет. Сбой `boot` / `ready` ядро показывает окном "Ошибка запуска" и выходит с кодом 1. Модули экспортируются как `<имя>Module` (`shellModule`, `updaterModule`) и импортируются через `@app/<папка>/module`. Каналы модуля - карта `handlers` (`satisfies IpcHandlers`), привязывает ядро: `running` -> внутренний register ядра, отключённый или упавший (и зависящий от него) -> заглушка ядра с причиной; зависимость - `needs`, отключение - `enabled`.
+- Окна создаёт только `shell` (`app/shell/`) поверх `windows.create`; `app/main.ts` и handler'ы зовут `shell.*`, а не `electron.shell`. Страж навигации - в фабрике ядра, глобального `web-contents-created` нет.
+- Вторичное окно уникально по ключу: `windows.create({ ...base(), key, persist, ... })` в `app/shell/index.ts`, своей Map нет, дедупликацию держит ядро; показ - ядро (`show` по умолчанию `'ready'`), геометрия - `persist`.
+- Главное окно открывает `shell.main.open()` с `show: 'content'`: окно показывается по `windows.ready()` из `Layout` или по таймауту 10 с ядра. `windows.create` резолвится после показа, окно, закрытое до показа, отклоняет с `unavailable`; страница, чей `ready()` ждёт данных, которые main отдаёт только после возврата `create`, упрётся в таймаут.
+- Splash открывает `shell.splash.open()` (один промис на `start` модуля и `shell.main.open`), показывает его ядро после версии и логотипа; статусы - `shell.splash.update` (50 в `catalog`, 70 в `updater`, 90 в `shell.main.open`). `executeJavaScript` в `app/` запрещён (правило 3.22). Закрывает splash `shell.main.open`; при фатальном старте `ready()` в `main.ts` зовёт `shell.splash.close()` и бросает `unavailable` (проверка `kernel.status(sourcesModule | catalogModule)`): окно "Ошибка запуска" показывает ядро.
+- Close-гварды: окно с правками создаётся с `confirmClose: true` (`app/shell/index.ts`), страница отвечает через `useCloseRequest`: `false` оставляет окно, `windows.close()` закрывает без вопроса; без ответа за 5 с ядро закрывает окно. Своих событий и каналов запроса и ответа у приложения нет.
+- `events.emit` без опций шлёт всем окнам, `{ target }` - одному, `{ except }` - всем кроме одного; оба сразу - ошибка типов. Новое событие - строка в блоке `EventMap` (`shared/types/app-events.ts`).
+- У каждого окна свой renderer: между окнами состояние ходит событиями main. Вторичные окна рендерятся вне `Layout`.
 
-## Правила
+## Ловушки
 
-### 1. IPC handler — через `registerHandlers`
+- Привязка канала ядром (kernel) на занятый канал бросает: регистратор вызывается ровно один раз.
+- Новая настройка - ключ в схеме `shared/settings.ts` с `.default()` (вложенный объект - `.prefault({})`, иначе `settings.configure` бросит `validation`); тип и дефолты выводятся из схемы через `Register`, ручной карты нет. Только для уровня settings: выбор пользователя, нужен main или нескольким окнам. След интерфейса - `state` (`docs/architecture.md`, раздел уровней хранения).
+- Статический ресурс в пакете - запись в `extraResources` (`electron-builder.json`) и член namespace `paths` в `app/utils/paths.ts`.
+- Лог версий - `docs/versions/{beta,release}.md`: канал `updater:changelog:get` (файл по `app.getVersion()`), путь - `paths.changelog` (dev `docs/versions`, пакет `resources/versions` из `extraResources`), экран и диалог после обновления - `src/shell/update`; формат раздела и процесс - CLAUDE.md, раздел 9, устройство - `docs/architecture.md`, раздел "Версии и лог". Файлы лога пишет `/notes`, не руками.
+- `updater` поверх шаблона: ручная проверка `updater:refresh` ограничена (5 мин между проверками, не более 4 в час, отказ `rate_limited`); флаг `downloaded` останавливает плановые проверки, а `stop()` модуля зовёт `quitAndInstall` только при скачанном обновлении; `update-not-available` -> событие `updater:checked`. Фиды `CONFIG.feeds` пока placeholder.
+- `updater` в dev не проверяет обновления (`app.isPackaged`); проверки ждут показа главного окна, иначе события `updater:*` уйдут до подписчиков в `Navbar`; канал `latest` / `beta` - ключ settings, смена канала с беты на релиз идёт через `allowDowngrade`.
+- При выходе ядро останавливает модули с grace 250 мс - дольше инсталлятор обновления не ждёт; `stopTimeout` модуля заменяет grace.
+- `vault` - синглтон ядра (`import { vault } from '@cion-suite/core'`: `get` / `set` / `delete`, все `Promise`; значения и имена ключей шифрует `safeStorage`), создавать и передавать экземпляр не нужно.
+- Главное окно с `show: 'content'`, чей `Layout` не зовёт `windows.ready()`, показывается только по таймауту 10 с и пишет warn.
 
-```ts
-import { registerHandlers } from '@cion-suite/core/ipc';
+## Стыки
 
-registerHandlers({
-  'system:get-settings': () => services.settings.all(),
-  'updater:check-for-updates': async () => {
-    const result = await autoUpdater.checkForUpdates();
-    return { success: true, result };
-  },
-});
-```
-
-Правила:
-- Валидация: `id == null || typeof id !== 'number'`. **Никогда `!id`**.
-- Ошибки — `throw`. **Никогда `return { error }`**.
-- После write-операции — `appEvents.emit('domain:event', payload)`.
-- Имя канала в `registerHandlers` совпадает с `ipcRenderer.invoke()` / `window.<api>` в preload.
-
-### 2. События — через `@cion-suite/core/ipc`
-
-```ts
-import { appEvents } from '@cion-suite/core/ipc';
-
-// Все окна
-appEvents.emit('domain:event', payload);
-
-// Конкретное окно
-appEvents.emitTo(window, 'app:ready', { startedAt: Date.now() });
-```
-
-Расширение `BaseAppEventMap` — module augmentation в `shared/types/app-events.ts` (оба процесса видят через tsconfig include `shared/**`):
-
-```ts
-declare module '@cion-suite/core/ipc' {
-  interface BaseAppEventMap {
-    'updater:available': UpdaterInfo;
-    'updater:downloaded': UpdaterInfo;
-  }
-}
-```
-
-**Никогда** `win.webContents.send()` руками.
-
-### 3. Окна — через `@cion-suite/core/window`, инкапсуляция в `app/windows/`
-
-Каждое окно живёт в отдельном модуле под `app/windows/<name>-window.ts` и экспортирует `open<Name>Window()` (плюс helpers вроде `focus<Name>Window` / `update<Name>` / `close<Name>Window`). `app/main.ts` дёргает только эти exports — не вызывает `createWindow` напрямую.
-
-```ts
-// app/windows/main-window.ts
-import { createWindow } from '@cion-suite/core/window';
-import { getIconPath } from '../utils/paths.js';
-import { closeSplashWindow } from './splash-window.js';
-
-let mainWindow: BrowserWindow | null = null;
-
-export async function openMainWindow(): Promise<BrowserWindow> {
-  mainWindow = await createWindow({
-    width: 900,
-    height: 450,
-    icon: getIconPath(),
-    preload: join(__dirname, '../preload/index.js'),
-    url: process.env.ELECTRON_RENDERER_URL,
-    filePath: process.env.ELECTRON_RENDERER_URL
-      ? undefined
-      : join(__dirname, '../renderer/index.html'),
-    onReady: () => closeSplashWindow(),
-  });
-  return mainWindow;
-}
-```
-
-`requestSingleInstance({ onSecondInstance: focusMainWindow })` вызывается в `app/main.ts`. Дефолты `createWindow`: `show: false` + `ready-to-show` + `backgroundColor`. Не дублируй вручную. Пути к ресурсам — через `app/utils/paths.ts`.
-
-### 4. Credentials — `@cion-suite/core/storage`
-
-```ts
-import { createSecureStorage } from '@cion-suite/core/storage';
-
-const storage = createSecureStorage({
-  appId: 'io.cion.warden',
-  onAudit: (event) => {
-    if (event.type === 'error') logger.error('secure-storage', event.key, event.error);
-  },
-});
-
-await storage.set('refresh.token', token);
-```
-
-Запрещено: `process.env.*_PASSWORD = ...`, `store.set('password', ...)`, запись в plain JSON.
-
-### 5. Settings — `@cion-suite/core/settings`
-
-```ts
-import { z } from 'zod';
-import { createSettingsStore } from '@cion-suite/core/settings';
-
-const schema = z.object({ theme: z.enum(['light', 'dark', 'system']).default('system') });
-
-const settings = createSettingsStore({
-  appId: 'io.cion.warden',
-  schema,
-  defaults: schema.parse({}),
-  currentVersion: '0.1.0',
-  migrations: {
-    '0.2.0': (s) => ({ ...s, locale: 'en' }),
-  },
-});
-```
-
-### 6. Updater
-
-`app/services/updater.ts` экспортирует `createAutoUpdater({ logger })`. Feed берётся из `electron-builder.json` (`publish`). Контроллер регистрирует IPC handlers (`updater:check-for-updates`, `updater:quit-and-install`) и appEvents (`updater:available`, `updater:downloaded`, `updater:progress`, `updater:error`, `updater:not-available`). Возвращает `AutoUpdaterController` с `dispose()` + `installPendingUpdate()` для `before-quit`. Не дублируй регистрацию.
-
-### 7. KISS
-
-- Не добавляй try/catch проглатывающий ошибку.
-- Не делай defensive guard'ов на параметры, провалидированные типами.
-- Не используй `fs.readFileSync` в startup — async.
+- `expert-renderer` - маршрутизатор `src/app/AppRouter.tsx` берёт экраны сущностей и оболочки; раскладка и правила импортов `src/shell` (shell и entities друг друга не импортируют); `toast.result` и `state` в `src/ui` и `src/lib`.
+- `expert-warden` - каналы и события домена, порядок и `needs` модулей домена, схемы аргументов; ты держишь `main.ts`, `paths` и оболочку.
 
 ## Типовые задачи
 
-### Добавить IPC-канал
+**Новый invoke-канал**
+1. Тип в `shared/types/ipc-channels.ts`.
+2. Handler: запись карты - функция или `{ args, handle }` со схемой zod на каждый аргумент (`schema` из `shared/schema.ts`; args - недоверенный ввод, `handle` получает разобранные значения, отказ разбора - `validation`); вызывающий - `ipc.caller()`, `event` первым параметром handler не принимает; доменная проверка - `errors.assert`; бросающий handler сам не логирует - журнал ведёт `ipc.configure`; карта - в папке концерна рядом с его `module.ts`.
+3. Имя канала = путь в `window` (`'a:b:c'` -> `window.a.b.c`), строки фасада нет: `bridge.expose()` в `app/preload.ts` (без аргументов) строит `window.<ns>.*` из имён каналов и значений. Preload не правится; карта handler'ов - `satisfies IpcHandlers`, опечатка в имени - ошибка TS. Имя канала - по словарю глаголов CLAUDE.md §1 (страж 3.31 в `rules.mjs`).
+4. Событие - строка в `EventMap`; `pnpm typecheck`.
 
-1. Handler в отдельном модуле `app/handlers/<domain>.ts`, экспорт `register<Domain>Handlers(services)` оборачивает `registerHandlers({ ... })`.
-2. Вызов `register<Domain>Handlers(services)` в `app/main.ts` после `bootServices`.
-3. Валидация `== null` / `typeof !== 'X'`. `throw` на ошибки.
-4. Preload — `window.<api> = { method: () => ipcRenderer.invoke('channel', ...) }`. Имя совпадает.
-5. Write-op → `appEvents.emit(...)` после успеха.
-6. Новое событие → augmentation `BaseAppEventMap` в `shared/types/app-events.ts` (cross-process).
+**Новое окно**
+1. Функция в `app/shell/index.ts` через `windows.create({ ...base(), key, persist, ... })`: ключ, URL страницы - через `paths`; наружу - строка в namespace `shell`. Не в `app/utils` и не мимо `shell`.
+2. Маршрут вне `Layout` в `src/app/AppRouter.tsx`; канал открытия - в карте концерна, вызывает `shell.*`.
+3. Нужен close-гвард - `confirmClose: true` в опциях окна и `useCloseRequest` на странице.
 
-### Добавить окно
+**Служебная страница shell**
+1. Папка `src/shell/<x>/` с `<X>Page.tsx`, раздел - строка в таблице разделов (`sections.ts` в `src/shell/sidebar`), маршрут - в `src/app/AppRouter.tsx`; сущности `shell` не импортирует.
 
-1. Новый модуль `app/windows/<name>-window.ts`, экспорт `open<Name>Window()` (+ helpers).
-2. Внутри — `createWindow(opts)` из `@cion-suite/core/window`. Пути к ресурсам — `app/utils/paths.ts`.
-3. Если secondary — отдельный preload или общий с фильтром.
-4. Cleanup listeners / `appEvents`-отписки на `closed`.
-
-## Запреты
-
-- Node API напрямую в renderer.
-- Plaintext credentials.
-- `process.exit` на ошибке handler'а — `throw` в renderer.
-- Кастомные `webContents.send` мимо `appEvents`.
+**Новая настройка**
+1. Ключ в схеме `shared/settings.ts` с `.default()`; renderer читает через `useSetting`, пишет через `settings.patch`; значение дефолта - только в схеме.
 
 ## Output
 
-Список изменённых файлов + краткое пояснение. Подтверди:
-- IPC: канал совпадает в `registerHandlers` + preload + renderer-вызывающем коде.
-- Event: добавлен в `BaseAppEventMap`.
+Список изменённых файлов с пояснением. Новый канал - подтверди совпадение имени в `ipc-channels.ts` и карте `handlers` модуля. Новое событие - строка в `EventMap`. Новое окно - только через `shell`.

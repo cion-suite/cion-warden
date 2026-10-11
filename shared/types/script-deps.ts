@@ -14,7 +14,7 @@ export interface MissingPreset {
 
 export type MissingItem = MissingLib | MissingPreset;
 
-export interface DepsCheckResult {
+export interface ScriptDeps {
     missing: MissingItem[];
     unknown: string[];
 }

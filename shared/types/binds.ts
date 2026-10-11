@@ -1,7 +1,7 @@
 export type PresetFieldType = 'hotkey' | 'number' | 'string' | 'boolean';
 
 export interface PresetField {
-    // Dotted path: "<section>.<field>". Used as the flat key in PresetValues.
+    /** "<section>.<field>": он же ключ в PresetValues. */
     key: string;
     label: string;
     type: PresetFieldType;
@@ -10,9 +10,9 @@ export interface PresetField {
 }
 
 export interface PresetSection {
-    // Raw key of the section in the on-disk JSON.
+    /** Ключ секции в json на диске. */
     name: string;
-    // Human-readable section title (derived from `name` unless schema overrides).
+    /** Заголовок: из name, если схема не задала свой. */
     title: string;
     fields: PresetField[];
 }
@@ -22,10 +22,10 @@ export interface PresetSchema {
     sections: PresetSection[];
 }
 
-// Flat map keyed by "<section>.<field>". Reified to nested when persisted.
+/** Плоский "<section>.<field>"; на диск пишется вложенным. */
 export type PresetValues = Record<string, string | number | boolean>;
 
-export interface RemotePresetMeta {
+export interface Bind {
     id: string;
     name: string;
     fileName: string;
@@ -35,4 +35,10 @@ export interface RemotePresetMeta {
     isDownloaded: boolean;
     hasUpdate: boolean;
     downloadUrl?: string;
+}
+
+/** Итог массовой загрузки binds:sync. */
+export interface BindSync {
+    ok: number;
+    failed: number;
 }

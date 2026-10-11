@@ -9,8 +9,8 @@
         "helpers:pinGitHubActionDigests"
     ],
     "timezone": "Europe/Istanbul",
-    "baseBranches": ["dev"],
-    "rangeStrategy": "replace",
+    "baseBranchPatterns": ["dev"],
+    "rangeStrategy": "update-lockfile",
     "schedule": ["before 5am on monday"],
     "lockFileMaintenance": {
         "enabled": false
@@ -22,14 +22,26 @@
             "enabled": false
         },
         {
-            "description": "Group Electron + electron-vite + electron-builder + electron-updater",
-            "matchPackageNames": [
-                "electron",
-                "electron-vite",
-                "electron-builder",
-                "electron-updater"
-            ],
+            "description": "One PR for in-range npm updates; the stack groups below take precedence",
+            "matchManagers": ["npm"],
+            "matchDepTypes": ["dependencies", "devDependencies"],
+            "matchUpdateTypes": ["minor", "patch"],
+            "groupName": "npm non-major"
+        },
+        {
+            "description": "Group Electron + electron-builder + electron-updater",
+            "matchPackageNames": ["electron", "electron-builder", "electron-updater"],
             "groupName": "electron stack"
+        },
+        {
+            "description": "Group Vite + React plugin + electron-vite (electron-vite gates the Vite major)",
+            "matchPackageNames": [
+                "vite",
+                "@vitejs/plugin-react",
+                "electron-vite",
+                "babel-plugin-react-compiler"
+            ],
+            "groupName": "vite stack"
         },
         {
             "description": "Group React + types",
@@ -47,13 +59,51 @@
                 "tailwindcss",
                 "@tailwindcss/vite",
                 "tw-animate-css",
-                "tailwind-merge",
                 "class-variance-authority",
-                "clsx",
+                "cn",
                 "radix-ui",
-                "lucide-react"
+                "lucide-react",
+                "shadcn"
             ],
             "groupName": "tailwind + shadcn"
+        },
+        {
+            "description": "Group ESLint + plugins (eslint.config.js loads them directly, bump together)",
+            "matchPackageNames": [
+                "eslint",
+                "@eslint/js",
+                "typescript-eslint",
+                "eslint-plugin-*",
+                "eslint-import-resolver-typescript"
+            ],
+            "groupName": "eslint stack"
+        },
+        {
+            "description": "Majors that need a coordinated change elsewhere (electron-vite for Vite, typescript-eslint for TypeScript, pnpm/action-setup for pnpm): approve from the Dependency Dashboard",
+            "matchPackageNames": [
+                "typescript",
+                "vite",
+                "@vitejs/plugin-react",
+                "electron-vite",
+                "eslint",
+                "@eslint/js",
+                "typescript-eslint",
+                "eslint-plugin-*",
+                "eslint-import-resolver-typescript",
+                "pnpm"
+            ],
+            "matchUpdateTypes": ["major"],
+            "dependencyDashboardApproval": true
+        },
+        {
+            "description": "core d.ts resolve zod from the link:-resolved cion-suite; the app pins the exact zod version installed there, so bump it together with cion-suite",
+            "matchPackageNames": ["zod"],
+            "dependencyDashboardApproval": true
+        },
+        {
+            "description": "Node runtime and types follow the Node major bundled with Electron",
+            "matchPackageNames": ["node", "@types/node"],
+            "allowedVersions": "<25"
         }
     ]
 }

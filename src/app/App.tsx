@@ -1,8 +1,5 @@
-import { useUpdaterNotifications } from '@/shared/lib/updater';
+import { AppRouter } from '@/app/AppRouter';
 
-import { AppRouter } from './routes';
+const App = () => <AppRouter />;
 
-export function App() {
-    useUpdaterNotifications();
-    return <AppRouter />;
-}
+export default App;

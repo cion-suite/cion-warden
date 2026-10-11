@@ -1,187 +1,161 @@
 ---
-description: Plan and break down a multi-step feature into structured phased tasks
+description: Разбить задачу на фазы с quality gates и DRY-контрактом
+argument-hint: "<задача>"
 allowed-tools: Bash, Read, Write, Edit, Glob, Grep, Agent
 ---
 
-# /planner — Phased Implementation Plan
+# /planner - фазовый план реализации
 
-Разбить feature / refactoring / multi-step task на последовательные фазы с явными quality gates и DRY-контрактом. План интегрируется с `/isgood`, `/notes`, `/ship` и конвенцией `docs/planned_now.md` (см. `CLAUDE.md`).
-
-## Input
-
-Пользователь описывает задачу. Аргумент: `$ARGUMENTS`.
+Задача - `$ARGUMENTS`. Сложный или архитектурный план перед запуском прогоняй через `/isplan`.
 
 ---
 
-## Phase 0 — Clarify (входной гейт)
+## Phase 0 - Гейт неоднозначности
 
-Перед составлением плана оцени запрос на неоднозначность. Если есть **≥ 2** неясных момента из списка ниже — **остановись и задай вопросы**, не угадывай (`CLAUDE.md STOP & ASK`: «Неоднозначные требования — спроси»).
+**>= 2 неясности** из списка -> остановись и спроси, не угадывай:
+технология или библиотека, граница scope, формат данных и контракт IPC, новая сущность против расширения существующей, целевой слой (renderer / main / shared), UX при конфликте вариантов.
 
-Типичные неясности:
-- Выбор технологии / библиотеки (есть ли уже используемая в `@cion-suite/core/*` или `src/shared/`?).
-- Граница scope (что в задаче, что вне).
-- Формат данных / IPC-контракт (поля, типы, nullable).
-- Новая сущность или расширение существующей.
-- Целевой слой FSD: `app` / `pages` / `widgets` / `features` / `entities` / `shared`.
-- Целевой процесс: main (`app/`) / renderer (`src/`) / shared (`shared/`).
-- UX-решение при конфликте вариантов — спросить и сослаться на skill `/shadcn`.
-
-Если ≤ 1 неясность и она не блокирующая — продолжай, зафиксировав допущение в Phase 1.
+<= 1 неясность и она не блокирующая -> продолжай, допущение зафиксируй в Phase 1.
 
 ---
 
-## Phase 1 — Understand
+## Phase 1 - Контекст
 
-1. Прочитать `CLAUDE.md` — Critical Rules (§1–§10), Clean Code, Pitfalls.
-2. Прочитать `docs/architecture.md` (карта проекта).
-3. Сформулировать коротко (1–3 предложения каждое):
-   - Ожидаемый результат.
-   - Затронутые слои FSD: `app` → `pages` → `widgets` → `features` → `entities` → `shared`.
-   - Затронутые процессы: renderer (`src/`) / main (`app/`) / shared (`shared/`).
-   - Внешние пакеты Cion Suite в игре: `@cion-suite/core` (storage/settings/log/window/ipc).
-   - Зафиксированные допущения (если Phase 0 пропустила неясность).
+Правила проекта уже в контексте - CLAUDE.md не перечитывать. `docs/architecture.md` - замысел и исключения, карты файлов в нём нет; раскладка `src/` и правила импортов - `docs/standard.md`. Дерево затронутой папки:
 
----
-
-## Phase 2 — Explore (с бюджетом)
-
-Цель — собрать **существующие** утилиты/hooks/паттерны для переиспользования (DRY) и список файлов, которые будут модифицированы.
-
-**Выбор инструмента:**
-
-- **Средний / большой scope** (затронуто ≥ 3 файла или ≥ 2 слоя FSD) → делегировать в параллельный агент:
-  ```
-  subagent_type: Explore (thoroughness: "medium")
-  prompt: |
-    Для задачи "<$ARGUMENTS>" найди в репозитории cion-warden:
-    1. Существующие hooks / утилиты / компоненты для переиспользования.
-       Искать в: src/shared/lib/, src/shared/lib/registry/, src/shared/ui/,
-       app/utils/, app/services/, app/handlers/,
-       shared/types/, @cion-suite/core/* (storage, settings, log,
-       window, ipc).
-    2. Аналогичные уже реализованные паттерны (feature slice, IPC handler,
-       app-event payload, provider+context split).
-    3. Файлы, которые будут модифицированы при реализации.
-    Верни: списки путей с краткими комментариями. ≤ 400 слов.
-  ```
-  Изолированный контекст агента не засорит родительский.
-
-- **UI / shadcn** — обязательно через skill `/shadcn` (CLAUDE.md §8). Не угадывай компоненты руками.
-
-- **Малый scope** (1 файл, очевидное изменение) → inline: ≤ 3 `Grep` + `Read` ключевых файлов.
-
-**Запрет:** не читать файлы «на всякий случай». Каждое чтение должно отвечать на конкретный вопрос плана.
-
----
-
-## Phase 3 — Plan
-
-Разбить на последовательные фазы. Для **каждой фазы** указать:
-
-- **What** — краткое описание deliverable (1–2 предложения).
-- **Where** — точные пути файлов (create / modify). Aliases: `@/*` → `src/*`, `@shared/*` → `shared/*`.
-- **How** — подход; если применим уже реализованный паттерн — сослаться на него (путь к файлу-образцу).
-- **Reuse** — список существующих hook / util / component / package из Phase 2, используемых в фазе. Если «новый» — **обосновать**: искал там-то, не нашёл, создаю под конкретную потребность. Пустое поле запрещено.
-- **Depends on** — какие фазы должны быть завершены раньше.
-
----
-
-## Phase 4 — Assess (checklist, не проза)
-
-Пройти по чек-листу. Каждый пункт отметить `[x]` / `[ ]` + короткое обоснование:
-
-```
-[ ] FSD direction      — §1: соседи не импортируют друг друга;
-                         features/X → features/Y только через
-                         src/shared/lib/registry/
-[ ] app → pages/widgets — §2: app не импортирует @/features/** /
-                         @/entities/** напрямую
-[ ] Context+hook split — §3: hooks к context в src/shared/lib/<domain>/,
-                         Provider в src/app/providers/
-[ ] IPC-пары           — §4: каждый новый канал зарегистрирован в
-                         preload (contextBridge) и через
-                         registerHandlers(map) из @cion-suite/core/ipc
-[ ] События            — §5: новые события — augmentation
-                         BaseAppEventMap в shared/types/app-events.ts,
-                         appEvents.emit / useAppEvent, никогда
-                         win.webContents.send
-[ ] Types placement    — §6: правильный слой (shared/types / app/types /
-                         src/shared/types / src/features/<f>/types /
-                         src/entities/<e>/model); никогда inline;
-                         import type
-[ ] Cion Suite пакеты  — §7: credentials — @cion-suite/core/storage;
-                         settings — @cion-suite/core/settings + Zod;
-                         logger — @cion-suite/core/log;
-                         window — @cion-suite/core/window
-[ ] UI через /shadcn   — §8: все UI-решения через skill;
-                         src/shared/ui/shadcn/** не трогать руками
-[ ] Tailwind v4        — §9: theme через @theme inline в
-                         src/app/styles/index.css; нет tailwind.config.js
-[ ] React 19 Compiler  — §10: нет ручных useMemo / useCallback
-[ ] Reuse-контракт     — поле Reuse заполнено для каждой фазы; DRY
-[ ] KISS               — нет фаз «на будущее»; каждая несёт value
-[ ] Scope              — ≤ 5 фаз. Больше — split на независимые
-                         shipable epic'и
-[ ] Before-ship invariants — затронуты electron-builder.json /
-                         app/main.ts setupAutoUpdater? URL инвариант
-                         сохранён?
+```bash
+git ls-files <папка>
 ```
 
-Если `[ ]` осталось хоть одно — вернуться в Phase 3 и доработать план. Не выдавать Output с невыполненными пунктами.
+Папки `src/entities` и `src/kit` в скелете пусты: появятся сущности и модули - смотри их дерево так же.
+
+По 1-3 предложения: ожидаемый результат, затронутые слои, зафиксированные допущения.
 
 ---
 
-## Phase 5 — Output
+## Phase 2 - Explore
 
-Сгенерировать markdown-план с единым блоком completion-steps и phases-блоком.
+Цель одна: найти, что уже написано, чтобы не писать заново.
+
+Сначала скрипты - **одним** Bash-вызовом:
+
+```bash
+node .claude/scripts/graph.mjs deps <путь> [путь...]
+node .claude/scripts/map.mjs <имя> [имя...]
+```
+
+- `deps` - радиус поражения по каждому пути: кто импортирует и что тянет. Это и есть ответ на "какие файлы задача заденет" - агентом не гадать.
+- `map` - `file:line` + сигнатура объявления по репозиторию (включая untracked) и слинкованному `@cion-suite/core`. Все имена, которые собираешься написать заново, - одним вызовом.
+
+Поиск по смыслу, когда имя заранее неизвестно. Scope <= 1 файл и изменение очевидное -> inline, <= 3 `Grep`. Иначе - агенты **в одном tool-calls блоке**, по одному на затронутый слой.
+
+| Слой | Где искать |
+|---|---|
+| renderer | `src/lib/` (hooks, state, i18n, utils), `src/kit/` (модули движка), `src/ui/`, `src/entities/<e>/` (ядро в корне, части в подпапках), `src/shell/` |
+| main | `app/utils/` (paths, environment), `app/shell/`, `app/updater/` |
+| shared | `shared/` (config, settings, schema, types) |
 
 ```
-## Completion steps (после каждой фазы)
+subagent_type: Explore
+model: haiku
+description: Reuse scan (<слой>)
+prompt: |
+  Задача: <$ARGUMENTS>
 
-1. `pnpm typecheck` (front + back).
-2. `pnpm lint` (ESLint + FSD boundaries).
-3. `/isgood` — adversarial review + fix-loop.
-4. `/notes` — changelog entry (UNCOMMITTED mode — без args).
-5. Отметить фазу как `[done]` в `docs/planned_now.md`.
-6. **STOP & WAIT** — явного confirmation от пользователя перед следующей фазой.
+  Найди в <каталоги слоя>:
+  1. hooks / утилиты / компоненты, закрывающие часть задачи;
+  2. уже реализованный аналогичный паттерн (часть сущности / модуль main / карта каналов) - путь-образец;
+  3. файлы, которые задача заденет.
 
-## Feature: <name>
+  Верни только пути + строка назначения. Пригодность не оценивай - это делает родитель. <= 250 слов.
+```
 
-### Phase 1: <title>
+Пригодность найденного решает родитель. Ничего не нашлось - тоже результат: обоснование "нового" в поле Reuse.
+
+**Запрет:** не читать файлы "на всякий случай". Каждое чтение отвечает на конкретный вопрос плана.
+
+---
+
+## Phase 3 - Фазы
+
+На каждую фазу:
+
+- **What** - deliverable, 1-2 предложения.
+- **Where** - точные пути (create | modify).
+- **How** - подход; применим существующий паттерн - сослаться на файл-образец.
+- **Reuse** - что из Phase 2 используется. "Новое" - обосновать: искал там-то, не нашёл, создаю под конкретную потребность. **Пустое поле запрещено.**
+- **Depends on** - какие фазы должны быть закрыты раньше.
+
+---
+
+## Phase 4 - Чек-лист
+
+Каждый пункт `[x]` / `[ ]` + короткое обоснование. Осталось хоть одно `[ ]` -> назад в Phase 3.
+
+```
+[ ] Reuse        - у каждой фазы поле заполнено, "новое" обосновано поиском
+[ ] Изоляция     - сценарий = одна часть сущности; связывание - через index.ts чужой сущности (kit получает данные и picker'ы пропсами), ядро чужих сущностей не импортирует
+[ ] Types        - main+renderer в shared/types/, общие для сущностей в src/lib/types/, типы сущности в entities/<e>/types.ts, не inline в компонентах
+[ ] IPC runtime  - новый канал не только объявлен, но и зарегистрирован в main через `kernel.module({ handlers })`
+[ ] Credentials  - если трогаются, то только через vault
+[ ] KISS         - нет фаз "на будущее", каждая несёт конкретную ценность
+[ ] Scope        - <= 5 фаз; больше - разбить на независимые shippable-планы, каждый со своим /planner
+```
+
+---
+
+## Phase 5 - Вывод
+
+План выдаётся ровно в таком виде - блок completion steps **первым, дословно**, без сокращений и без замены ссылкой на CLAUDE.md:
+
+````
+Completion steps (после каждой фазы)
+
+1. pnpm typecheck (затронуты и src/, и app/).
+2. pnpm lint
+3. pnpm test
+4. /isgood - adversarial review + fix-loop.
+5. /notes - лог версии и commit-сообщение (uncommitted mode).
+6. Отметить фазу [done] в docs/planned-now.md.
+7. STOP & WAIT - подтверждение перед следующей фазой.
+
+---
+
+## <Название задачи>
+
+### Phase 1: <заголовок>
 - **What:** ...
 - **Where:** `path/to/file.ts` (create | modify)
-- **How:** ... (при необходимости ссылка на образец: `src/features/<f>/...`)
-- **Reuse:** `useX` из `src/shared/lib/...`, `createSecureStorage` из `@cion-suite/core/storage`
-- **Depends on:** —
+- **How:** ... (образец: `src/shell/settings/SettingsPage.tsx`)
+- **Reuse:** `useX` - `src/lib/hooks/...`; `schema.nonEmpty` - `shared/schema.ts`
+- **Depends on:** -
 
-### Phase 2: <title>
+### Phase 2: <заголовок>
 - **What:** ...
 - **Where:** ...
 - **How:** ...
 - **Reuse:** ...
 - **Depends on:** Phase 1
 
-...
-
 ## Before merge
 
-Запустить `/ship` — pre-flight checklist (typecheck + lint + FSD audit + build).
+`/ship` - typecheck + lint + test + скан ветки + циклы импортов + build. Ревью в нём нет - это `/isgood` каждой фазы.
+````
+
+---
+
+## Phase 6 - Запись в `docs/planned-now.md` (только по согласию)
+
+Активный план один - запись перезаписывает предыдущий. Перед вопросом покажи, что теряется:
+
+```bash
+wc -l docs/planned-now.md; grep -ci 'done' docs/planned-now.md
 ```
 
----
-
-## Phase 6 — Persist (опционально, по согласию пользователя)
-
-После того как пользователь одобрил план:
-
-1. Спросить: «Записать план в `docs/planned_now.md`?»
-2. Если **да** — записать через `Write` (один активный план за раз — перезапись допустима).
-3. Если **нет** — план остаётся только в чате. Не записывать без явного согласия.
-
-Перезапись `docs/planned_now.md` всегда требует явного подтверждения, даже если предыдущий план уже завершён.
+Спроси прямо: "Записать план в `docs/planned-now.md`? Текущий будет перезаписан". Без явного "да" - план остаётся в чате, даже если предыдущий план завершён.
 
 ---
 
-## Waiting for approval
+## Гейт ожидания
 
-После Phase 5 вывести план и **остановиться**. Не переходить к реализации, пока пользователь не сказал «делай» (или эквивалент). Это жёсткий гейт — `CLAUDE.md STOP & ASK`.
+После Phase 5 выдать план и **остановиться**. К реализации не переходить, пока пользователь не сказал "делай".

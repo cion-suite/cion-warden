@@ -1,0 +1,462 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+const electron = vi.hoisted(() => ({
+    app: { isPackaged: true, getVersion: (): string => '1.0.0' },
+}));
+const autoUpdater = vi.hoisted(() => ({
+    on: vi.fn(),
+    setFeedURL: vi.fn(),
+    checkForUpdates: vi.fn(),
+    quitAndInstall: vi.fn(),
+    logger: null as unknown,
+    allowDowngrade: false,
+}));
+const events = vi.hoisted(() => ({ emit: vi.fn() }));
+const shellMock = vi.hoisted(() => ({ main: { shown: vi.fn() }, splash: { update: vi.fn() } }));
+const fsMock = vi.hoisted(() => ({ readFile: vi.fn() }));
+const pathsMock = vi.hoisted(() => ({ changelog: vi.fn((file: string) => `/versions/${file}`) }));
+const log = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }));
+const store = vi.hoisted(() => ({
+    beta: false,
+    unsubscribe: vi.fn(),
+    on: vi.fn(),
+}));
+
+vi.mock('electron', () => electron);
+vi.mock('node:fs/promises', () => fsMock);
+vi.mock('@app/utils/paths', () => ({ paths: pathsMock }));
+vi.mock('electron-updater', () => ({ default: { autoUpdater } }));
+vi.mock('@app/shell', () => ({ shell: shellMock }));
+vi.mock('@cion-suite/core', async (importOriginal) => {
+    const original = await importOriginal<typeof import('@cion-suite/core')>();
+    return {
+        ...original,
+        events,
+        logger: { ...original.logger, child: () => log },
+        settings: { ...original.settings, get: () => store.beta, on: store.on },
+    };
+});
+vi.mock('@shared/config', () => ({
+    CONFIG: { feeds: { latestUrl: 'https://latest.test/', betaUrl: 'https://beta.test/' } },
+}));
+
+const FIRST_CHECK_MS = 3_000;
+const HOUR_MS = 60 * 60 * 1000;
+
+let showMain: () => void;
+
+beforeEach(() => {
+    vi.resetModules();
+    vi.useFakeTimers();
+    electron.app.isPackaged = true;
+    electron.app.getVersion = () => '1.0.0';
+    fsMock.readFile.mockReset();
+    pathsMock.changelog.mockClear();
+    store.beta = false;
+    store.unsubscribe.mockReset();
+    store.on.mockReset().mockReturnValue(store.unsubscribe);
+    autoUpdater.on.mockReset();
+    autoUpdater.setFeedURL.mockReset();
+    autoUpdater.checkForUpdates.mockReset().mockResolvedValue(null);
+    autoUpdater.quitAndInstall.mockReset();
+    autoUpdater.logger = null;
+    autoUpdater.allowDowngrade = false;
+    events.emit.mockReset();
+    log.info.mockReset();
+    log.error.mockReset();
+    log.warn.mockReset();
+    shellMock.splash.update.mockReset();
+    shellMock.main.shown.mockReset().mockReturnValue(
+        new Promise<void>((resolve) => {
+            showMain = resolve;
+        }),
+    );
+});
+
+afterEach(() => {
+    vi.useRealTimers();
+});
+
+async function load() {
+    return import('@app/updater/updater');
+}
+
+describe('расписание проверок', () => {
+    it('до показа главного окна проверки нет, после - через 3 с и раз в час', async () => {
+        const { startUpdater } = await load();
+        startUpdater();
+
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS * 10);
+        expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+
+        showMain();
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS - 1);
+        expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+
+        await vi.advanceTimersByTimeAsync(1);
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(HOUR_MS);
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2);
+    });
+
+    it('start показывает статус на splash', async () => {
+        const { startUpdater } = await load();
+        startUpdater();
+
+        expect(shellMock.splash.update).toHaveBeenCalledWith({ progress: 70, status: 'Configuring updater' });
+    });
+
+    it('слушатели и логгер ставятся в start, фид - при проверке', async () => {
+        const { startUpdater } = await load();
+        startUpdater();
+
+        expect(autoUpdater.logger).toBe(log);
+        expect(autoUpdater.on).toHaveBeenCalledWith('update-downloaded', expect.any(Function));
+        expect(autoUpdater.setFeedURL).not.toHaveBeenCalled();
+
+        showMain();
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
+
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
+            provider: 'generic',
+            url: 'https://latest.test/',
+            channel: 'latest',
+        });
+        expect(autoUpdater.allowDowngrade).toBe(true);
+    });
+
+    it('сбой проверки пишется в лог и не рвёт расписание', async () => {
+        autoUpdater.checkForUpdates.mockRejectedValueOnce(new Error('сеть'));
+        const { startUpdater } = await load();
+        startUpdater();
+        showMain();
+
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
+        expect(log.error).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(HOUR_MS);
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2);
+    });
+
+    it('в dev-сборке проверка пропускается', async () => {
+        electron.app.isPackaged = false;
+        const { startUpdater } = await load();
+        startUpdater();
+        showMain();
+
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
+
+        expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+    });
+});
+
+describe('канал обновлений', () => {
+    it('флаг updaterBeta выбирает beta-фид без отката версии', async () => {
+        store.beta = true;
+        const { startUpdater } = await load();
+        startUpdater();
+        showMain();
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
+
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith({
+            provider: 'generic',
+            url: 'https://beta.test/',
+            channel: 'beta',
+        });
+        expect(autoUpdater.allowDowngrade).toBe(false);
+    });
+
+    it('смена флага проверяет новый фид сразу, не дожидаясь расписания', async () => {
+        const { startUpdater } = await load();
+        startUpdater();
+        expect(store.on).toHaveBeenCalledWith('updaterBeta', expect.any(Function));
+        const onChange = store.on.mock.calls[0][1] as () => void;
+
+        store.beta = true;
+        onChange();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(autoUpdater.setFeedURL).toHaveBeenCalledWith(expect.objectContaining({ channel: 'beta' }));
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('события electron-updater', () => {
+    async function listener(name: string): Promise<(...args: unknown[]) => void> {
+        const { startUpdater } = await load();
+        startUpdater();
+        const entry = autoUpdater.on.mock.calls.find(([event]) => event === name);
+        return entry![1] as (...args: unknown[]) => void;
+    }
+
+    it('error -> updater:failed с пояснённым текстом, без своего лога', async () => {
+        const onError = await listener('error');
+
+        onError(new Error("Error invoking remote method 'x:y': Error: сеть"));
+
+        expect(events.emit).toHaveBeenCalledWith('updater:failed', { message: 'сеть' });
+        expect(log.error).not.toHaveBeenCalled();
+    });
+
+    it('update-not-available -> updater:checked без нагрузки', async () => {
+        const onNotAvailable = await listener('update-not-available');
+
+        onNotAvailable();
+
+        expect(events.emit).toHaveBeenCalledWith('updater:checked');
+    });
+
+    it('update-available эмитит версию и заметки', async () => {
+        const onAvailable = await listener('update-available');
+        const info = { version: '3.1.0', releaseNotes: 'заметки', releaseName: null, releaseDate: '2026-01-01' };
+
+        onAvailable(info);
+
+        expect(events.emit).toHaveBeenCalledWith('updater:available', {
+            version: '3.1.0',
+            releaseNotes: 'заметки',
+            releaseName: undefined,
+            releaseDate: '2026-01-01',
+        });
+    });
+
+    it('releaseNotes не строкой (массив) отбрасываются', async () => {
+        const onDownloaded = await listener('update-downloaded');
+
+        onDownloaded({ version: '3.1.0', releaseNotes: [{ version: '3.1.0', note: 'x' }], releaseDate: '' });
+
+        expect(events.emit).toHaveBeenCalledWith(
+            'updater:downloaded',
+            expect.objectContaining({ version: '3.1.0', releaseNotes: undefined }),
+        );
+    });
+
+    it('download-progress пробрасывается как есть', async () => {
+        const onProgress = await listener('download-progress');
+        const progress = { percent: 40, bytesPerSecond: 100 };
+
+        onProgress(progress);
+
+        expect(events.emit).toHaveBeenCalledWith('updater:progress', progress);
+    });
+});
+
+describe('updater:refresh', () => {
+    it('проверяет фид текущего канала и ничего не возвращает', async () => {
+        const { updaterHandlers } = await load();
+
+        await expect(updaterHandlers['updater:refresh']()).resolves.toBeUndefined();
+
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
+    });
+
+    it('в dev ничего не проверяет', async () => {
+        electron.app.isPackaged = false;
+        const { updaterHandlers } = await load();
+
+        await expect(updaterHandlers['updater:refresh']()).resolves.toBeUndefined();
+
+        expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+    });
+
+    it('сбой проверки оборачивается, без своего лога', async () => {
+        autoUpdater.checkForUpdates.mockRejectedValue(new Error('сервер недоступен'));
+        const { updaterHandlers } = await load();
+
+        await expect(updaterHandlers['updater:refresh']()).rejects.toMatchObject({
+            message: 'Update check failed: сервер недоступен',
+        });
+        expect(log.error).not.toHaveBeenCalled();
+    });
+});
+
+describe('updater:refresh: лимит ручных проверок', () => {
+    const MIN_MS = 5 * 60 * 1000;
+
+    it('вторая проверка раньше 5 минут - rate_limited с секундами', async () => {
+        const { updaterHandlers } = await load();
+        await updaterHandlers['updater:refresh']();
+
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        await expect(updaterHandlers['updater:refresh']()).rejects.toMatchObject({
+            code: 'rate_limited',
+            message: 'Too many update checks, retry in 240 s',
+        });
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
+    });
+
+    it('через 5 минут проверка снова разрешена', async () => {
+        const { updaterHandlers } = await load();
+        await updaterHandlers['updater:refresh']();
+
+        await vi.advanceTimersByTimeAsync(MIN_MS);
+        await updaterHandlers['updater:refresh']();
+
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2);
+    });
+
+    it('пятая за час - отказ до истечения часа от первой', async () => {
+        const { updaterHandlers } = await load();
+        for (let i = 0; i < 4; i++) {
+            await updaterHandlers['updater:refresh']();
+            await vi.advanceTimersByTimeAsync(MIN_MS);
+        }
+
+        await expect(updaterHandlers['updater:refresh']()).rejects.toMatchObject({
+            code: 'rate_limited',
+            message: 'Too many update checks, retry in 2400 s',
+        });
+
+        await vi.advanceTimersByTimeAsync(2400 * 1000);
+        await updaterHandlers['updater:refresh']();
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(5);
+    });
+
+    it('отказ не продлевает окно и не зовёт проверку', async () => {
+        const { updaterHandlers } = await load();
+        await updaterHandlers['updater:refresh']();
+        await vi.advanceTimersByTimeAsync(MIN_MS - 1000);
+        await expect(updaterHandlers['updater:refresh']()).rejects.toMatchObject({ code: 'rate_limited' });
+
+        await vi.advanceTimersByTimeAsync(1000);
+        await updaterHandlers['updater:refresh']();
+
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(2);
+    });
+
+    it('плановая проверка и смена канала лимит не трогают', async () => {
+        const { startUpdater, updaterHandlers } = await load();
+        startUpdater();
+        showMain();
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
+        (store.on.mock.calls[0][1] as () => void)();
+        await vi.advanceTimersByTimeAsync(0);
+
+        await expect(updaterHandlers['updater:refresh']()).resolves.toBeUndefined();
+
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(3);
+    });
+});
+
+describe('после скачивания обновления', () => {
+    async function downloadedState() {
+        const loaded = await load();
+        loaded.startUpdater();
+        showMain();
+        const entry = autoUpdater.on.mock.calls.find(([event]) => event === 'update-downloaded');
+        (entry![1] as (info: unknown) => void)({ version: '3.1.0', releaseDate: '' });
+        autoUpdater.checkForUpdates.mockClear();
+        return loaded;
+    }
+
+    it('плановые проверки пропускаются', async () => {
+        await downloadedState();
+
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS + HOUR_MS * 2);
+
+        expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+    });
+
+    it('смена канала проверку не запускает', async () => {
+        await downloadedState();
+
+        (store.on.mock.calls[0][1] as () => void)();
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(autoUpdater.checkForUpdates).not.toHaveBeenCalled();
+    });
+
+    it('ручной updater:refresh работает', async () => {
+        const { updaterHandlers } = await downloadedState();
+
+        await updaterHandlers['updater:refresh']();
+
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('updater:install', () => {
+    it('зовёт quitAndInstall(true, true)', async () => {
+        const { updaterHandlers } = await load();
+
+        updaterHandlers['updater:install']();
+
+        expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+    });
+});
+
+describe('updater:changelog:get', () => {
+    it('релизная версия читает release.md', async () => {
+        fsMock.readFile.mockResolvedValue('### Версия v1.0.0');
+        const { updaterHandlers } = await load();
+
+        await expect(updaterHandlers['updater:changelog:get']()).resolves.toBe('### Версия v1.0.0');
+
+        expect(pathsMock.changelog).toHaveBeenCalledWith('release.md');
+        expect(fsMock.readFile).toHaveBeenCalledWith('/versions/release.md', 'utf8');
+    });
+
+    it('версия с суффиксом читает beta.md', async () => {
+        electron.app.getVersion = () => '1.1.0-beta.3';
+        fsMock.readFile.mockResolvedValue('');
+        const { updaterHandlers } = await load();
+
+        await expect(updaterHandlers['updater:changelog:get']()).resolves.toBe('');
+
+        expect(pathsMock.changelog).toHaveBeenCalledWith('beta.md');
+    });
+
+    it('файла нет -> null', async () => {
+        fsMock.readFile.mockRejectedValue(Object.assign(new Error('нет файла'), { code: 'ENOENT' }));
+        const { updaterHandlers } = await load();
+
+        await expect(updaterHandlers['updater:changelog:get']()).resolves.toBeNull();
+    });
+
+    it('прочая ошибка чтения оборачивается', async () => {
+        fsMock.readFile.mockRejectedValue(Object.assign(new Error('нет доступа'), { code: 'EACCES' }));
+        const { updaterHandlers } = await load();
+
+        await expect(updaterHandlers['updater:changelog:get']()).rejects.toMatchObject({
+            message: 'Не удалось прочитать лог версий: нет доступа',
+        });
+    });
+});
+
+describe('stopUpdater', () => {
+    it('снимает подписку на канал и расписание', async () => {
+        const { startUpdater, stopUpdater } = await load();
+        startUpdater();
+        showMain();
+        await vi.advanceTimersByTimeAsync(FIRST_CHECK_MS);
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
+
+        stopUpdater();
+        await vi.advanceTimersByTimeAsync(HOUR_MS * 3);
+
+        expect(store.unsubscribe).toHaveBeenCalledTimes(1);
+        expect(autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1);
+    });
+
+    it('без скачанного обновления quitAndInstall не зовёт', async () => {
+        const { startUpdater, stopUpdater } = await load();
+        startUpdater();
+
+        stopUpdater();
+
+        expect(autoUpdater.quitAndInstall).not.toHaveBeenCalled();
+    });
+
+    it('со скачанным ставит его при выходе', async () => {
+        const { startUpdater, stopUpdater } = await load();
+        startUpdater();
+        const entry = autoUpdater.on.mock.calls.find(([event]) => event === 'update-downloaded');
+        (entry![1] as (info: unknown) => void)({ version: '3.1.0', releaseDate: '' });
+
+        stopUpdater();
+
+        expect(autoUpdater.quitAndInstall).toHaveBeenCalledWith(true, true);
+    });
+});

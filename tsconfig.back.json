@@ -1,13 +1,26 @@
 {
-    "extends": "@cion-suite/config/tsconfig/back",
     "compilerOptions": {
-        "composite": true,
-        "outDir": "build/out-types/back",
-        "baseUrl": ".",
         "paths": {
-            "@app/*": ["app/*"],
-            "@shared/*": ["shared/*"]
-        }
+            "@app/*": ["./app/*"],
+            "@shared/*": ["./shared/*"]
+        },
+        "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.back.tsbuildinfo",
+        "target": "ES2022",
+        "lib": ["ES2022"],
+        "module": "ESNext",
+        "types": ["node"],
+        "skipLibCheck": true,
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
+        "verbatimModuleSyntax": true,
+        "moduleDetection": "force",
+        "noEmit": true,
+        "strict": true,
+        "noUnusedLocals": true,
+        "noUnusedParameters": true,
+        "erasableSyntaxOnly": true,
+        "noFallthroughCasesInSwitch": true,
+        "noUncheckedSideEffectImports": true
     },
-    "include": ["app/**/*", "shared/**/*"]
+    "include": ["app", "shared", "tests/app", "tests/shared", "tests/support"]
 }
