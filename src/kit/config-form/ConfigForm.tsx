@@ -1,10 +1,10 @@
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/shadcn/tabs';
+import { useT } from '@/lib/i18n';
 import { ConfigFieldRow } from './ConfigFieldRow';
-import type { ConfigFormProps } from './types';
+import { configValues } from './config-values';
+import type { ConfigFormProps, ConfigSectionsProps } from './types';
 
-/** Секции полей схемы; значения и сохранение - у вызывающего. */
-export function ConfigForm({ schema, values, onChange }: ConfigFormProps) {
-    const sections = schema.sections.filter((section) => section.fields.length > 0);
-
+function ConfigSections({ sections, values, onChange }: ConfigSectionsProps) {
     return (
         <div className="flex flex-col gap-5">
             {sections.map((section, index) => (
@@ -27,5 +27,31 @@ export function ConfigForm({ schema, values, onChange }: ConfigFormProps) {
                 </div>
             ))}
         </div>
+    );
+}
+
+/** Табы значений и биндов; одна группа пуста - без табов. */
+export function ConfigForm({ schema, values, onChange }: ConfigFormProps) {
+    const t = useT();
+    const split = configValues.split(schema);
+
+    if (split.values.length === 0 || split.binds.length === 0) {
+        const sections = split.values.length > 0 ? split.values : split.binds;
+        return <ConfigSections sections={sections} values={values} onChange={onChange} />;
+    }
+
+    return (
+        <Tabs defaultValue="values">
+            <TabsList>
+                <TabsTrigger value="values">{t('config.values')}</TabsTrigger>
+                <TabsTrigger value="binds">{t('config.binds')}</TabsTrigger>
+            </TabsList>
+            <TabsContent value="values">
+                <ConfigSections sections={split.values} values={values} onChange={onChange} />
+            </TabsContent>
+            <TabsContent value="binds">
+                <ConfigSections sections={split.binds} values={values} onChange={onChange} />
+            </TabsContent>
+        </Tabs>
     );
 }

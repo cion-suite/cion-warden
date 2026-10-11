@@ -47,6 +47,10 @@ export const en = {
                 language: 'Language',
             },
         },
+        config: {
+            values: 'Values',
+            binds: 'Binds',
+        },
         scripts: {
             title: 'Scripts',
             stopAll: 'Stop All',

@@ -47,6 +47,10 @@ export const ru = {
                 language: 'Язык',
             },
         },
+        config: {
+            values: 'Значения',
+            binds: 'Бинды',
+        },
         scripts: {
             title: 'Скрипты',
             stopAll: 'Остановить все',

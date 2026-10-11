@@ -1,9 +1,13 @@
-import type { ConfigField, ConfigSchema, ConfigValues } from '@shared/types';
+import type { ConfigField, ConfigSchema, ConfigSection, ConfigValues } from '@shared/types';
 
 export interface ConfigFormProps {
     schema: ConfigSchema;
     values: ConfigValues;
     onChange: (key: string, value: string | number) => void;
+}
+
+export interface ConfigSectionsProps extends Omit<ConfigFormProps, 'schema'> {
+    sections: ConfigSection[];
 }
 
 export interface ConfigFieldRowProps {

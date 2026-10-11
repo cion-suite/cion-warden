@@ -17,6 +17,32 @@ const schema: ConfigSchema = {
     ],
 };
 
+describe('configValues.split', () => {
+    it('hotkey - в binds, остальное - в values, заголовки сохраняются', () => {
+        const { values, binds } = configValues.split(schema);
+        expect(binds.map((s) => [s.title, s.fields.map((f) => f.key)])).toEqual([['Keys', ['keys_jump']]]);
+        expect(values.map((s) => [s.title, s.fields.map((f) => f.key)])).toEqual([
+            ['Keys', ['keys_name']],
+            ['', ['tune_speed']],
+        ]);
+    });
+
+    it('пустые секции выпадают', () => {
+        const { values, binds } = configValues.split(schema);
+        expect([...values, ...binds].some((s) => s.title === 'Empty')).toBe(false);
+    });
+
+    it('нет hotkey - binds пуст', () => {
+        const plain: ConfigSchema = { sections: [{ title: '', fields: [schema.sections[0].fields[1]] }] };
+        expect(configValues.split(plain).binds).toEqual([]);
+    });
+
+    it('только hotkey - values пуст', () => {
+        const keys: ConfigSchema = { sections: [{ title: '', fields: [schema.sections[0].fields[0]] }] };
+        expect(configValues.split(keys).values).toEqual([]);
+    });
+});
+
 describe('configValues.fields', () => {
     it('собирает поля всех секций, включая секцию без заголовка', () => {
         expect(configValues.fields(schema).map((f) => f.key)).toEqual(['keys_jump', 'keys_name', 'tune_speed']);

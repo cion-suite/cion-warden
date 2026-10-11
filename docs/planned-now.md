@@ -32,7 +32,7 @@ Completion steps (после каждой фазы)
 - **Reuse:** `src/ui/shadcn/input-group.tsx` (уже добавлен); `useSetNavbarSlot` - `src/lib/navbar`. Нового кода нет - только удаление.
 - **Depends on:** -
 
-### Phase 3: табы "Значения" / "Бинды" в форме конфига
+### Phase 3: табы "Значения" / "Бинды" в форме конфига [done]
 - **What:** `ConfigForm` показывает два таба (`Tabs`): "Значения" - поля не-`hotkey`, "Бинды" - поля `hotkey`; внутри таба заголовки `@Title` остаются подзаголовками. Одна группа пуста - табов нет, форма как сейчас. Действует и в диалоге макроса, и в форме пресета.
 - **Where:** `src/kit/config-form/ConfigForm.tsx` (modify); `src/kit/config-form/config-values.ts` (modify - член `split`); `tests/src/kit/config-form/config-values.test.ts` (modify); `src/lib/i18n/locales/{en,ru}.ts` (modify - ключи табов).
 - **How:** сначала `/shadcn`. `configValues.split(schema)` -> `{ values: ConfigSection[], binds: ConfigSection[] }`: секции фильтруются по `field.type === 'hotkey'`, пустые выпадают. Рендер секции - локальная функция в `ConfigForm.tsx`. `PresetForm` и `ScriptConfigDialog` не меняются.

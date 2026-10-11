@@ -1,6 +1,15 @@
-import type { ConfigField, ConfigSchema, ConfigValues } from '@shared/types';
+import type { ConfigField, ConfigSchema, ConfigSection, ConfigValues } from '@shared/types';
 
 export const configValues = {
+    /** Секции без пустых: поля не-hotkey и поля hotkey (бинды). */
+    split(schema: ConfigSchema): { values: ConfigSection[]; binds: ConfigSection[] } {
+        const pick = (bind: boolean) =>
+            schema.sections
+                .map((s) => ({ ...s, fields: s.fields.filter((f) => (f.type === 'hotkey') === bind) }))
+                .filter((s) => s.fields.length > 0);
+        return { values: pick(false), binds: pick(true) };
+    },
+
     fields(schema: ConfigSchema | null): ConfigField[] {
         return schema?.sections.flatMap((s) => s.fields) ?? [];
     },
