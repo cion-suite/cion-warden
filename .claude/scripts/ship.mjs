@@ -1,4 +1,4 @@
-// Pre-flight перед merge: typecheck, lint, тесты, скан ветки и циклы - параллельно; всё чисто -> сборка приложения.
+// Pre-flight перед merge: typecheck, lint, тесты, скан ветки и циклы - параллельно (lint и тесты - друг за другом); всё чисто -> сборка приложения.
 //   node .claude/scripts/ship.mjs [range] [--no-build]   - range: main...HEAD, на main - origin/main..HEAD
 // Stdout - таблица итогов и <=20 значимых строк на провал; полный вывод - .claude/cache/ship/*.log.
 // READY TO MERGE -> exit 0, кеш удалён. ISSUES FOUND -> exit 1, логи остаются.
@@ -95,26 +95,37 @@ const checks = [
         const name = cmd.match(/tsconfig\.(\w+)\.json/)?.[1] ?? cmd.match(/typecheck:(\S+)/)?.[1] ?? cmd.replace(/\W+/g, '-');
         return { name: `typecheck ${name}`, log: `typecheck-${name}`, cmd, parse: tsc };
     }),
-    { name: 'lint', log: 'lint', cmd: 'pnpm lint', parse: eslint },
-    { name: 'test', log: 'test', cmd: 'pnpm test', parse: vitest },
+    { name: 'lint', log: 'lint', cmd: 'pnpm lint', parse: eslint, tree: true },
+    { name: 'test', log: 'test', cmd: 'pnpm test', parse: vitest, tree: true },
     { name: 'скан', log: 'scan', cmd: `node .claude/scripts/diff-scan.mjs "${range}" --totals`, parse: scan },
     { name: 'циклы', log: 'cycles', cmd: `node .claude/scripts/graph.mjs cycles "${range}"`, parse: cycles },
 ];
 
 const out = cache.open('ship');
-const stage = list => Promise.all(list.map(async c => {
+const run = async c => {
     const r = await sh.run(c.cmd, out.path(`${c.log}.log`));
     return { ...c, r, ...c.parse(r, sh.text(r.log)) };
-}));
+};
+// lanes - параллельные цепочки, внутри цепочки по очереди. lint и тесты делят
+// src/: eslint-тест создаёт там пробные файлы, параллельный lint ловит ENOENT
+const stage = async lanes => {
+    const done = await Promise.all(lanes.map(async lane => {
+        const results = [];
+        for (const c of lane) results.push(await run(c));
+        return results;
+    }));
+    return done.flat();
+};
 
 const t0 = performance.now();
-const first = await stage(checks);
+const lanes = [...checks.filter(c => !c.tree).map(c => [c]), checks.filter(c => c.tree)];
+const first = (await stage(lanes)).sort((a, b) => checks.findIndex(c => c.name === a.name) - checks.findIndex(c => c.name === b.name));
 const blocked = first.some(x => x.block);
 // Сборка - после проверок: ошибки бандлинга (renderer-код
 // в main, пути ресурсов) typecheck и lint не видят
 const build = { name: 'build', log: 'build', cmd: 'pnpm build', parse: buildResult };
 const second = [];
-if (!blocked && !NO_BUILD) second.push((await stage([build]))[0]);
+if (!blocked && !NO_BUILD) second.push((await stage([[build]]))[0]);
 
 // -- вывод
 

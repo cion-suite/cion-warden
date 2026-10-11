@@ -12,7 +12,7 @@ node .claude/scripts/ship.mjs $ARGUMENTS
 
 Один вызов Bash с `timeout: 600000`. Аргументы: `[range] [--no-build]`; range по умолчанию `main...HEAD`, на `main` - `origin/main..HEAD`.
 
-Скрипт параллельно гонит `typecheck`, `lint`, `test`, `diff-scan --totals`, `graph cycles`; всё чисто - `build`. Полный вывод - `.claude/cache/ship/*.log`.
+Скрипт параллельно гонит `typecheck`, `lint`, `test`, `diff-scan --totals`, `graph cycles` (`lint` и `test` - друг за другом: eslint-тест пишет пробные файлы в `src/`); всё чисто - `build`. Полный вывод - `.claude/cache/ship/*.log`.
 
 ## Итог
 
