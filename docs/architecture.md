@@ -170,7 +170,7 @@ shared/                   # @shared/
 
 ### Оболочка, kit, ui, lib
 
-- `src/shell/`: `layout` (каркас, `useQuerySync`, `windows.ready()`), `navbar` (крошки, слот страницы, провайдер), `sidebar` (таблица разделов `sections.ts`: Scripts, Get Scripts, Libraries, Binds, Changelog, Settings), `command` (палитра), `settings` (карточки Appearance, Language, GitHub API, Updates), `update` (updater из шаблона, экран `changelog`).
+- `src/shell/`: `layout` (каркас, `useQuerySync`, `windows.ready()`), `navbar` (крошки, слот страницы, провайдер), `sidebar` (таблица разделов `sections.ts`: Scripts, Get Scripts, Libraries, Binds, Changelog, Settings), `settings` (карточки Appearance, Language, GitHub API, Updates), `update` (updater из шаблона, экран `changelog`).
 - `src/kit/catalog-actions` - действия над элементами каталога (install, remove, openFolder, sync с тостами и инвалидацией); `library` и `bind` отличаются только конфигом (каналы, префикс i18n, список инвалидаций).
 - `src/kit/config-form` - форма полей `ConfigSchema` (`ConfigForm`, `ConfigFieldRow`, `useConfigForm`, `configValues`): диалог конфига скрипта (`script/values`) и форма пресета (`bind/form`); схема, значения и сохранение приходят пропсами и хуком вызывающего, kit каналов не знает.
 - `src/ui/`: списки (`ListPanel`, `ListRow`), `ConfirmDialog`, `InfoTip`, `KeyBindInput`, `useNavbarSearch`, `useGithubToast`, `toast` и прочие generic-компоненты.

@@ -44,19 +44,7 @@ export const en = {
                 },
             },
             navbar: {
-                search: 'Search...',
                 language: 'Language',
-            },
-            palette: {
-                title: 'Command palette',
-                description: 'Go to a section or change a setting.',
-                placeholder: 'Type a command or search...',
-                empty: 'Nothing found.',
-                sections: 'Go to',
-                theme: 'Theme',
-                language: 'Language',
-                actions: 'Actions',
-                checkUpdates: 'Check for updates',
             },
         },
         scripts: {

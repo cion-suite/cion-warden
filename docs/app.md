@@ -556,7 +556,7 @@ updater:failed          { message }
 ```text
 src/
 |-- app/                     AppRouter, AppProvider, стили
-|-- shell/                   layout, navbar, sidebar, command, settings, update
+|-- shell/                   layout, navbar, sidebar, settings, update
 |-- entities/
 |   |-- source/   manage/ (SourcesButton, диалог), sync/ (useSourcesSync)
 |   |-- script/   list/ (ScriptsPage), catalog/ (GetScriptsPage), values/ (ScriptConfigDialog), deps/

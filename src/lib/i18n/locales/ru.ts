@@ -44,19 +44,7 @@ export const ru = {
                 },
             },
             navbar: {
-                search: 'Поиск...',
                 language: 'Язык',
-            },
-            palette: {
-                title: 'Палитра команд',
-                description: 'Перейдите в раздел или измените настройку.',
-                placeholder: 'Введите команду или поиск...',
-                empty: 'Ничего не найдено.',
-                sections: 'Перейти',
-                theme: 'Тема',
-                language: 'Язык',
-                actions: 'Действия',
-                checkUpdates: 'Проверить обновления',
             },
         },
         scripts: {

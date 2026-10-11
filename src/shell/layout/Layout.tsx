@@ -4,7 +4,6 @@ import { useStored, windows } from '@cion-suite/core/renderer';
 
 import { SidebarInset, SidebarProvider } from '@/ui/shadcn/sidebar';
 import { ErrorBoundary } from '@/ui/ErrorBoundary';
-import { CommandPalette, useCommandPalette } from '@/shell/command';
 import { AppSidebar } from '@/shell/sidebar';
 import { Navbar, NavbarProvider } from '@/shell/navbar';
 import { PostUpdateChangelogDialog, useAutoUpdaterCheck } from '@/shell/update';
@@ -13,7 +12,6 @@ import { state } from '@/lib/state';
 
 export function Layout() {
     const sidebarOpen = useStored(state, 'sidebarOpen');
-    const palette = useCommandPalette();
     useAutoUpdaterCheck();
     useQuerySync();
 
@@ -28,10 +26,9 @@ export function Layout() {
             <SidebarProvider open={sidebarOpen} onOpenChange={(open) => state.set('sidebarOpen', open)}>
                 <AppSidebar />
                 <PostUpdateChangelogDialog />
-                <CommandPalette open={palette.open} onOpenChange={palette.setOpen} />
                 {/* Страницы сами держат ширину и скролл списков */}
                 <SidebarInset className="h-svh overflow-hidden">
-                    <Navbar onSearch={() => palette.setOpen(true)} />
+                    <Navbar />
                     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto p-6">
                         <ErrorBoundary>
                             <Outlet />

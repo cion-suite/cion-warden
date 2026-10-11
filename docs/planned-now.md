@@ -25,7 +25,7 @@ Completion steps (после каждой фазы)
 - **Reuse:** `keyBind.button` / `keyBind.key` - `src/ui/key-bind.ts`; существующие capture-слушатели `KeyBindInput.tsx:35-72` (расширяются, не заменяются). Тест: окружение vitest - node без DOM, `tests/src/ui/key-bind.test.ts` уже покрывает чистую функцию; проверка - вручную в `pnpm dev` (L/M/R/X1/X2 поверх кнопки диалога и поверх самого поля; отпускание вне окна).
 - **Depends on:** -
 
-### Phase 2: убрать палитру команд и лупу, лупа - декорация поля поиска
+### Phase 2: убрать палитру команд и лупу, лупа - декорация поля поиска [done]
 - **What:** удалить `src/shell/command/` целиком (палитра, Ctrl+K) и кнопку-лупу в шапке; в поле поиска страниц - иконка `SearchIcon` слева как декорация.
 - **Where:** `src/shell/command/*` (delete); `src/shell/layout/Layout.tsx` (modify - убрать `useCommandPalette`, `CommandPalette`, проп `onSearch`); `src/shell/navbar/Navbar.tsx` (modify - убрать кнопку и проп `onSearch`, `MOD_KEY` локально); `src/ui/useNavbarSearch.tsx` (modify); `src/lib/i18n/locales/{en,ru}.ts` (modify - удалить `shell.palette.*`, `shell.navbar.search`); `docs/app.md`, `docs/architecture.md`, CLAUDE.md раздел 3 (`command` в списке оболочки) (modify).
 - **How:** сначала `/shadcn`. Поле: `InputGroup` + `InputGroupAddon` с `SearchIcon` + `InputGroupInput` (образец: `src/entities/source/manage/SourceFormFields.tsx:68-92`). После удаления - `node .claude/scripts/graph.mjs cycles` и Grep по `@/shell/command`. Осиротевшие `src/ui/shadcn/command.tsx` и зависимость `cmdk` (`package.json:57`) - удалить, если Grep не найдёт других потребителей (сейчас их нет).

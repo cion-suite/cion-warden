@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { PanelLeftCloseIcon, PanelLeftOpenIcon, SearchIcon } from 'lucide-react';
+import { PanelLeftCloseIcon, PanelLeftOpenIcon } from 'lucide-react';
 
 import {
     Breadcrumb,
@@ -16,11 +16,12 @@ import { Separator } from '@/ui/shadcn/separator';
 import { useSidebar } from '@/ui/shadcn/sidebar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/shadcn/tooltip';
 import { ThemeToggle } from '@/ui/theme';
-import { MOD_KEY } from '@/shell/command';
 import { SECTIONS } from '@/shell/sidebar';
 import { useT } from '@/lib/i18n';
 import { useNavbar } from '@/lib/navbar';
 import { LocaleMenu } from './LocaleMenu';
+
+const MOD_KEY = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl';
 
 function SidebarToggle() {
     const t = useT();
@@ -91,8 +92,7 @@ function PageBreadcrumb() {
     );
 }
 
-export function Navbar({ onSearch }: { onSearch: () => void }) {
-    const t = useT();
+export function Navbar() {
     const { slot } = useNavbar();
 
     return (
@@ -102,19 +102,6 @@ export function Navbar({ onSearch }: { onSearch: () => void }) {
             <PageBreadcrumb />
             <div className="ml-auto flex items-center gap-1">
                 {slot}
-                <Tooltip>
-                    <TooltipTrigger render={<Button variant="ghost" size="icon-sm" onClick={onSearch} />}>
-                        <SearchIcon />
-                        <span className="sr-only">{t('shell.navbar.search')}</span>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">
-                        {t('shell.navbar.search')}
-                        <KbdGroup>
-                            <Kbd>{MOD_KEY}</Kbd>
-                            <Kbd>K</Kbd>
-                        </KbdGroup>
-                    </TooltipContent>
-                </Tooltip>
                 <LocaleMenu />
                 <ThemeToggle />
             </div>
