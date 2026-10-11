@@ -17,10 +17,49 @@ interface KeyBindInputProps {
     className?: string
 }
 
+const TAIL_RELEASE_MS = 100;
+
+function swallow(e: Event) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+}
+
+// contextmenu и auxclick приходят после pointerup, click -
+// элементу под курсором: хвост гасим, пока не отпустят кнопку
+function swallowTail(button: number, onRelease: () => void): () => void {
+    const swallowed = ['mouseup', 'click', 'auxclick', 'contextmenu'] as const;
+    let timer: number | undefined;
+
+    const release = () => {
+        clearTimeout(timer);
+        for (const type of swallowed) window.removeEventListener(type, swallow, { capture: true });
+        window.removeEventListener('pointerup', onPointerUp, { capture: true });
+        window.removeEventListener('pointerdown', release, { capture: true });
+        window.removeEventListener('blur', release);
+        onRelease();
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+        swallow(e);
+        if (e.button === button) timer = window.setTimeout(release, TAIL_RELEASE_MS);
+    };
+
+    for (const type of swallowed) window.addEventListener(type, swallow, { capture: true });
+    window.addEventListener('pointerup', onPointerUp, { capture: true });
+    window.addEventListener('pointerdown', release, { capture: true });
+    window.addEventListener('blur', release);
+
+    return release;
+}
+
 export function KeyBindInput({ value, onChange, className }: KeyBindInputProps) {
     const inputRef = useRef<HTMLInputElement>(null);
+    const tailRef = useRef<(() => void) | null>(null);
     const [listening, setListening] = useState(false);
     const emit = useEffectEvent(onChange);
+
+    useEffect(() => () => tailRef.current?.(), []);
 
     useEffect(() => {
         if (!listening) return;
@@ -37,39 +76,25 @@ export function KeyBindInput({ value, onChange, className }: KeyBindInputProps) 
             commit(keyBind.key(e.key));
         };
 
-        // Перехват в capture: диалог остаётся открытым,
-        // а preventDefault гасит переход по XButton
+        // Capture: диалог остаётся открытым. Эффект снимется до
+        // pointerup - хвост нажатия гасит swallowTail
         const onPointerDown = (e: PointerEvent) => {
             if (e.pointerType !== 'mouse') return;
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
+            swallow(e);
             const key = keyBind.button(e.button);
-            if (key) commit(key);
-        };
-
-        const onPointerUp = (e: PointerEvent) => {
-            if (e.button === 3 || e.button === 4) {
-                e.preventDefault();
-                e.stopPropagation();
-            }
-        };
-
-        const onContextMenu = (e: MouseEvent) => {
-            e.preventDefault();
-            e.stopPropagation();
+            if (!key) return;
+            commit(key);
+            tailRef.current = swallowTail(e.button, () => {
+                tailRef.current = null;
+            });
         };
 
         window.addEventListener('keydown', onKeyDown, { capture: true });
         window.addEventListener('pointerdown', onPointerDown, { capture: true });
-        window.addEventListener('pointerup', onPointerUp, { capture: true });
-        window.addEventListener('contextmenu', onContextMenu, { capture: true });
 
         return () => {
             window.removeEventListener('keydown', onKeyDown, { capture: true });
             window.removeEventListener('pointerdown', onPointerDown, { capture: true });
-            window.removeEventListener('pointerup', onPointerUp, { capture: true });
-            window.removeEventListener('contextmenu', onContextMenu, { capture: true });
         };
     }, [listening]);
 
