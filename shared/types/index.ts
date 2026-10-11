@@ -13,5 +13,6 @@ export type {
     PresetFieldType,
     PresetValues,
 } from './binds';
+export type { ConfigField, ConfigFieldType, ConfigSchema, ConfigSection, ConfigValues } from './config';
 export type { GithubLimit, GithubLimitEntry, GithubLimitResource, GithubRepo, GithubRepoRef } from './github';
 export type { Font, FontInstall } from './fonts';
