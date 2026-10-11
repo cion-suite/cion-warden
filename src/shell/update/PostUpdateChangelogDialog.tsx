@@ -23,10 +23,7 @@ export function PostUpdateChangelogDialog() {
 
     return (
         <AlertDialog open={open}>
-            <AlertDialogContent
-                className="data-[size=default]:max-w-xl data-[size=default]:sm:max-w-xl"
-                onEscapeKeyDown={(event) => event.preventDefault()}
-            >
+            <AlertDialogContent className="data-[size=default]:max-w-xl data-[size=default]:sm:max-w-xl">
                 <AlertDialogHeader>
                     <AlertDialogMedia>
                         <SparklesIcon />

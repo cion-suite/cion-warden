@@ -1,18 +1,13 @@
-// sonner и лог подменены: читаем ушедший тост, а не рендерим
+// Менеджер тостов и лог подменены: читаем ушедший тост
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const sonner = vi.hoisted(() => ({
-    success: vi.fn(),
-    error: vi.fn(),
-    info: vi.fn(),
-    warning: vi.fn(),
-    loading: vi.fn(),
-    dismiss: vi.fn(),
+const manager = vi.hoisted(() => ({
+    add: vi.fn((options: { id?: string; type?: string; title?: unknown }) => options.id ?? 'generated'),
+    close: vi.fn(),
 }));
 const logError = vi.hoisted(() => vi.fn());
 
-vi.mock('sonner', () => ({ toast: sonner }));
-vi.mock('@/ui/shadcn/sonner', () => ({ Toaster: () => null }));
+vi.mock('@/ui/shadcn/toast', () => ({ toast: manager, Toaster: () => null }));
 vi.mock('@cion-suite/core/renderer', async (importOriginal) => ({
     ...(await importOriginal<typeof import('@cion-suite/core/renderer')>()),
     logger: { error: logError },
@@ -23,13 +18,11 @@ import { toast } from '@/ui/toast';
 
 const reject = (message: string) => Promise.reject(new Error(message));
 
-const shown = () =>
-    (['success', 'error', 'info', 'warning', 'loading'] as const).flatMap((kind) =>
-        sonner[kind].mock.calls.map(([title]) => `${kind}: ${title}`),
-    );
+const shown = () => manager.add.mock.calls.map(([{ type, title }]) => `${type}: ${title}`);
 
 beforeEach(() => {
-    Object.values(sonner).forEach((fn) => fn.mockClear());
+    manager.add.mockClear();
+    manager.close.mockClear();
     logError.mockClear();
 });
 
@@ -106,13 +99,38 @@ describe('toast.error', () => {
         expect(logError).toHaveBeenCalledTimes(1);
     });
 
-    it('id и прочие опции уходят в sonner, cause - нет', () => {
-        toast.error('Не удалось подключиться', { id: 'loading-1', duration: Infinity, cause: new Error('x') });
+    it('id и прочие опции уходят в менеджер, cause - нет', () => {
+        const onClick = vi.fn();
+        toast.error('Не удалось подключиться', {
+            id: 'loading-1',
+            duration: Infinity,
+            action: { label: 'Повторить', onClick },
+            cause: new Error('x'),
+        });
 
-        const [title, options] = sonner.error.mock.calls[0];
-        expect(title).toBe('Не удалось подключиться: x');
-        expect(options).toMatchObject({ id: 'loading-1', duration: Infinity });
+        const [options] = manager.add.mock.calls[0];
+        expect(options).toMatchObject({
+            id: 'loading-1',
+            type: 'error',
+            title: 'Не удалось подключиться: x',
+            timeout: 0,
+            actionProps: { children: 'Повторить', onClick },
+        });
         expect(options).not.toHaveProperty('cause');
+    });
+
+    it('duration уходит в timeout как есть', () => {
+        toast.info('Привет', { duration: 1500 });
+
+        expect(manager.add.mock.calls[0][0]).toMatchObject({ timeout: 1500 });
+    });
+});
+
+describe('toast.close', () => {
+    it('закрывает тост по id через менеджер', () => {
+        toast.close('job');
+
+        expect(manager.close).toHaveBeenCalledWith('job');
     });
 });
 
@@ -129,6 +147,6 @@ describe('toast: дедупликация', () => {
         toast.success('Готово', { id });
 
         expect(id).toBe('job');
-        expect(sonner.success).toHaveBeenCalledWith('Готово', expect.objectContaining({ id: 'job' }));
+        expect(manager.add).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'job', type: 'success', title: 'Готово' }));
     });
 });

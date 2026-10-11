@@ -49,19 +49,21 @@ export function BindCard({ bind, busy, onOpen, onInstall, onDelete, onOpenFolder
                                     if (!open) suppressClickRef.current = true;
                                 }}
                             >
-                                <DropdownMenuTrigger asChild>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon-sm"
-                                        onClick={(e) => e.stopPropagation()}
-                                        title={bind.hasUpdate ? t('binds.update') : undefined}
-                                        className="relative"
-                                    >
-                                        <MoreHorizontalIcon />
-                                        {bind.hasUpdate && (
-                                            <span className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-destructive" />
-                                        )}
-                                    </Button>
+                                <DropdownMenuTrigger
+                                    render={
+                                        <Button
+                                            variant="ghost"
+                                            size="icon-sm"
+                                            onClick={(e) => e.stopPropagation()}
+                                            title={bind.hasUpdate ? t('binds.update') : undefined}
+                                            className="relative"
+                                        />
+                                    }
+                                >
+                                    <MoreHorizontalIcon />
+                                    {bind.hasUpdate && (
+                                        <span className="absolute right-0.5 top-0.5 size-1.5 rounded-full bg-destructive" />
+                                    )}
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                                     {bind.hasUpdate && (

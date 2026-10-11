@@ -10,7 +10,7 @@ export function AppearanceCard() {
     const t = useT();
     const theme = useSetting('theme');
 
-    const select = (value: string) => {
+    const select = (value: string | undefined) => {
         const next = THEME_OPTIONS.find((option) => option.value === value);
         if (next) void settings.set('theme', next.value);
     };
@@ -29,13 +29,12 @@ export function AppearanceCard() {
                             <FieldDescription>{t('settings.appearance.theme.description')}</FieldDescription>
                         </FieldContent>
                         <ToggleGroup
-                            type="single"
                             variant="outline"
                             size="sm"
                             spacing={0}
                             aria-labelledby="settings-theme"
-                            value={theme}
-                            onValueChange={select}
+                            value={[theme]}
+                            onValueChange={([value]) => select(value)}
                         >
                             {THEME_OPTIONS.map(({ value, icon: Icon }) => (
                                 <ToggleGroupItem key={value} value={value}>

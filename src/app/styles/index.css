@@ -178,3 +178,8 @@
     cursor: pointer;
     }
 }
+
+/* Диалоги (z-50) иначе перекрыли бы тосты из модалок. */
+[data-slot="toast-viewport"] {
+  z-index: 100;
+}

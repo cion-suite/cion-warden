@@ -37,7 +37,7 @@ export function KeyBindInput({ value, onChange, className }: KeyBindInputProps) 
             commit(keyBind.key(e.key));
         };
 
-        // Перехват в capture: диалог Radix остаётся открытым,
+        // Перехват в capture: диалог остаётся открытым,
         // а preventDefault гасит переход по XButton
         const onPointerDown = (e: PointerEvent) => {
             if (e.pointerType !== 'mouse') return;
@@ -86,27 +86,29 @@ export function KeyBindInput({ value, onChange, className }: KeyBindInputProps) 
 
     return (
         <ContextMenu>
-            <ContextMenuTrigger asChild>
-                <Input
-                    ref={inputRef}
-                    value={listening ? '[-]' : value}
-                    readOnly
-                    placeholder="—"
-                    onPointerDown={handlePointerDown}
-                    onBlur={() => setListening(false)}
-                    className={cn(
-                        'h-8 w-27 cursor-pointer text-center font-mono text-sm',
-                        listening && 'border-destructive text-destructive focus-visible:ring-destructive/30',
-                        className,
-                    )}
-                />
-            </ContextMenuTrigger>
+            <ContextMenuTrigger
+                render={
+                    <Input
+                        ref={inputRef}
+                        value={listening ? '[-]' : value}
+                        readOnly
+                        placeholder="—"
+                        onPointerDown={handlePointerDown}
+                        onBlur={() => setListening(false)}
+                        className={cn(
+                            'h-8 w-27 cursor-pointer text-center font-mono text-sm',
+                            listening && 'border-destructive text-destructive focus-visible:ring-destructive/30',
+                            className,
+                        )}
+                    />
+                }
+            />
             <ContextMenuContent>
-                <ContextMenuItem onSelect={() => choose('Escape')}>
+                <ContextMenuItem onClick={() => choose('Escape')}>
                     <KeyboardIcon data-icon="inline-start" />
                     Bind &quot;Escape&quot;
                 </ContextMenuItem>
-                <ContextMenuItem onSelect={() => choose('')}>
+                <ContextMenuItem onClick={() => choose('')}>
                     <EraserIcon data-icon="inline-start" />
                     Remove bind
                 </ContextMenuItem>

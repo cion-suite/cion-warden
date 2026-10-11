@@ -25,14 +25,12 @@ function SectionMenu({ group }: { group: SectionGroup }) {
             {SECTIONS.filter((section) => section.group === group).map((section) => (
                 <SidebarMenuItem key={section.path}>
                     <SidebarMenuButton
-                        asChild
+                        render={<Link to={section.path} />}
                         isActive={pathname === section.path}
                         tooltip={t(section.i18nKey)}
                     >
-                        <Link to={section.path}>
-                            <section.icon />
-                            <span>{t(section.i18nKey)}</span>
-                        </Link>
+                        <section.icon />
+                        <span>{t(section.i18nKey)}</span>
                     </SidebarMenuButton>
                 </SidebarMenuItem>
             ))}

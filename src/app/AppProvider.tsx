@@ -22,7 +22,7 @@ export const AppProvider = ({ children }: { children: ReactNode }) => (
             <TooltipProvider>
                 <HashRouter>
                     {children}
-                    <Toaster position="bottom-right" richColors />
+                    <Toaster />
                 </HashRouter>
             </TooltipProvider>
         </QueryClientProvider>

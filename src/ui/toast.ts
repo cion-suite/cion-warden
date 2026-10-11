@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import { errors, logger } from '@cion-suite/core/renderer';
-import { toast as sonner, type ExternalToast } from 'sonner';
+import { toast as manager } from '@/ui/shadcn/toast';
 
-export { Toaster } from '@/ui/shadcn/sonner';
+export { Toaster } from '@/ui/shadcn/toast';
 
 type ToastKind = 'success' | 'error' | 'info' | 'warning' | 'loading';
 
@@ -27,12 +27,16 @@ const dedupId = (kind: ToastKind, title: ReactNode) =>
     `${kind}::${typeof title === 'string' ? title : JSON.stringify(title)}`;
 
 const emit =
-    (kind: ToastKind) =>
-    (title: ReactNode, { id, ...options }: ToastOptions = {}): string => {
-        const toastId = id ?? dedupId(kind, title);
-        sonner[kind](title, { ...options, id: toastId } satisfies ExternalToast);
-        return toastId;
-    };
+    (type: ToastKind) =>
+    (title: ReactNode, { id, description, duration, action }: ToastOptions = {}): string =>
+        manager.add({
+            id: id ?? dedupId(type, title),
+            type,
+            title,
+            description,
+            timeout: duration === Infinity ? 0 : duration,
+            actionProps: action && { children: action.label, onClick: action.onClick },
+        });
 
 const showError = emit('error');
 
@@ -76,7 +80,8 @@ export const toast = {
     error,
     warning: emit('warning'),
     info: emit('info'),
+    // Без timeout: Base UI не заводит таймер для 'loading'.
     loading: emit('loading'),
-    close: (id?: string) => void sonner.dismiss(id),
+    close: manager.close,
     result,
 };

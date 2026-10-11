@@ -9,7 +9,7 @@ export function LanguageCard() {
     const t = useT();
     const locale = useSetting('locale');
 
-    const select = (value: string) => {
+    const select = (value: string | null) => {
         const next = SUPPORTED_LOCALES.find((code) => code === value);
         if (next) void settings.set('locale', next);
     };
@@ -24,7 +24,11 @@ export function LanguageCard() {
                 <FieldGroup>
                     <Field orientation="responsive">
                         <FieldLabel htmlFor="settings-locale">{t('settings.language.label')}</FieldLabel>
-                        <Select value={locale} onValueChange={select}>
+                        <Select
+                            value={locale}
+                            onValueChange={select}
+                            items={SUPPORTED_LOCALES.map((code) => ({ value: code, label: t(`locale.name.${code}`) }))}
+                        >
                             <SelectTrigger id="settings-locale" className="w-full @md/field-group:w-44">
                                 <SelectValue />
                             </SelectTrigger>

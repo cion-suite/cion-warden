@@ -35,10 +35,8 @@ export function LibraryRow({ lib, busy, onInstall, onRemove, onOpenFolder, onOpe
 
                 {lib.isDownloaded && (
                     <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon-sm">
-                                <MoreHorizontalIcon />
-                            </Button>
+                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+                            <MoreHorizontalIcon />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                             <DropdownMenuGroup>

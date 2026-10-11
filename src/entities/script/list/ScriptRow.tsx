@@ -65,10 +65,8 @@ export function ScriptRow({ script, onRun, checking }: ScriptRowProps) {
         <>
             <ListRow title={script.name} subtitle={subtitle} active={running} actionsClassName="gap-1">
                 <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-sm">
-                            <MoreHorizontalIcon />
-                        </Button>
+                    <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+                        <MoreHorizontalIcon />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                         <DropdownMenuGroup>

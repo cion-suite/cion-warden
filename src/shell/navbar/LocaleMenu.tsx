@@ -19,11 +19,9 @@ export function LocaleMenu() {
 
     return (
         <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon-sm">
-                    <LanguagesIcon />
-                    <span className="sr-only">{t('locale.toggle')}</span>
-                </Button>
+            <DropdownMenuTrigger render={<Button variant="ghost" size="icon-sm" />}>
+                <LanguagesIcon />
+                <span className="sr-only">{t('locale.toggle')}</span>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
                 <DropdownMenuGroup>

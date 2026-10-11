@@ -41,11 +41,9 @@ function SidebarToggle() {
 
     return (
         <Tooltip>
-            <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon-sm" onClick={toggleSidebar}>
-                    <Icon />
-                    <span className="sr-only">{t('nav.toggleSidebar')}</span>
-                </Button>
+            <TooltipTrigger render={<Button variant="ghost" size="icon-sm" onClick={toggleSidebar} />}>
+                <Icon />
+                <span className="sr-only">{t('nav.toggleSidebar')}</span>
             </TooltipTrigger>
             <TooltipContent side="bottom">
                 {t('nav.toggleSidebar')}
@@ -70,10 +68,11 @@ function PageBreadcrumb() {
             <BreadcrumbList className="flex-nowrap">
                 <BreadcrumbItem className="min-w-0">
                     {crumb?.onBack ? (
-                        <BreadcrumbLink asChild className="cursor-pointer truncate">
-                            <button type="button" onClick={crumb.onBack}>
-                                {title}
-                            </button>
+                        <BreadcrumbLink
+                            render={<button type="button" onClick={crumb.onBack} />}
+                            className="cursor-pointer truncate"
+                        >
+                            {title}
                         </BreadcrumbLink>
                     ) : (
                         <BreadcrumbPage className="truncate">{title}</BreadcrumbPage>
@@ -104,11 +103,9 @@ export function Navbar({ onSearch }: { onSearch: () => void }) {
             <div className="ml-auto flex items-center gap-1">
                 {slot}
                 <Tooltip>
-                    <TooltipTrigger asChild>
-                        <Button variant="ghost" size="icon-sm" onClick={onSearch}>
-                            <SearchIcon />
-                            <span className="sr-only">{t('shell.navbar.search')}</span>
-                        </Button>
+                    <TooltipTrigger render={<Button variant="ghost" size="icon-sm" onClick={onSearch} />}>
+                        <SearchIcon />
+                        <span className="sr-only">{t('shell.navbar.search')}</span>
                     </TooltipTrigger>
                     <TooltipContent side="bottom">
                         {t('shell.navbar.search')}

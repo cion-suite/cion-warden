@@ -37,7 +37,10 @@ export function GithubLimitRow({ entry }: GithubLimitRowProps) {
             </div>
             <Progress
                 value={pct}
-                className={cn('h-2', lowRemaining && '[&>[data-slot=progress-indicator]]:bg-destructive')}
+                className={cn(
+                    '[&_[data-slot=progress-track]]:h-2',
+                    lowRemaining && '[&_[data-slot=progress-indicator]]:bg-destructive',
+                )}
             />
             <p className="text-xs text-muted-foreground">
                 {t('settings.github.remainingResets', {
