@@ -200,7 +200,7 @@ Warden ждёт v2: `cfg/<имя>.json`, JSON-пресеты, `*.values.json`. `
   - механизма версий в коде нет (искал в `app/catalog`, `app/libs`, `app/binds`): `.local-cache.json` хранит sha содержимого, не версию из репо.
 - **Depends on:** Phase 2
 
-### Phase 4: Значения пресетов в .ahk, `catalog.config`
+### Phase 4: Значения пресетов в .ahk, `catalog.config` [done]
 - **What:**
   - правка пресета пишет значение прямо в `presets/<файл>.ahk`;
   - обновление пресета переносит значения пользователя в новый файл;
@@ -253,7 +253,7 @@ Warden ждёт v2: `cfg/<имя>.json`, JSON-пресеты, `*.values.json`. `
     - `tests/shared/schema.test.ts`.
 - **How:**
   - `catalog.config` живёт в `catalog`: это предок `binds` и `scripts` в `modules`, граф идёт только вниз.
-  - `ahk.merge` = `ahk.patch(новый, значения полей parse(старый))`: логика переноса одна, у `catalog.config` и у `ahk` нет второй копии.
+  - `ahk.merge` = `ahk.patch(новый, значения полей parse(старый))`: логика переноса одна, у `catalog.config` и у `ahk` нет второй копии. Исключение: поля `:=` с выражением без кавычек (`false`, `A_ScreenWidth`) не переносятся, остаётся значение нового файла: `patch` записал бы их строкой и сломал смысл.
   - Версию пресета пишет вызывающий (`binds`), после `config.install`: `config` версий не знает.
 - **Reuse:**
   - `ahk.parse`, `ahk.patch`;

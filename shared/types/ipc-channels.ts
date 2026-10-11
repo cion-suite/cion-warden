@@ -5,7 +5,8 @@ import type { Script, ScriptCfgValues } from './scripts';
 import type { ScriptDeps } from './script-deps';
 import type { CatalogScript, SourceSync } from './catalog';
 import type { Lib, LibSync } from './libs';
-import type { Bind, BindSync, PresetSchema, PresetValues } from './binds';
+import type { Bind, BindSync } from './binds';
+import type { ConfigSchema, ConfigValues } from './config';
 import type { GithubLimit, GithubRepo } from './github';
 import type { Font, FontInstall } from './fonts';
 
@@ -50,10 +51,8 @@ declare module '@cion-suite/core' {
         'binds:sync': { args: [sourceId?: string]; return: BindSync };
         'binds:delete': { args: [sourceId: string, presetId: string]; return: void };
         'binds:folder:open': { args: [sourceId: string, presetId: string]; return: void };
-        'binds:schema:get': { args: [sourceId: string, presetId: string]; return: PresetSchema | null };
-        'binds:values:get': { args: [sourceId: string, presetId: string]; return: PresetValues };
-        'binds:values:save': { args: [sourceId: string, presetId: string, values: PresetValues]; return: void };
-        'binds:values:reset': { args: [sourceId: string, presetId: string]; return: void };
+        'binds:schema:get': { args: [sourceId: string, presetId: string]; return: ConfigSchema | null };
+        'binds:values:save': { args: [sourceId: string, presetId: string, values: ConfigValues]; return: void };
 
         // -- Scripts (локальные) --
         'scripts:list': { args: []; return: Script[] };

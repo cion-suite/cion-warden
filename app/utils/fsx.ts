@@ -43,14 +43,18 @@ function isTemp(name: string): boolean {
     return name.endsWith('.tmp');
 }
 
-async function read<T>(file: string): Promise<T | undefined> {
-    let raw: string;
+async function readText(file: string): Promise<string | undefined> {
     try {
-        raw = await fs.readFile(file, 'utf-8');
+        return await fs.readFile(file, 'utf-8');
     } catch (e) {
         if (isMissing(e)) return undefined;
         throw errors.fail('failed', `Cannot read ${path.basename(file)}`, { cause: e });
     }
+}
+
+async function read<T>(file: string): Promise<T | undefined> {
+    const raw = await readText(file);
+    if (raw === undefined) return undefined;
     try {
         return JSON.parse(raw) as T;
     } catch (e) {
@@ -78,6 +82,10 @@ export const fsx = {
             .update(`blob ${content.length}\0`)
             .update(content)
             .digest('hex');
+    },
+    text: {
+        /** undefined - нет файла; прочие сбои - failed. */
+        read: readText,
     },
     json: {
         /** undefined - нет файла; битый JSON - validation. */

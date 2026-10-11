@@ -4,15 +4,7 @@ export type { Script, ScriptCfgFile, ScriptCfgValues, ScriptStatus, HkEntry, Val
 export type { ScriptDeps, MissingItem, MissingLib, MissingPreset } from './script-deps';
 export type { CatalogScript, SourceSync } from './catalog';
 export type { Lib, LibFile, LibKind, LibSync } from './libs';
-export type {
-    Bind,
-    BindSync,
-    PresetSchema,
-    PresetSection,
-    PresetField,
-    PresetFieldType,
-    PresetValues,
-} from './binds';
+export type { Bind, BindSync } from './binds';
 export type { ConfigField, ConfigFieldType, ConfigSchema, ConfigSection, ConfigValues } from './config';
 export type { GithubLimit, GithubLimitEntry, GithubLimitResource, GithubRepo, GithubRepoRef } from './github';
 export type { Font, FontInstall } from './fonts';

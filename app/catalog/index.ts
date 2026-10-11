@@ -1,3 +1,4 @@
+import { config } from '@app/catalog/config';
 import { manifest } from '@app/catalog/manifest';
 import { metas } from '@app/catalog/metas';
 import { versions } from '@app/catalog/versions';
@@ -13,4 +14,5 @@ export const catalog = {
     font: manifest.font,
     metas,
     versions,
+    config,
 };

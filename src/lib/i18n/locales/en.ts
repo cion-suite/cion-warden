@@ -130,7 +130,6 @@ export const en = {
             deleted: '"{{name}}" deleted',
             bulkDone: '{{ok}} presets downloaded',
             bulkDoneWithFails: '{{ok}} downloaded, {{failed}} failed',
-            reset: 'Reset',
             save: 'Save',
             saved: 'Saved',
             schemaEmpty: 'Preset has no fields.',

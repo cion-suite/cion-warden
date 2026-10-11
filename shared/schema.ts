@@ -5,13 +5,10 @@ import { cmd } from './cmd';
 
 const primitive = z.union([z.string(), z.number(), z.boolean()]);
 
-// Ключ пресета: section.field, без имён прототипа
+// Ключ поля - имя переменной AHK, без имён прототипа
 const PROTO_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
 
-function isPresetKey(key: string): boolean {
-    const parts = key.split('.');
-    return parts.length >= 2 && parts.every(part => part !== '' && !PROTO_KEYS.has(part));
-}
+const isVariable = (key: string): boolean => /^[\p{L}_][\p{L}\p{N}_]*$/u.test(key) && !PROTO_KEYS.has(key.toLowerCase());
 
 /** Схемы аргументов каналов; пустая строка - отказ. */
 export const schema = {
@@ -40,9 +37,6 @@ export const schema = {
             val: z.record(z.string(), primitive),
         }),
     },
-    preset: {
-        values: z.record(z.string().refine(isPresetKey), primitive),
-    },
     file: {
         // Один сегмент пути из manifest, без метасимволов
         name: z.string().min(1).refine(name => name !== '.' && name !== '..' && !/[\\/]/.test(name) && cmd.allows(name)),
@@ -50,5 +44,10 @@ export const schema = {
     config: {
         // Без .json values.json совпал бы с cfg и затёр его
         path: z.string().min(1).endsWith('.json'),
+        // Значение - одна строка файла
+        values: z.record(
+            z.string().refine(isVariable),
+            z.union([z.number(), z.string().refine(text => !/[\r\n]/.test(text))]),
+        ),
     },
 };

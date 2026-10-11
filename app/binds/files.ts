@@ -1,34 +1,25 @@
 import fs from 'node:fs/promises';
-import path from 'node:path';
 import { errors, events, logger } from '@cion-suite/core';
 import { catalog } from '@app/catalog';
 import { fanout } from '@app/catalog/fanout';
-import type { ManifestPresetEntry } from '@app/catalog/types';
+import type { ConfigRef, ManifestPresetEntry } from '@app/catalog/types';
 import { github } from '@app/github';
-import { preset } from '@app/binds/preset';
 import { store, type SourceRecord } from '@app/sources/store';
 import { fsx } from '@app/utils/fsx';
-import { paths } from '@app/utils/paths';
-import type { BindSync, PresetSchema, PresetValues } from '@shared/types';
+import type { BindSync, ConfigSchema, ConfigValues } from '@shared/types';
 
 const log = logger.child('Binds');
 
-/** Пресет manifest и два его локальных файла: схема и значения. */
+/** Пресет manifest и его рабочий файл: путь от корня источника. */
 interface Located {
     source: SourceRecord;
-    entry: ManifestPresetEntry;
-    schemaPath: string;
-    valuesPath: string;
+    ref: ConfigRef;
+    file: string;
 }
 
 function locate(source: SourceRecord, entry: ManifestPresetEntry): Located {
-    const root = paths.source(source.id).presets;
-    return {
-        source,
-        entry,
-        schemaPath: fsx.confine(root, path.join(root, entry.fileName)),
-        valuesPath: fsx.confine(root, path.join(root, `${catalog.stem(entry.fileName)}.values.json`)),
-    };
+    const ref = { sourceId: source.id, path: `${catalog.dir.presets}/${entry.fileName}` };
+    return { source, ref, file: catalog.config.path(ref) };
 }
 
 // Нет пресета в manifest - not_found
@@ -47,10 +38,11 @@ async function findOrNull(sourceId: string, presetId: string): Promise<Located |
     return entry ? locate(source, entry) : null;
 }
 
-async function download({ source, entry, schemaPath }: Located): Promise<void> {
-    const content = await github.file(source, `${catalog.dir.presets}/${entry.fileName}`);
-    await fsx.write(schemaPath, content);
-    await catalog.versions.record(source.id, { [`${catalog.dir.presets}/${entry.fileName}`]: fsx.sha(content) });
+// Версия - sha скачанных байт, не результат переноса значений
+async function download({ source, ref }: Located): Promise<void> {
+    const content = await github.file(source, ref.path);
+    await catalog.config.install(ref, content);
+    await catalog.versions.record(source.id, { [ref.path]: fsx.sha(content) });
 }
 
 async function syncSource(source: SourceRecord): Promise<BindSync> {
@@ -74,7 +66,7 @@ async function syncSource(source: SourceRecord): Promise<BindSync> {
     return result;
 }
 
-/** Пресеты и их значения: global_vault/<источник>/presets. */
+/** Пресеты: значения лежат прямо в рабочем .ahk. */
 export const binds = {
     async install(sourceId: string, presetId: string): Promise<void> {
         await download(await find(sourceId, presetId));
@@ -89,54 +81,31 @@ export const binds = {
         }, log, 'Presets');
     },
 
-    // Значения лежат рядом со схемой и уходят вместе с ней
+    // Старый .values.json не трогаем: его никто не читает
     async remove(sourceId: string, presetId: string): Promise<void> {
-        const { schemaPath, valuesPath } = await find(sourceId, presetId);
-        await fs.rm(schemaPath, { force: true });
-        await fs.rm(valuesPath, { force: true });
+        const { file } = await find(sourceId, presetId);
+        await fs.rm(file, { force: true });
         events.emit('bind:changed', { sourceId, presetId });
     },
 
-    /** Путь схемы на диске; не скачана - not_found. */
+    /** Путь рабочего файла; не скачан - not_found. */
     async local(sourceId: string, presetId: string): Promise<string> {
-        const { schemaPath } = await find(sourceId, presetId);
-        if (!await fsx.exists(schemaPath)) throw errors.fail('not_found', `Preset is not downloaded: ${presetId}`);
-        return schemaPath;
+        const { file } = await find(sourceId, presetId);
+        if (!await fsx.exists(file)) throw errors.fail('not_found', `Preset is not downloaded: ${presetId}`);
+        return file;
     },
 
-    /** Схема скачанного файла; нет manifest, пресета, файла - null. */
-    async schema(sourceId: string, presetId: string): Promise<PresetSchema | null> {
+    /** Схема со значениями; нет manifest, пресета, файла - null. */
+    async schema(sourceId: string, presetId: string): Promise<ConfigSchema | null> {
         const found = await findOrNull(sourceId, presetId);
-        if (!found) return null;
-        const raw = await fsx.json.read<unknown>(found.schemaPath).catch((e: unknown) => {
-            log.warn(`Preset is unreadable: ${presetId}`, e);
-            return undefined;
-        });
-        return raw === undefined ? null : preset.schema(raw, found.entry.fileName);
+        return found ? catalog.config.read(found.ref) : null;
     },
 
     values: {
-        async get(sourceId: string, presetId: string): Promise<PresetValues> {
-            const found = await findOrNull(sourceId, presetId);
-            if (!found) return {};
-            const raw = await fsx.json.read<unknown>(found.valuesPath).catch((e: unknown) => {
-                log.warn(`Preset values are unreadable: ${presetId}`, e);
-                return undefined;
-            });
-            return preset.flatten(raw);
-        },
-
-        // Без схемы значения не пишем: отложенное сохранение
+        // Без файла значения не пишем: отложенное сохранение
         // иначе воскресило бы значения удалённого пресета
-        async save(sourceId: string, presetId: string, values: PresetValues): Promise<void> {
-            const { schemaPath, valuesPath } = await find(sourceId, presetId);
-            if (!await fsx.exists(schemaPath)) throw errors.fail('not_found', `Preset is not downloaded: ${presetId}`);
-            await fsx.json.write(valuesPath, preset.nest(values));
-        },
-
-        async reset(sourceId: string, presetId: string): Promise<void> {
-            const found = await findOrNull(sourceId, presetId);
-            if (found) await fs.rm(found.valuesPath, { force: true });
+        async save(sourceId: string, presetId: string, values: ConfigValues): Promise<void> {
+            await catalog.config.save((await find(sourceId, presetId)).ref, values);
         },
     },
 };

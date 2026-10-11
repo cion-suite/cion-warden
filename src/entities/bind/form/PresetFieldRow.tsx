@@ -1,7 +1,6 @@
 import { useState } from 'react';
 
 import { Input } from '@/ui/shadcn/input';
-import { Switch } from '@/ui/shadcn/switch';
 import { InfoTip } from '@/ui/InfoTip';
 import { KeyBindInput } from '@/ui/KeyBindInput';
 import type { NumberInputProps, PresetFieldRowProps } from './types';
@@ -27,7 +26,7 @@ function NumberInput({ value, onChange }: NumberInputProps) {
 }
 
 export function PresetFieldRow({ field, value, onChange }: PresetFieldRowProps) {
-    const current = value ?? field.default;
+    const current = value ?? field.value;
     return (
         <div className="flex items-center justify-between gap-3 py-1.5">
             <div className="flex min-w-0 items-center gap-1.5">
@@ -36,11 +35,6 @@ export function PresetFieldRow({ field, value, onChange }: PresetFieldRowProps) 
             </div>
             {field.type === 'hotkey' ? (
                 <KeyBindInput value={typeof current === 'string' ? current : String(current)} onChange={onChange} />
-            ) : field.type === 'boolean' ? (
-                <Switch
-                    checked={current === true || current === 'true' || current === 1}
-                    onCheckedChange={onChange}
-                />
             ) : field.type === 'number' ? (
                 <NumberInput
                     value={typeof current === 'number' && Number.isFinite(current) ? current : 0}

@@ -1,4 +1,4 @@
-import type { PresetField } from '@shared/types';
+import type { ConfigField } from '@shared/types';
 
 export interface PresetFormProps {
     sourceId: string;
@@ -11,7 +11,7 @@ export interface NumberInputProps {
 }
 
 export interface PresetFieldRowProps {
-    field: PresetField;
-    value: string | number | boolean | undefined;
-    onChange: (v: string | number | boolean) => void;
+    field: ConfigField;
+    value: string | number | undefined;
+    onChange: (v: string | number) => void;
 }

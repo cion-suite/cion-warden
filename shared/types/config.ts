@@ -5,7 +5,8 @@ export interface ConfigField {
     key: string;
     label: string;
     type: ConfigFieldType;
-    default: string | number;
+    /** Текущее значение в файле. */
+    value: string | number;
     tooltip?: string;
 }
 

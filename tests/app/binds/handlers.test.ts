@@ -7,7 +7,7 @@ const binds = vi.hoisted(() => ({
     remove: vi.fn(),
     local: vi.fn(),
     schema: vi.fn(),
-    values: { get: vi.fn(), save: vi.fn(), reset: vi.fn() },
+    values: { save: vi.fn() },
 }));
 const catalog = vi.hoisted(() => ({ metas: vi.fn() }));
 
@@ -57,8 +57,6 @@ describe('схемы аргументов', () => {
             'binds:delete',
             'binds:folder:open',
             'binds:schema:get',
-            'binds:values:get',
-            'binds:values:reset',
         ] as const;
         for (const name of names) {
             const [source, id] = bindsHandlers[name].args;
@@ -67,12 +65,18 @@ describe('схемы аргументов', () => {
         }
     });
 
-    it('values:save: значения - примитивы вида section.field', () => {
-        const [, , values] = bindsHandlers['binds:values:save'].args;
+    it('values:save: значения - примитивы по именам переменных AHK', () => {
+        const [source, id, values] = bindsHandlers['binds:values:save'].args;
 
-        expect(values.safeParse({ 'keys.jump': 'F1', 'tune.speed': 5 }).success).toBe(true);
-        expect(values.safeParse({ 'keys.jump': { x: 1 } }).success).toBe(false);
-        expect(values.safeParse({ '__proto__.polluted': 'yes' }).success).toBe(false);
+        expect(source).toBe(schema.source.id);
+        expect(id.safeParse('').success).toBe(false);
+        expect(values).toBe(schema.config.values);
+        expect(values.safeParse({ Jump: 'F1', Speed: 5 }).success).toBe(true);
+        expect(values.safeParse({ 'keys.jump': 'F1' }).success).toBe(false);
+        expect(values.safeParse({ constructor: 'x' }).success).toBe(false);
+        // zod record сам отбрасывает __proto__ до refine
+        expect(values.safeParse(JSON.parse('{"__proto__":"x"}')).data).toEqual({});
+        expect(values.safeParse({ Jump: true }).success).toBe(false);
     });
 
     it('sync: sourceId необязателен', () => {
@@ -89,8 +93,6 @@ describe('делегирование', () => {
         expect(bindsHandlers['binds:sync'].handle).toBe(binds.sync);
         expect(bindsHandlers['binds:delete'].handle).toBe(binds.remove);
         expect(bindsHandlers['binds:schema:get'].handle).toBe(binds.schema);
-        expect(bindsHandlers['binds:values:get'].handle).toBe(binds.values.get);
         expect(bindsHandlers['binds:values:save'].handle).toBe(binds.values.save);
-        expect(bindsHandlers['binds:values:reset'].handle).toBe(binds.values.reset);
     });
 });

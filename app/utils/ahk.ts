@@ -135,7 +135,7 @@ function field(item: Assignment, current: string | number, kind: Kind, tooltip: 
         key: item.name,
         label: label(item),
         type,
-        default: type === 'number' ? current : String(current),
+        value: type === 'number' ? current : String(current),
     };
     return tooltip ? { ...result, tooltip } : result;
 }
@@ -248,4 +248,21 @@ function patch(text: string, values: ConfigValues): string {
     return bom + parts.join('');
 }
 
-export const ahk = { includes, parse, patch };
+// `:= false` и `:= A_ScreenWidth`: patch записал бы их строкой
+const isExpression = (item: Assignment): boolean =>
+    item.op === ':=' && !item.raw.startsWith('"') && !NUMBER.test(item.raw);
+
+/**
+ * Значения previous - в text по имени переменной.
+ * Поля и метаданные - из text, исчезнувшие - прочь.
+ * Выражения previous не переносятся: остаётся значение text.
+ */
+function merge(text: string, previous: string): string {
+    const values: ConfigValues = {};
+    for (const { assignment: item, value: current } of scan(linesOf(split(previous).parts)).entries) {
+        if (!isExpression(item)) values[item.name] = current;
+    }
+    return patch(text, values);
+}
+
+export const ahk = { includes, parse, patch, merge };

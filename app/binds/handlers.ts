@@ -27,12 +27,8 @@ export const bindsHandlers = {
 
     'binds:schema:get': { args: [...target], handle: binds.schema },
 
-    'binds:values:get': { args: [...target], handle: binds.values.get },
-
     'binds:values:save': {
-        args: [schema.source.id, schema.nonEmpty, schema.preset.values],
+        args: [schema.source.id, schema.nonEmpty, schema.config.values],
         handle: binds.values.save,
     },
-
-    'binds:values:reset': { args: [...target], handle: binds.values.reset },
 } satisfies IpcHandlers;

@@ -4,7 +4,7 @@ import { useEvent, type EventMap, type IpcChannel } from '@cion-suite/core/rende
 import type { Script } from '@shared/types';
 
 const SOURCE_LISTS: IpcChannel[] = ['libs:list', 'binds:list', 'catalog:scripts:list'];
-const BIND_FORMS: IpcChannel[] = ['binds:schema:get', 'binds:values:get'];
+const BIND_FORMS: IpcChannel[] = ['binds:schema:get'];
 
 /** Статус скрипта из события в закешированном списке. */
 export function patchStatus(

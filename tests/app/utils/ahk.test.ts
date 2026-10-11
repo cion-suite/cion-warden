@@ -53,8 +53,8 @@ const lf = (lines: string[]): string => lines.join('\n');
 
 const keys = (schema: ConfigSchema): string[] => schema.sections.flatMap(s => s.fields.map(f => f.key));
 
-const defaults = (schema: ConfigSchema): ConfigValues =>
-    Object.fromEntries(schema.sections.flatMap(s => s.fields.map(f => [f.key, f.default])));
+const valuesOf = (schema: ConfigSchema): ConfigValues =>
+    Object.fromEntries(schema.sections.flatMap(s => s.fields.map(f => [f.key, f.value])));
 
 const SAMPLES: Array<[string, string]> = [
     ['cyt08 BOM CRLF', BOM + crlf(CYT08)],
@@ -109,15 +109,15 @@ describe('ahk.parse: строгий режим', () => {
                 {
                     title: '',
                     fields: [
-                        { key: 'StartStopKey', label: 'Enable chat spam', type: 'hotkey', default: 'LButton', tooltip: 'Chat spam on and off' },
-                        { key: 'SpamTime', label: 'SpamTime', type: 'number', default: 300, tooltip: 'Spam delay' },
+                        { key: 'StartStopKey', label: 'Enable chat spam', type: 'hotkey', value: 'LButton', tooltip: 'Chat spam on and off' },
+                        { key: 'SpamTime', label: 'SpamTime', type: 'number', value: 300, tooltip: 'Spam delay' },
                     ],
                 },
                 {
                     title: 'Misc',
                     fields: [
-                        { key: 'MiscReloadMacroKey', label: 'Reload macros', type: 'hotkey', default: 'Insert', tooltip: 'Reload' },
-                        { key: 'MiscPauseKey', label: 'Pause / resume macros', type: 'hotkey', default: 'F11' },
+                        { key: 'MiscReloadMacroKey', label: 'Reload macros', type: 'hotkey', value: 'Insert', tooltip: 'Reload' },
+                        { key: 'MiscPauseKey', label: 'Pause / resume macros', type: 'hotkey', value: 'F11' },
                     ],
                 },
             ],
@@ -128,8 +128,8 @@ describe('ahk.parse: строгий режим', () => {
         const [section] = ahk.parse(lf(SCULPTOR)).sections;
 
         expect(section?.fields).toMatchObject([
-            { key: 'AbilityKey', type: 'hotkey', default: '2' },
-            { key: 'DelayBetweenCasts', type: 'number', default: 10, label: 'Delay in seconds' },
+            { key: 'AbilityKey', type: 'hotkey', value: '2' },
+            { key: 'DelayBetweenCasts', type: 'number', value: 10, label: 'Delay in seconds' },
         ]);
     });
 
@@ -137,9 +137,9 @@ describe('ahk.parse: строгий режим', () => {
         const text = ['; @Value', 'Name = hello world ; who', '; @Value', 'Greeting := "say ""hi"" ; no"', '; @Value', 'Quoted := "300"'];
 
         expect(ahk.parse(lf(text)).sections[0]?.fields).toMatchObject([
-            { key: 'Name', type: 'string', default: 'hello world', label: 'who' },
-            { key: 'Greeting', type: 'string', default: 'say "hi" ; no', label: 'Greeting' },
-            { key: 'Quoted', type: 'string', default: '300' },
+            { key: 'Name', type: 'string', value: 'hello world', label: 'who' },
+            { key: 'Greeting', type: 'string', value: 'say "hi" ; no', label: 'Greeting' },
+            { key: 'Quoted', type: 'string', value: '300' },
         ]);
     });
 
@@ -163,16 +163,16 @@ describe('ahk.parse: строгий режим', () => {
         const text = ['; @Bind', 'a = ; none', '; @Bind', 'b =', '; @Bind', 'c=  '];
 
         expect(ahk.parse(lf(text)).sections[0]?.fields).toMatchObject([
-            { key: 'a', default: '', label: 'none' },
-            { key: 'b', default: '' },
-            { key: 'c', default: '' },
+            { key: 'a', value: '', label: 'none' },
+            { key: 'b', value: '' },
+            { key: 'c', value: '' },
         ]);
     });
 
     it('`[` `]` и экранированные `;` `%` backtick - значения', () => {
         const text = ['; @Bind', 'a = [', '; @Bind', 'b = ]', '; @Bind', 'c = `; ; semi', '; @Bind', 'd = 100`% ; pct'];
 
-        expect(ahk.parse(lf(text)).sections[0]?.fields.map(f => f.default)).toEqual(['[', ']', ';', '100%']);
+        expect(ahk.parse(lf(text)).sections[0]?.fields.map(f => f.value)).toEqual(['[', ']', ';', '100%']);
     });
 
     it('аннотация без присваивания и tooltip не вплотную - игнор', () => {
@@ -185,7 +185,7 @@ describe('ahk.parse: строгий режим', () => {
     it('повтор имени без учёта регистра - первое вхождение', () => {
         const text = ['; @Bind', 'Key = F1', '; @Bind', 'KEY = F2'];
 
-        expect(ahk.parse(lf(text)).sections[0]?.fields).toMatchObject([{ key: 'Key', default: 'F1' }]);
+        expect(ahk.parse(lf(text)).sections[0]?.fields).toMatchObject([{ key: 'Key', value: 'F1' }]);
     });
 
     it('`==`, `+=` и вызовы не присваивания', () => {
@@ -200,8 +200,8 @@ describe('ahk.parse: свободный режим', () => {
         const { sections } = ahk.parse(lf(GAME));
 
         expect(sections.map(s => [s.title, s.fields.length])).toEqual([['', 1], ['Control keys', 3], ['Misc', 2]]);
-        expect(sections[0]?.fields[0]).toEqual({ key: 'fps', label: 'Average ingame fps', type: 'number', default: 144 });
-        expect(sections[1]?.fields.map(f => [f.key, f.type, f.default])).toEqual([
+        expect(sections[0]?.fields[0]).toEqual({ key: 'fps', label: 'Average ingame fps', type: 'number', value: 144 });
+        expect(sections[1]?.fields.map(f => [f.key, f.type, f.value])).toEqual([
             ['shootKey', 'hotkey', 'F9'],
             ['aimKey', 'hotkey', '['],
             ['operatorKey', 'hotkey', ']'],
@@ -220,7 +220,7 @@ describe('ahk.parse: свободный режим', () => {
     });
 
     it('повтор имени в пресете - первое вхождение', () => {
-        expect(ahk.parse(lf(['a = F1', 'A = F2'])).sections[0]?.fields).toMatchObject([{ default: 'F1' }]);
+        expect(ahk.parse(lf(['a = F1', 'A = F2'])).sections[0]?.fields).toMatchObject([{ value: 'F1' }]);
     });
 
     it('без полей - пустая схема', () => {
@@ -305,8 +305,8 @@ describe('ahk.patch', () => {
         expect(() => ahk.patch(text, { a: Number.NaN })).toThrow();
     });
 
-    it.each(SAMPLES)('patch(parse defaults) не меняет файл: %s', (_name, text) => {
-        expect(ahk.patch(text, defaults(ahk.parse(text)))).toBe(text);
+    it.each(SAMPLES)('patch(parse values) не меняет файл: %s', (_name, text) => {
+        expect(ahk.patch(text, valuesOf(ahk.parse(text)))).toBe(text);
     });
 
     it.each(SAMPLES)('parse(patch(t, v)) возвращает v: %s', (_name, text) => {
@@ -317,8 +317,147 @@ describe('ahk.patch', () => {
 
         const out = ahk.patch(text, values);
 
-        expect(defaults(ahk.parse(out))).toEqual(values);
+        expect(valuesOf(ahk.parse(out))).toEqual(values);
         expect(ahk.patch(out, values)).toBe(out);
+    });
+});
+
+describe('ahk.merge', () => {
+    const PREVIOUS = ['; @Bind', 'Key = F1 ; Old label', '', '; @Value', 'N := 100', '', '; @Bind', 'Gone = F9'];
+    const NEXT = [
+        '; @Tooltip New tip',
+        '; @Bind',
+        'KEY = LButton ; New label',
+        '',
+        '; @Title Extra',
+        '',
+        '; @Value',
+        'N := 300',
+        '',
+        '; @Bind',
+        'Fresh = F5 ; Fresh key',
+    ];
+
+    const bare = (text: string): ConfigSchema => ({
+        sections: ahk.parse(text).sections.map(s => ({ ...s, fields: s.fields.map(f => ({ ...f, value: '' })) })),
+    });
+
+    it('выражение старого файла не переносится: остаётся значение репо', () => {
+        const old = lf(['; @Value', 'On := false', '', '; @Value', 'W := A_ScreenWidth', '', '; @Value', 'S := "x"']);
+        const next = lf(['; @Value', 'On := true', '', '; @Value', 'W := 100 * 2', '', '; @Value', 'S := "y"']);
+
+        const out = ahk.merge(next, old);
+
+        expect(out).toContain('On := true');
+        expect(out).toContain('W := 100 * 2');
+        expect(valuesOf(ahk.parse(out)).S).toBe('x');
+    });
+
+    it('новое поле приходит со значением репо', () => {
+        const out = ahk.merge(lf(NEXT), lf(PREVIOUS));
+
+        expect(valuesOf(ahk.parse(out)).Fresh).toBe('F5');
+    });
+
+    it('значение старого файла побеждает, имя без учёта регистра', () => {
+        const out = ahk.merge(lf(NEXT), lf(PREVIOUS));
+
+        expect(valuesOf(ahk.parse(out))).toEqual({ KEY: 'F1', N: 100, Fresh: 'F5' });
+    });
+
+    it('исчезнувшая переменная отбрасывается', () => {
+        const out = ahk.merge(lf(NEXT), lf(PREVIOUS));
+
+        expect(out).not.toContain('Gone');
+        expect(keys(ahk.parse(out))).toEqual(['KEY', 'N', 'Fresh']);
+    });
+
+    it('label, tooltip, секции и порядок - из нового файла', () => {
+        const out = ahk.merge(lf(NEXT), lf(PREVIOUS));
+
+        expect(bare(out)).toEqual(bare(lf(NEXT)));
+        expect(ahk.parse(out).sections[0]?.fields[0]).toMatchObject({ label: 'New label', tooltip: 'New tip' });
+        expect(out).not.toContain('Old label');
+    });
+
+    it('меняется только значение, выравнивание нового файла остаётся', () => {
+        const next = ['; @Bind', 'a = LButton ; k', '; @Value', 'n := 300'].join('\n');
+        const previous = ['; @Bind', 'a = F1', '; @Value', 'n := 5'].join('\n');
+
+        expect(ahk.merge(next, previous)).toBe(['; @Bind', 'a = F1      ; k', '; @Value', 'n := 5'].join('\n'));
+    });
+
+    it.each([
+        ['новый BOM CRLF, старый LF', BOM + crlf(NEXT), lf(PREVIOUS)],
+        ['новый LF, старый BOM CRLF', lf(NEXT), BOM + crlf(PREVIOUS)],
+        ['новый BOM LF, старый без BOM', BOM + lf(NEXT), lf(PREVIOUS)],
+        ['новый без BOM CRLF, старый BOM', crlf(NEXT), BOM + crlf(PREVIOUS)],
+    ])('BOM и EOL нового файла сохраняются: %s', (_name, next, previous) => {
+        const out = ahk.merge(next, previous);
+
+        expect(out.startsWith(BOM)).toBe(next.startsWith(BOM));
+        const eol = next.includes('\r\n') ? '\r\n' : '\n';
+
+        expect(out.replace(BOM, '').split(eol).join('')).not.toMatch(/[\r\n]/);
+        expect(next.includes('\r\n')).toBe(out.includes('\r\n'));
+        expect(valuesOf(ahk.parse(out))).toEqual({ KEY: 'F1', N: 100, Fresh: 'F5' });
+    });
+
+    it('скрытые константы нового файла не меняются', () => {
+        const next = ['; @Bind', 'a = F1', '', 'Hidden := 5000 ; const'].join('\n');
+        const previous = ['; @Bind', 'a = F2', '; @Value', 'Hidden := 1'].join('\n');
+
+        expect(ahk.merge(next, previous)).toBe(['; @Bind', 'a = F2', '', 'Hidden := 5000 ; const'].join('\n'));
+    });
+
+    it('числа и строки переносятся между `=` и `:=`', () => {
+        const next = ['; @Value', 'A := 1', '; @Value', 'B = 2', '; @Value', 'C := "x"', '; @Value', 'D = y'].join('\n');
+        const previous = ['; @Value', 'A = 10', '; @Value', 'B := 20', '; @Value', 'C = hello world', '; @Value', 'D := "say ""q"""'].join('\n');
+        const out = ahk.merge(next, previous);
+
+        expect(out).toBe(['; @Value', 'A := 10', '; @Value', 'B = 20', '; @Value', 'C := "hello world"', '; @Value', 'D = say "q"'].join('\n'));
+        expect(valuesOf(ahk.parse(out))).toEqual(valuesOf(ahk.parse(previous)));
+    });
+
+    it.each([
+        ['=', ['; @Bind', 'a = F1'], ['; @Bind', 'a = F2']],
+        [':=', ['; @Value', 'a := "x"'], ['; @Value', 'a := "y"']],
+    ])('`;` `%` и backtick переживают перенос: оператор %s', (_op, previousLines, nextLines) => {
+        const value = 'x;y%z`w';
+        const previous = ahk.patch(lf(previousLines), { a: value });
+        const out = ahk.merge(lf(nextLines), previous);
+
+        expect(valuesOf(ahk.parse(out))).toEqual({ a: value });
+        expect(ahk.merge(out, previous)).toBe(out);
+    });
+
+    it.each(SAMPLES)('merge(text, text) не меняет файл: %s', (_name, text) => {
+        expect(ahk.merge(text, text)).toBe(text);
+    });
+
+    it('повторный merge с тем же старым файлом идемпотентен', () => {
+        const once = ahk.merge(lf(NEXT), lf(PREVIOUS));
+
+        expect(ahk.merge(once, lf(PREVIOUS))).toBe(once);
+    });
+
+    it('старый файл без полей - новый без изменений', () => {
+        expect(ahk.merge(lf(NEXT), '')).toBe(lf(NEXT));
+        expect(ahk.merge(lf(NEXT), '; just a comment')).toBe(lf(NEXT));
+    });
+
+    it('в новом файле появилась @Bind: переносятся только поля новой схемы', () => {
+        const previous = ['a = F1', 'b = F2'].join('\n');
+        const next = ['; @Bind', 'a = LButton', 'b = Hidden'].join('\n');
+
+        expect(ahk.merge(next, previous)).toBe(['; @Bind', 'a = F1', 'b = Hidden'].join('\n'));
+    });
+
+    it('в новом файле аннотации исчезли: поля новой схемы получают значения старого', () => {
+        const previous = ['; @Bind', 'a = F1'].join('\n');
+        const next = ['a = LButton', 'c = F3'].join('\n');
+
+        expect(ahk.merge(next, previous)).toBe(['a = F1', 'c = F3'].join('\n'));
     });
 });
 
@@ -326,7 +465,7 @@ describe('ahk: регрессии из adversarial-ревью', () => {
     it('значение `=` не склеивается с оператором', () => {
         expect(ahk.patch('; @Bind\na=x', { a: '=' })).toBe('; @Bind\na= =');
         expect(ahk.patch('; @Bind\na =x', { a: '=y' })).toBe('; @Bind\na = =y');
-        expect(ahk.parse(ahk.patch('; @Bind\na=x', { a: '=' })).sections[0]?.fields[0]?.default).toBe('=');
+        expect(ahk.parse(ahk.patch('; @Bind\na=x', { a: '=' })).sections[0]?.fields[0]?.value).toBe('=');
     });
 
     it('пробельное значение - пустой бинд, повторный patch ничего не меняет', () => {

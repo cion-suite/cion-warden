@@ -84,18 +84,43 @@ describe('schema.script.values', () => {
     });
 });
 
-describe('schema.preset.values', () => {
-    it('плоская карта примитивов', () => {
-        expect(ok(schema.preset.values, { 'a.b': 1, 'a.c': 'x', 'd.e': true })).toBe(true);
-        expect(ok(schema.preset.values, { 'a.b': null })).toBe(false);
-        expect(ok(schema.preset.values, { 'a.b': { x: 1 } })).toBe(false);
+describe('schema.config.values', () => {
+    it('ключ - имя переменной AHK, юникодные буквы допустимы', () => {
+        for (const key of ['a', 'StartStopKey', '_x', 'a1_b', 'Клавиша']) {
+            expect(ok(schema.config.values, { [key]: 'F1' })).toBe(true);
+        }
     });
 
-    it('ключ - section.field без имён прототипа', () => {
-        for (const key of ['', 'a', '.b', 'a.', 'a..b', '__proto__.polluted', 'a.__proto__', 'constructor.x', 'a.prototype']) {
-            expect(ok(schema.preset.values, { [key]: 'yes' })).toBe(false);
+    it('отвергает пустой ключ, точку, пробел и цифру в начале', () => {
+        for (const key of ['', 'a.b', 'a b', '1a', 'a-b', 'a;b']) {
+            expect(ok(schema.config.values, { [key]: 'F1' })).toBe(false);
         }
-        expect(ok(schema.preset.values, JSON.parse('{"__proto__.polluted":"yes"}'))).toBe(false);
-        expect(ok(schema.preset.values, { 'a.b.c': 1 })).toBe(true);
+    });
+
+    it('отвергает имена прототипа в любом регистре', () => {
+        for (const key of ['constructor', 'prototype', 'Constructor', 'PROTOTYPE', '__Proto__', '__PROTO__']) {
+            expect(ok(schema.config.values, { [key]: 'x' })).toBe(false);
+        }
+    });
+
+    // zod record молча отбрасывает свой ключ __proto__
+    it('собственный ключ __proto__ не доходит до разобранных значений', () => {
+        for (const input of [{ ['__proto__']: 'x' }, JSON.parse('{"__proto__":"x"}'), JSON.parse('{"__proto__":{"a":1}}')]) {
+            const parsed = schema.config.values.safeParse(input);
+
+            expect(!parsed.success || (!Object.hasOwn(parsed.data, '__proto__') && Object.keys(parsed.data).length === 0)).toBe(true);
+        }
+    });
+
+    it('значение - конечное число или строка в одну строку', () => {
+        expect(ok(schema.config.values, { a: 1, b: 'x', c: -1.5 })).toBe(true);
+        for (const value of [true, false, null, undefined, { x: 1 }, ['a'], Number.NaN, Infinity, -Infinity, 'a\nb', 'a\rb']) {
+            expect(ok(schema.config.values, { a: value })).toBe(false);
+        }
+    });
+
+    it('0 и пустая строка валидны: пустой бинд допустим', () => {
+        expect(ok(schema.config.values, { a: 0, b: '' })).toBe(true);
+        expect(ok(schema.config.values, {})).toBe(true);
     });
 });

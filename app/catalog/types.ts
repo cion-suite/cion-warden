@@ -39,6 +39,12 @@ export interface ManifestFile {
 
 export type ManifestPresetEntry = ManifestFileEntry;
 
+/** Файл источника: путь от его корня (`presets/<файл>`). */
+export interface ConfigRef {
+    sourceId: string;
+    path: string;
+}
+
 /** Запись assets/fonts/_fonts.json. */
 export interface FontsSidecarEntry {
     file: string;

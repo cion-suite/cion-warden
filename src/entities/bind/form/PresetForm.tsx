@@ -1,4 +1,4 @@
-import { RotateCcwIcon, SaveIcon } from 'lucide-react';
+import { SaveIcon } from 'lucide-react';
 
 import { Button } from '@/ui/shadcn/button';
 import { Card, CardContent, CardFooter } from '@/ui/shadcn/card';
@@ -12,7 +12,7 @@ import { usePresetForm } from './usePresetForm';
 
 export function PresetForm({ sourceId, presetId }: PresetFormProps) {
     const t = useT();
-    const { schema, values, loading, dirty, saving, setValue, save, reset } = usePresetForm(sourceId, presetId);
+    const { schema, values, loading, dirty, saving, setValue, save } = usePresetForm(sourceId, presetId);
     const sections = schema?.sections.filter((s) => s.fields.length > 0) ?? [];
     const hasAnyField = sections.length > 0;
 
@@ -30,11 +30,13 @@ export function PresetForm({ sourceId, presetId }: PresetFormProps) {
                         <p className="py-4 text-center text-sm text-muted-foreground">{t('binds.schemaEmpty')}</p>
                     ) : (
                         <div className="flex flex-col gap-5">
-                            {sections.map((section) => (
-                                <div key={section.name} className="flex flex-col">
-                                    <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                                        {section.title}
-                                    </h3>
+                            {sections.map((section, index) => (
+                                <div key={index} className="flex flex-col">
+                                    {section.title && (
+                                        <h3 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                                            {section.title}
+                                        </h3>
+                                    )}
                                     <div className="flex flex-col divide-y divide-border/60">
                                         {section.fields.map((f) => (
                                             <PresetFieldRow
@@ -53,12 +55,7 @@ export function PresetForm({ sourceId, presetId }: PresetFormProps) {
                 {hasAnyField && (
                     <>
                         <Separator />
-                        <CardFooter className="px-5 py-2.5">
-                            <Button variant="ghost" size="sm" onClick={() => void reset()} disabled={saving}>
-                                <RotateCcwIcon data-icon="inline-start" />
-                                {t('binds.reset')}
-                            </Button>
-                            <div className="flex-1" />
+                        <CardFooter className="justify-end px-5 py-2.5">
                             <Button size="sm" onClick={() => void save()} disabled={!dirty || saving}>
                                 {saving ? <Spinner data-icon="inline-start" /> : <SaveIcon data-icon="inline-start" />}
                                 {t('binds.save')}

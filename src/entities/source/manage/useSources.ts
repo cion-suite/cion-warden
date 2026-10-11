@@ -20,6 +20,5 @@ export function useInvalidateSources() {
             'binds:list',
             'catalog:scripts:list',
             'binds:schema:get',
-            'binds:values:get',
         );
 }

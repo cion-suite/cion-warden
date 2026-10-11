@@ -130,7 +130,6 @@ export const ru = {
             deleted: '"{{name}}" удалён',
             bulkDone: 'Скачано пресетов: {{ok}}',
             bulkDoneWithFails: 'Скачано: {{ok}}, ошибок: {{failed}}',
-            reset: 'Сбросить',
             save: 'Сохранить',
             saved: 'Сохранено',
             schemaEmpty: 'В пресете нет полей.',

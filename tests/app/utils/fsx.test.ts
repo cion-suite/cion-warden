@@ -61,6 +61,20 @@ describe('fsx.write', () => {
     });
 });
 
+describe('fsx.text', () => {
+    it('читает как есть, BOM остаётся', async () => {
+        const file = path.join(dir, 'a.ahk');
+        await fs.writeFile(file, '\uFEFFa = 1\r\n');
+
+        expect(await fsx.text.read(file)).toBe('\uFEFFa = 1\r\n');
+    });
+
+    it('нет файла - undefined, каталог вместо файла - failed', async () => {
+        expect(await fsx.text.read(path.join(dir, 'none.ahk'))).toBeUndefined();
+        await expect(fsx.text.read(dir)).rejects.toMatchObject({ code: 'failed' });
+    });
+});
+
 describe('fsx.json', () => {
     it('write -> read: круговой обмен', async () => {
         const file = path.join(dir, 'a.json');
